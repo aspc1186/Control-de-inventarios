@@ -1,100 +1,276 @@
-// api/articulos/index.js — Handles ALL articulo operations
-// Routes: GET /api/articulos, POST, GET /api/articulos?sku=X, PUT, DELETE, batch, deactivate
-const { getSQL, cors } = require('../_db');
+// api/articulos/index.js — StockFlow WMS
+// Maneja GET, POST (batch), PUT (update), DELETE, acción deactivate
+import { neon } from '@neondatabase/serverless';
 
-module.exports = async (req, res) => {
-  cors(res);
+const sql = neon(process.env.DATABASE_URL);
+
+// Todos los campos del modelo de artículo
+const CAMPOS = [
+  'id','sku','nombre','descripcion','categoria','subcategoria',
+  'marca','unidad','ubicacion','ubicacion_label','bodega','bodega_id',
+  'stock','stock_minimo','stock_maximo','stock_reservado','stock_seguridad',
+  'punto_reorden','consumo_diario','lead_time','dias_cobertura','metodo_seguridad',
+  'costo','precio','proveedor','estado',
+  'empresa_id','created_by','ultima_entrada','ultima_salida',
+];
+
+function pick(obj, fields) {
+  const out = {};
+  fields.forEach(f => { if (f in obj) out[f] = obj[f]; });
+  return out;
+}
+
+function n(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const num = parseFloat(String(v).replace(/[^0-9.\-]/g,''));
+  return isNaN(num) ? null : num;
+}
+
+function s(v) {
+  if (v === null || v === undefined) return null;
+  return String(v).trim() || null;
+}
+
+async function ensureTable() {
+  await sql`
+    CREATE TABLE IF NOT EXISTS articulos (
+      id               TEXT PRIMARY KEY,
+      sku              TEXT UNIQUE NOT NULL,
+      nombre           TEXT,
+      descripcion      TEXT,
+      categoria        TEXT,
+      subcategoria     VARCHAR(200) DEFAULT '',
+      marca            TEXT,
+      unidad           TEXT DEFAULT 'UND',
+      ubicacion        TEXT,
+      ubicacion_label  TEXT,
+      bodega           VARCHAR(200) DEFAULT '',
+      bodega_id        TEXT,
+      stock            NUMERIC(14,2) DEFAULT 0,
+      stock_minimo     NUMERIC(14,2) DEFAULT 0,
+      stock_maximo     NUMERIC(14,2) DEFAULT 0,
+      stock_reservado  NUMERIC(14,2) DEFAULT 0,
+      stock_seguridad  NUMERIC(14,2) DEFAULT 0,
+      punto_reorden    NUMERIC(14,2) DEFAULT 0,
+      consumo_diario   NUMERIC(14,4) DEFAULT 0,
+      lead_time        NUMERIC(8,0)  DEFAULT 0,
+      dias_cobertura   NUMERIC(8,0)  DEFAULT 0,
+      metodo_seguridad VARCHAR(20)   DEFAULT 'automatico',
+      costo            NUMERIC(14,2) DEFAULT 0,
+      precio           NUMERIC(14,2) DEFAULT 0,
+      proveedor        TEXT,
+      estado           TEXT DEFAULT 'Activo',
+      empresa_id       VARCHAR(100),
+      created_by       TEXT,
+      ultima_entrada   TEXT,
+      ultima_salida    TEXT,
+      created_at       TIMESTAMPTZ DEFAULT NOW(),
+      updated_at       TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  const sql = getSQL();
 
-  const action = req.query.action || '';
-  const sku    = (req.query.sku || '').toUpperCase();
+  try {
+    await ensureTable();
+    const { action, limit = 5000, empresa_id } = req.query;
 
-  // ── GET list or single ────────────────────────────────────────────────
-  if (req.method === 'GET') {
-    try {
-      if (sku) {
-        const rows = await sql`SELECT * FROM articulos WHERE sku = ${sku}`;
-        if (!rows[0]) return res.status(404).json({ error: 'Artículo no encontrado', sku });
-        const movs = await sql`SELECT * FROM movimientos WHERE sku = ${sku} ORDER BY created_at DESC LIMIT 25`;
-        return res.json({ ...rows[0], movimientos: movs });
+    // ── GET — listar artículos ─────────────────────────────────────────
+    if (req.method === 'GET') {
+      if (action === 'deactivate') return res.status(400).json({ error: 'Use POST for deactivate' });
+
+      let rows;
+      if (empresa_id) {
+        rows = await sql`
+          SELECT * FROM articulos 
+          WHERE empresa_id = ${empresa_id}
+          ORDER BY sku 
+          LIMIT ${parseInt(limit)}
+        `;
+      } else {
+        rows = await sql`
+          SELECT * FROM articulos 
+          ORDER BY sku 
+          LIMIT ${parseInt(limit)}
+        `;
       }
-      const limit = Math.min(Number(req.query.limit)||5000, 10000);
-      const rows = await sql`SELECT * FROM articulos WHERE estado = 'Activo' OR estado IS NULL ORDER BY sku LIMIT ${limit}`;
-      return res.json({ data: rows, total: rows.length });
-    } catch (err) { return res.status(500).json({ error: err.message }); }
-  }
+      return res.status(200).json({ data: rows, total: rows.length });
+    }
 
-  // ── POST batch upsert ──────────────────────────────────────────────────
-  if (req.method === 'POST' && action === 'batch') {
-    const { items, modo, createdBy } = req.body || {};
-    if (!items?.length) return res.status(400).json({ error: 'items requerido' });
-    try {
-      let created=0, updated=0, deactivated=0;
-      const fecha = new Date().toLocaleDateString('es-CO',{year:'numeric',month:'2-digit',day:'2-digit'});
-      const hora  = new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'});
-      for (const b of items) {
-        if (!b.sku || !b.nombre) continue;
-        const s = b.sku.trim().toUpperCase();
-        const ex = await sql`SELECT id,stock FROM articulos WHERE sku=${s}`;
-        const stock = Number(b.stock||0);
-        if (ex[0]) {
-          await sql`UPDATE articulos SET nombre=${b.nombre},descripcion=${b.descripcion||null},categoria=${b.categoria||null},marca=${b.marca||null},unidad=${b.unidad||'UND'},ubicacion=${b.ubicacion||null},stock=${stock},stock_minimo=${Number(b.stock_minimo||0)},costo=${Number(b.costo||0)},proveedor=${b.proveedor||null},estado='Activo',updated_at=NOW() WHERE sku=${s}`;
-          updated++;
-        } else {
-          await sql`INSERT INTO articulos(sku,nombre,descripcion,categoria,marca,unidad,ubicacion,stock,stock_minimo,costo,proveedor,estado,created_by)VALUES(${s},${b.nombre},${b.descripcion||null},${b.categoria||null},${b.marca||null},${b.unidad||'UND'},${b.ubicacion||null},${stock},${Number(b.stock_minimo||0)},${Number(b.costo||0)},${b.proveedor||null},'Activo',${createdBy||null})`;
-          if (stock>0) await sql`INSERT INTO movimientos(tipo,sku,articulo,cantidad,stock_anterior,stock_resultante,usuario,observacion,fecha,hora)VALUES('ENTRADA',${s},${b.nombre},${stock},0,${stock},${createdBy||'Sistema'},'Stock inicial - importación masiva',${fecha},${hora})`;
-          created++;
+    // ── POST — batch upsert o deactivate ──────────────────────────────
+    if (req.method === 'POST') {
+      const body = req.body;
+
+      // Deactivate action
+      if (action === 'deactivate') {
+        const { skus, usuario } = body;
+        if (!skus?.length) return res.status(200).json({ deactivated: 0 });
+        await sql`
+          UPDATE articulos 
+          SET estado = 'Inactivo', updated_at = NOW()
+          WHERE sku = ANY(${skus})
+        `;
+        return res.status(200).json({ deactivated: skus.length });
+      }
+
+      // Batch upsert
+      const { items } = body;
+      if (!items?.length) return res.status(400).json({ error: 'No items provided' });
+
+      let inserted = 0, updated = 0, errors = [];
+
+      for (const item of items) {
+        try {
+          const id            = s(item.id)     || `art_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+          const sku           = s(item.sku)    || s(item.codigo);
+          if (!sku) { errors.push({ sku: '?', error: 'SKU vacío' }); continue; }
+
+          const nombre        = s(item.nombre)        || s(item.descripcion) || '';
+          const descripcion   = s(item.descripcion)   || '';
+          const categoria     = s(item.categoria)     || '';
+          const subcategoria  = s(item.subcategoria)  || '';
+          const marca         = s(item.marca)         || '';
+          const unidad        = s(item.unidad)        || 'UND';
+          const ubicacion     = s(item.ubicacion)     || '';
+          const ubicacion_lbl = s(item.ubicacion_label)|| s(item.ubicacion) || '';
+          const bodega        = s(item.bodega)        || '';
+          const bodega_id     = s(item.bodega_id)     || s(item.bodega) || '';
+          const proveedor     = s(item.proveedor)     || '';
+          const estado        = s(item.estado)        || 'Activo';
+          const empresa_id_v  = s(item.empresa_id)    || null;
+          const created_by    = s(item.created_by)    || 'Sistema';
+          const ultima_ent    = s(item.ultima_entrada) || null;
+          const ultima_sal    = s(item.ultima_salida)  || null;
+          const metodo_seg    = s(item.metodo_seguridad) || 'automatico';
+
+          // Numéricos — todos con fallback a 0
+          const stock         = n(item.stock)          ?? 0;
+          const stock_min     = n(item.stock_minimo)   ?? 0;
+          const stock_max     = n(item.stock_maximo)   ?? 0;
+          const stock_res     = n(item.stock_reservado)?? 0;
+          const stock_seg     = n(item.stock_seguridad)?? 0;
+          const p_reorden     = n(item.punto_reorden)  ?? 0;
+          const consumo       = n(item.consumo_diario) ?? 0;
+          const lead          = n(item.lead_time)      ?? 0;
+          const dias_cob      = n(item.dias_cobertura) ?? 0;
+          const costo         = n(item.costo)          ?? n(item.costo_unitario) ?? 0;
+          const precio        = n(item.precio)         ?? costo ?? 0;
+
+          await sql`
+            INSERT INTO articulos (
+              id, sku, nombre, descripcion, categoria, subcategoria,
+              marca, unidad, ubicacion, ubicacion_label, bodega, bodega_id,
+              stock, stock_minimo, stock_maximo, stock_reservado, stock_seguridad,
+              punto_reorden, consumo_diario, lead_time, dias_cobertura, metodo_seguridad,
+              costo, precio, proveedor, estado, empresa_id,
+              created_by, ultima_entrada, ultima_salida,
+              created_at, updated_at
+            ) VALUES (
+              ${id}, ${sku}, ${nombre}, ${descripcion}, ${categoria}, ${subcategoria},
+              ${marca}, ${unidad}, ${ubicacion}, ${ubicacion_lbl}, ${bodega}, ${bodega_id},
+              ${stock}, ${stock_min}, ${stock_max}, ${stock_res}, ${stock_seg},
+              ${p_reorden}, ${consumo}, ${lead}, ${dias_cob}, ${metodo_seg},
+              ${costo}, ${precio}, ${proveedor}, ${estado}, ${empresa_id_v},
+              ${created_by}, ${ultima_ent}, ${ultima_sal},
+              NOW(), NOW()
+            )
+            ON CONFLICT (sku) DO UPDATE SET
+              nombre           = EXCLUDED.nombre,
+              descripcion      = EXCLUDED.descripcion,
+              categoria        = EXCLUDED.categoria,
+              subcategoria     = EXCLUDED.subcategoria,
+              marca            = EXCLUDED.marca,
+              unidad           = EXCLUDED.unidad,
+              ubicacion        = EXCLUDED.ubicacion,
+              ubicacion_label  = EXCLUDED.ubicacion_label,
+              bodega           = EXCLUDED.bodega,
+              bodega_id        = EXCLUDED.bodega_id,
+              stock            = EXCLUDED.stock,
+              stock_minimo     = EXCLUDED.stock_minimo,
+              stock_maximo     = EXCLUDED.stock_maximo,
+              stock_reservado  = EXCLUDED.stock_reservado,
+              stock_seguridad  = EXCLUDED.stock_seguridad,
+              punto_reorden    = EXCLUDED.punto_reorden,
+              consumo_diario   = EXCLUDED.consumo_diario,
+              lead_time        = EXCLUDED.lead_time,
+              dias_cobertura   = EXCLUDED.dias_cobertura,
+              metodo_seguridad = EXCLUDED.metodo_seguridad,
+              costo            = EXCLUDED.costo,
+              precio           = EXCLUDED.precio,
+              proveedor        = EXCLUDED.proveedor,
+              estado           = EXCLUDED.estado,
+              empresa_id       = COALESCE(EXCLUDED.empresa_id, articulos.empresa_id),
+              created_by       = EXCLUDED.created_by,
+              ultima_entrada   = COALESCE(EXCLUDED.ultima_entrada, articulos.ultima_entrada),
+              ultima_salida    = COALESCE(EXCLUDED.ultima_salida, articulos.ultima_salida),
+              updated_at       = NOW()
+          `;
+
+          // Check if it was insert or update
+          const exists = await sql`SELECT id FROM articulos WHERE sku = ${sku}`;
+          if (exists.length > 0 && exists[0].id !== id) updated++; else inserted++;
+
+        } catch(e) {
+          errors.push({ sku: item.sku || '?', error: e.message });
         }
       }
-      if (modo==='sincronizacion_total') {
-        const skus = items.map(i=>i.sku?.toUpperCase()).filter(Boolean);
-        if (skus.length) { await sql`UPDATE articulos SET estado='Inactivo' WHERE sku != ALL(${skus}) AND estado='Activo'`; deactivated++; }
-      }
-      return res.json({ ok:true, created, updated, deactivated });
-    } catch (err) { return res.status(500).json({ error: err.message }); }
-  }
 
-  // ── POST deactivate ────────────────────────────────────────────────────
-  if (req.method === 'POST' && action === 'deactivate') {
-    const { skus } = req.body || {};
-    if (!skus?.length) return res.status(400).json({ error: 'skus requerido' });
-    try {
-      await sql`UPDATE articulos SET estado='Inactivo',updated_at=NOW() WHERE sku=ANY(${skus})`;
-      return res.json({ ok:true });
-    } catch (err) { return res.status(500).json({ error: err.message }); }
-  }
+      return res.status(200).json({ inserted, updated, errors });
+    }
 
-  // ── POST create single ─────────────────────────────────────────────────
-  if (req.method === 'POST') {
-    const b = req.body || {};
-    if (!b.sku || !b.nombre) return res.status(400).json({ error: 'sku y nombre requeridos' });
-    const s = b.sku.trim().toUpperCase();
-    try {
-      const rows = await sql`INSERT INTO articulos(sku,nombre,descripcion,categoria,marca,unidad,ubicacion,stock,stock_minimo,stock_maximo,costo,proveedor,estado)VALUES(${s},${b.nombre},${b.descripcion||null},${b.categoria||null},${b.marca||null},${b.unidad||'UND'},${b.ubicacion||null},${Number(b.stock||0)},${Number(b.stock_minimo||0)},${b.stock_maximo?Number(b.stock_maximo):null},${Number(b.costo||0)},${b.proveedor||null},'Activo')RETURNING*`;
-      return res.status(201).json(rows[0]);
-    } catch (err) { return res.status(500).json({ error: err.message }); }
-  }
+    // ── PUT — update single item ──────────────────────────────────────
+    if (req.method === 'PUT') {
+      const item = req.body;
+      const sku  = s(item.sku) || s(item.codigo);
+      if (!sku) return res.status(400).json({ error: 'SKU requerido' });
 
-  // ── PUT update by sku ──────────────────────────────────────────────────
-  if (req.method === 'PUT') {
-    if (!sku) return res.status(400).json({ error: 'sku requerido' });
-    const b = req.body || {};
-    try {
-      const rows = await sql`UPDATE articulos SET nombre=COALESCE(${b.nombre||null},nombre),descripcion=COALESCE(${b.descripcion!==undefined?b.descripcion:null},descripcion),categoria=COALESCE(${b.categoria||null},categoria),marca=COALESCE(${b.marca||null},marca),unidad=COALESCE(${b.unidad||null},unidad),ubicacion=COALESCE(${b.ubicacion||null},ubicacion),ubicacion_label=COALESCE(${b.ubicacion_label||null},ubicacion_label),stock_minimo=COALESCE(${b.stock_minimo!=null?Number(b.stock_minimo):null},stock_minimo),costo=COALESCE(${b.costo!=null?Number(b.costo):null},costo),proveedor=COALESCE(${b.proveedor||null},proveedor),updated_at=NOW() WHERE sku=${sku} RETURNING*`;
-      if (!rows[0]) return res.status(404).json({ error: 'No encontrado' });
-      return res.json(rows[0]);
-    } catch (err) { return res.status(500).json({ error: err.message }); }
-  }
+      await sql`
+        UPDATE articulos SET
+          nombre           = COALESCE(${s(item.nombre)}, nombre),
+          descripcion      = COALESCE(${s(item.descripcion)}, descripcion),
+          categoria        = COALESCE(${s(item.categoria)}, categoria),
+          subcategoria     = COALESCE(${s(item.subcategoria)}, subcategoria),
+          marca            = COALESCE(${s(item.marca)}, marca),
+          unidad           = COALESCE(${s(item.unidad)}, unidad),
+          ubicacion        = COALESCE(${s(item.ubicacion)}, ubicacion),
+          bodega           = COALESCE(${s(item.bodega)}, bodega),
+          stock            = COALESCE(${n(item.stock)}, stock),
+          stock_minimo     = COALESCE(${n(item.stock_minimo)}, stock_minimo),
+          stock_maximo     = COALESCE(${n(item.stock_maximo)}, stock_maximo),
+          stock_reservado  = COALESCE(${n(item.stock_reservado)}, stock_reservado),
+          stock_seguridad  = COALESCE(${n(item.stock_seguridad)}, stock_seguridad),
+          punto_reorden    = COALESCE(${n(item.punto_reorden)}, punto_reorden),
+          consumo_diario   = COALESCE(${n(item.consumo_diario)}, consumo_diario),
+          lead_time        = COALESCE(${n(item.lead_time)}, lead_time),
+          costo            = COALESCE(${n(item.costo)}, costo),
+          precio           = COALESCE(${n(item.precio)}, precio),
+          proveedor        = COALESCE(${s(item.proveedor)}, proveedor),
+          estado           = COALESCE(${s(item.estado)}, estado),
+          empresa_id       = COALESCE(${s(item.empresa_id)}, empresa_id),
+          ultima_entrada   = COALESCE(${s(item.ultima_entrada)}, ultima_entrada),
+          updated_at       = NOW()
+        WHERE sku = ${sku}
+      `;
+      return res.status(200).json({ updated: 1 });
+    }
 
-  // ── DELETE ─────────────────────────────────────────────────────────────
-  if (req.method === 'DELETE') {
-    if (!sku) return res.status(400).json({ error: 'sku requerido' });
-    try {
-      await sql`DELETE FROM articulos WHERE sku=${sku}`;
-      return res.json({ ok:true });
-    } catch (err) { return res.status(500).json({ error: err.message }); }
-  }
+    // ── DELETE ────────────────────────────────────────────────────────
+    if (req.method === 'DELETE') {
+      const { sku } = req.query;
+      if (!sku) return res.status(400).json({ error: 'SKU requerido' });
+      await sql`DELETE FROM articulos WHERE sku = ${sku}`;
+      return res.status(200).json({ deleted: 1 });
+    }
 
-  res.status(405).end();
-};
+    return res.status(405).json({ error: 'Method not allowed' });
+
+  } catch(err) {
+    console.error('API articulos error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+}
