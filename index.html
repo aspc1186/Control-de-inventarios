@@ -6200,16 +6200,49 @@ function _autoCorregirProducto(item, contexto) {
 
 function _autoCorregirLote(items, contexto) {
   var totalCorregidos = 0;
+  var tiposError = {};
+  // Suprimir registro individual — solo registrar resumen al final
   var resultado = items.map(function(item) {
     var antes = JSON.stringify(item);
-    var despues = _autoCorregirProducto(item, contexto);
+    var despues = _autoCorregirProductoSilent(item, tiposError);
     if (JSON.stringify(despues) !== antes) totalCorregidos++;
     return despues;
   });
+  // Un solo registro de auditoría para todo el lote
   if (totalCorregidos > 0) {
-    showToast('🔧 Auto-corrección: ' + totalCorregidos + ' registros ajustados automáticamente', 'amber');
+    var resumen = Object.keys(tiposError).map(function(k){ return tiposError[k]+'x '+k; }).join(', ');
+    _registrarAuditoriaTecnica('INFO', contexto || 'Importar', null,
+      'Auto-corrección lote: '+totalCorregidos+' productos ajustados ('+resumen+')', 'Auto-corrección aplicada');
+    showToast('🔧 Auto-corrección: ' + totalCorregidos + ' registros ajustados', 'amber');
   }
   return resultado;
+}
+
+function _autoCorregirProductoSilent(item, tiposError) {
+  // Igual que _autoCorregirProducto pero sin registrar auditoría individual
+  if (!item.codigo || String(item.codigo).trim() === '') {
+    item.codigo = 'AUTO-' + Date.now().toString(36).toUpperCase();
+    tiposError['Código vacío'] = (tiposError['Código vacío'] || 0) + 1;
+  }
+  if (!item.descripcion || String(item.descripcion).trim() === '') {
+    item.descripcion = item.nombre || 'Producto sin descripción';
+    tiposError['Descripción vacía'] = (tiposError['Descripción vacía'] || 0) + 1;
+  }
+  var costo = Number(item.costo || item.costo_unitario || 0);
+  if (isNaN(costo) || costo < 0) {
+    item.costo = 0;
+    tiposError['Costo inválido'] = (tiposError['Costo inválido'] || 0) + 1;
+  }
+  var stock = Number(item.stock || 0);
+  if (isNaN(stock) || stock < 0) {
+    item.stock = 0;
+    tiposError['Stock negativo'] = (tiposError['Stock negativo'] || 0) + 1;
+  }
+  if (!item.categoria || String(item.categoria).trim() === '') {
+    item.categoria = 'Sin Categoría';
+    tiposError['Categoría vacía'] = (tiposError['Categoría vacía'] || 0) + 1;
+  }
+  return item;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -11126,8 +11159,26 @@ renders.auditoria = function() {
         <tbody id="inv-tbody">${rows}</tbody>
       </table>
     </div></div>
-    <p style="font-size:11px;color:var(--muted);margin-top:8px">Total: ${audit.length} registros · No es posible eliminar registros de auditoría.</p>`;
-};
+    <p style="font-size:11px;color:var(--muted);margin-top:8px">Total: ${audit.length} registros</p>
+    \`;
+    // Auditoría técnica section
+    var techAudit = [];
+    try { techAudit = JSON.parse(localStorage.getItem('sf_auditoria_tecnica') || '[]'); } catch(e){}
+    var techSection = '';
+    if (techAudit.length > 0) {
+      techSection = '<div style="margin-top:16px;padding:12px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:10px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
+        '<p style="font-size:12px;font-weight:700;color:#f87171">⚠️ Auditoría Técnica: ' + techAudit.length + ' registros</p>' +
+        '<button class="btn btn-ghost btn-sm" onclick="limpiarAuditoriaTecnica();renders.auditoria()" style="font-size:11px;color:#4ade80">🧹 Limpiar</button>' +
+        '</div>' +
+        techAudit.slice(0,20).map(function(r) {
+          return '<div style="font-size:11px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);color:'+(r.tipo_error==='CORRECCIÓN'||r.tipo_error==='INFO'?'var(--muted)':'#f87171')+'">' +
+            r.fecha + ' ' + r.hora + ' — <strong>' + r.modulo + '</strong>: ' + r.descripcion + '</div>';
+        }).join('') +
+        (techAudit.length > 20 ? '<p style="font-size:10px;color:var(--muted);margin-top:6px">... y ' + (techAudit.length-20) + ' más</p>' : '') +
+        '</div>';
+    }
+    document.getElementById('pg-auditoria').innerHTML += techSection;};
 
 function badgeAudit(accion) {
   if (accion === 'LOGIN')  return '<span class="badge b-ok">LOGIN</span>';
@@ -11137,7 +11188,7 @@ function badgeAudit(accion) {
   if (accion.startsWith('AJUSTE')) return '<span class="badge b-adj">AJUSTE</span>';
   if (accion.startsWith('CREAR')) return '<span class="badge b-info">CREACIÓN</span>';
   if (accion.startsWith('EDITAR')) return '<span class="badge b-warn">EDICIÓN</span>';
-  return `<span class="badge b-gray">${accion}</span>`;
+  return '<span class="badge b-gray">' + accion + '</span>';
 }
 
 function exportAuditoria() {
@@ -11194,60 +11245,8 @@ renders.usuarios = function() {
     const isProtectedRow= isSuperAdmRow || isAdminAccount;
     const isMe          = u.id === myId || u.username === myUser;
     const canActOnUser  = !isProtectedRow && !isMe;
-    return `
-    <tr style="${isSuperAdmRow ? 'background:rgba(255,184,0,.04);border-left:3px solid var(--amber)' : ''}">
-      <td>
-        <div style="display:flex;align-items:center;gap:9px">
-          <div class="user-avatar" style="${isSuperAdmRow ? 'background:linear-gradient(135deg,#FFB800,#FF8C00)' : ''}">${u.nombre.charAt(0)}</div>
-          <div>
-            <div style="font-weight:600;font-size:13px">${u.nombre}${isSuperAdmRow ? ' <span style="font-size:10px;color:var(--amber)">🔒 Restringido</span>' : ''}</div>
-            <div style="font-size:11px;color:var(--muted)">${u.correo||'—'}</div>
-          </div>
-        </div>
-      </td>
-      <td><code style="font-size:12px">${u.username}</code></td>
-      <td><span class="role-badge role-${u.rol}">${u.rol}</span></td>
-      <td class="hide-m" style="font-size:12px">${u.cargo||'—'}</td>
-      <td class="hide-m" style="font-size:12px">${u.area||'—'}</td>
-      <td><span class="badge ${u.estado==='ACTIVO'?'b-ok':u.estado==='BLOQUEADO'?'b-out':'b-gray'}">${u.estado}</span></td>
-      <td class="hide-m" style="font-size:11px;color:var(--muted)">${u.ultimo_acceso||'—'}</td>
-      <td>
-        <div style="display:flex;gap:3px;justify-content:flex-end;align-items:center">
-          ${isSuperAdmRow
-            ? '<span style="font-size:11px;color:var(--amber);padding:4px 10px;background:rgba(255,184,0,.08);border:1px solid rgba(255,184,0,.25);border-radius:8px;white-space:nowrap;font-weight:600">🔒 Acceso Restringido</span>'
-            : `
-          <button class="btn-icon" onclick="editarUsuario('${u.id}')" title="Editar usuario">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          </button>
-          ${canActOnUser ? `
-          <button class="btn-icon" onclick="resetPassword('${u.id}')" title="Cambiar contraseña" style="color:var(--electric)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          </button>
-          <button class="btn-icon" onclick="desactivarUsuario('${u.id}','${u.username}','${u.nombre}')" title="${u.estado==='ACTIVO'?'Desactivar':'Activar'}" style="color:${u.estado==='ACTIVO'?'var(--amber)':'var(--neon)'}">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
-          </button>
-          <button class="btn-icon" onclick="eliminarUsuario('${u.id}','${u.username}','${u.nombre}')" title="Eliminar usuario" style="color:var(--red)">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-          </button>` : ''}
-          `}
-        </div>
-      </td>
-    </tr>`;
-  }).join('');
+    return _buildUserRow(u, isSuperAdmRow, isProtectedRow, isMe, canActOnUser);
 
-  document.getElementById('pg-usuarios').innerHTML = `
-    <div class="toolbar" style="margin-bottom:14px">
-      <p style="font-size:12px;color:var(--muted);flex:1">${users.length} usuario(s) registrado(s)</p>
-      <button class="btn btn-navy btn-sm" onclick="nuevoUsuario()">
-        <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>Nuevo usuario
-      </button>
-    </div>
-    <div class="tbl-wrap"><div class="tbl-overflow">
-      <table>
-        <thead><tr><th>Usuario</th><th>Login</th><th>Rol</th><th class="hide-m">Cargo</th><th class="hide-m">Área</th><th>Estado</th><th class="hide-m">Último acceso</th><th></th></tr></thead>
-        <tbody id="inv-tbody">${rows}</tbody>
-      </table>
-    </div></div>`;
 };
 
 function nuevoUsuario() {
@@ -12518,6 +12517,64 @@ function _getItems() {
 }
 function _getMovs() {
   return loadMovs() || [];
+}
+
+
+/* ── Limpiar errores técnicos históricos de importaciones ──────────────── */
+function limpiarAuditoriaTecnica() {
+  // Solo mantener los últimos 50 registros que NO sean CORRECCIÓN masiva
+  try {
+    var all = JSON.parse(localStorage.getItem('sf_auditoria_tecnica') || '[]');
+    // Filtrar: quitar CORRECCIÓN individuales (generadas por auto-fix por producto)
+    var filtered = all.filter(function(r) {
+      return r.tipo_error !== 'CORRECCIÓN' || !r.descripcion.includes('Producto "');
+    });
+    // Mantener solo últimos 100
+    filtered = filtered.slice(0, 100);
+    localStorage.setItem('sf_auditoria_tecnica', JSON.stringify(filtered));
+    return { removed: all.length - filtered.length, remaining: filtered.length };
+  } catch(e) { return { removed: 0, remaining: 0 }; }
+}
+
+// Auto-limpiar al inicio: si hay más de 200 entradas de corrección individual
+(function _autoLimpiarAudit() {
+  try {
+    var all = JSON.parse(localStorage.getItem('sf_auditoria_tecnica') || '[]');
+    if (all.length > 100) {
+      var result = limpiarAuditoriaTecnica();
+      console.log('[StockFlow] Auditoría técnica limpiada:', result.removed, 'entradas de auto-corrección eliminadas');
+    }
+  } catch(e) {}
+})();
+
+
+function _buildUserRow(u, isSuperAdmRow, isProtectedRow, isMe, canActOnUser) {
+  var trSt = isSuperAdmRow ? 'background:rgba(255,184,0,.04);border-left:3px solid #f59e0b' : '';
+  var avSt = isSuperAdmRow ? 'background:linear-gradient(135deg,#FFB800,#FF8C00)' : '';
+  var estC = u.estado==='ACTIVO'?'b-ok':u.estado==='BLOQUEADO'?'b-out':'b-gray';
+  var r = '<tr style="'+trSt+'">';
+  r += '<td><div style="display:flex;align-items:center;gap:9px">';
+  r += '<div class="user-avatar" style="'+avSt+'">'+(u.nombre?u.nombre.charAt(0).toUpperCase():'?')+'</div>';
+  r += '<div><div style="font-weight:600;font-size:13px">'+u.nombre+(isSuperAdmRow?' <span style="font-size:10px;color:#f59e0b">🔒</span>':'')+'</div>';
+  r += '<div style="font-size:11px;color:var(--muted)">'+(u.correo||'—')+'</div></div></div></td>';
+  r += '<td><code style="font-size:12px">'+u.username+'</code></td>';
+  r += '<td><span class="role-badge">'+u.rol+'</span></td>';
+  r += '<td class="hide-m" style="font-size:12px">'+(u.cargo||'—')+'</td>';
+  r += '<td class="hide-m" style="font-size:12px">'+(u.area||'—')+'</td>';
+  r += '<td><span class="badge '+estC+'">'+u.estado+'</span></td>';
+  r += '<td style="white-space:nowrap"><div style="display:flex;gap:4px;justify-content:flex-end">';
+  if (!isProtectedRow && typeof editarUsuario==='function') {
+    r += '<button class="btn-icon" onclick="editarUsuario(''+u.id+'')" title="Editar">✏️</button>';
+  }
+  if (canActOnUser && u.estado==='BLOQUEADO' && typeof _desbloquearUsuario==='function') {
+    r += '<button class="btn-icon" onclick="_desbloquearUsuario(''+u.id+'')" title="Desbloquear" style="color:var(--neon)">🔓</button>';
+  }
+  if (!isMe && !isProtectedRow) {
+    if (typeof resetPasswordUsuario==='function') r += '<button class="btn-icon" onclick="resetPasswordUsuario(''+u.id+'')" title="Resetear contraseña" style="color:var(--amber)">🔑</button>';
+    if (typeof cambiarEstadoUsuario==='function') r += '<button class="btn-icon" onclick="cambiarEstadoUsuario(''+u.id+'')" title="'+(u.estado==='ACTIVO'?'Desactivar':'Activar')+'" style="color:'+(u.estado==='ACTIVO'?'var(--red)':'var(--neon)')+'">'+( u.estado==='ACTIVO'?'⏸':'▶')+'</button>';
+  }
+  r += '</div></td></tr>';
+  return r;
 }
 
 </script>
