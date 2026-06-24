@@ -12176,88 +12176,148 @@ function _calcItemIndicadores(item) {
 
 /* ── _buildInvRow — construir fila de la tabla de inventario ─────────────── */
 function _buildInvRow(item) {
-  var d       = _calcItemIndicadores(item);
-  var stock   = d.stock, reserv = d.reserv, disp = d.disp;
-  var smin    = d.smin,  smax   = d.smax;
-  var preord  = d.preord, barPct = d.barPct;
-  var agot    = d.agot,  crit   = d.crit,  bajo  = d.bajo, sobreS = d.sobreS, reord = d.reord;
+  var d      = _calcItemIndicadores(item);
+  var stock  = d.stock,  reserv = d.reserv, disp = d.disp;
+  var smin   = d.smin,   smax   = d.smax;
+  var preord = d.preord, barPct = d.barPct;
+  var agot   = d.agot,   crit   = d.crit,  bajo  = d.bajo;
+  var sobreS = d.sobreS, reord  = d.reord;
+  var consumo = Number(item.consumo_diario || 0);
+  var lead    = Number(item.lead_time || 0);
 
-  var stockClr = agot?'#dc2626':crit?'#f97316':bajo?'#d97706':'var(--text)';
-  var dispClr  = agot?'#dc2626':crit?'#f97316':bajo?'#d97706':sobreS?'#7c3aed':'#16a34a';
-  var rowBg    = agot?'rgba(220,38,38,.04)':crit?'rgba(249,115,22,.04)':bajo?'rgba(245,158,11,.03)':'';
+  // Colores
+  var stockClr = agot?'#ef4444':crit?'#f97316':bajo?'#f59e0b':'#e2e8f0';
+  var dispClr  = agot?'#ef4444':crit?'#f97316':bajo?'#f59e0b':sobreS?'#a78bfa':'#4ade80';
+  var rowBg    = agot?'rgba(239,68,68,.05)':crit?'rgba(249,115,22,.04)':bajo?'rgba(245,158,11,.03)':'';
 
+  // Estado
   var estTxt, estBg, estClr;
-  if      (agot)   { estTxt='⚫ AGOTADO';     estBg='rgba(220,38,38,.2)';   estClr='#fca5a5'; }
-  else if (crit)   { estTxt='🔴 CRÍTICO';     estBg='rgba(249,115,22,.2)';  estClr='#fdba74'; }
-  else if (bajo)   { estTxt='🟠 BAJO MÍN';    estBg='rgba(217,119,6,.2)';   estClr='#fcd34d'; }
-  else if (sobreS) { estTxt='🔵 SOBRE STOCK'; estBg='rgba(124,58,237,.2)';  estClr='#c4b5fd'; }
-  else             { estTxt='🟢 NORMAL';       estBg='rgba(22,163,74,.15)';  estClr='#86efac'; }
+  if      (agot)   { estTxt='AGOTADO';     estBg='#7f1d1d'; estClr='#fca5a5'; }
+  else if (crit)   { estTxt='CRÍTICO';     estBg='#7c2d12'; estClr='#fdba74'; }
+  else if (bajo)   { estTxt='BAJO MÍN';   estBg='#713f12'; estClr='#fde68a'; }
+  else if (sobreS) { estTxt='SOBRE STOCK'; estBg='#3b0764'; estClr='#d8b4fe'; }
+  else             { estTxt='NORMAL';       estBg='#14532d'; estClr='#86efac'; }
 
-  var r = '<tr style="' + (rowBg?'background:'+rowBg+';':'') + 'border-bottom:1px solid rgba(255,255,255,.04)">';
+  // Cobertura
+  var cob    = consumo > 0 ? Math.round(disp/consumo) : null;
+  var cobTxt = cob !== null ? cob+'d' : '—';
+  var cobClr = cob===null?'#64748b':cob<=7?'#ef4444':cob<=30?'#f59e0b':'#4ade80';
 
-  // 1. CHECKBOX
-  r += '<td style="padding:7px 6px;width:32px;text-align:center">';
-  r += '<input type="checkbox" data-sku="'+(item.sku||'')+'" style="accent-color:var(--electric)">';
+  // Compra sugerida
+  var compra = (reord && smax > 0) ? Math.max(0, smax-disp) : 0;
+
+  var r = '<tr style="'+(rowBg?'background:'+rowBg+';':'')+' border-bottom:1px solid rgba(255,255,255,.05); transition:background .1s" onmouseenter="this.style.background=\''+(rowBg||'rgba(255,255,255,.02)')+'\'" onmouseleave="this.style.background=\''+rowBg+'\'">';
+
+  // 1. CHK (28px)
+  r += '<td style="padding:6px 4px 6px 10px;width:28px;min-width:28px">';
+  r += '<input type="checkbox" data-sku="'+(item.sku||'')+'" style="accent-color:#3b82f6;cursor:pointer">';
   r += '</td>';
-  // 2. CÓDIGO
-  r += '<td style="padding:7px 8px;white-space:nowrap">';
-  r += '<span style="font-family:monospace;font-size:11px;font-weight:700;color:var(--electric);background:rgba(59,130,246,.1);padding:3px 7px;border-radius:5px">'+(item.sku||item.codigo||'—')+'</span>';
+
+  // 2. CÓDIGO (90px)
+  r += '<td style="padding:6px 8px;width:90px;min-width:90px;white-space:nowrap">';
+  r += '<span style="font-family:monospace;font-size:11px;font-weight:700;color:#60a5fa;background:rgba(59,130,246,.12);padding:2px 6px;border-radius:4px;white-space:nowrap">'+(item.sku||item.codigo||'—')+'</span>';
   r += '</td>';
-  // 3. NOMBRE
-  r += '<td style="padding:7px 8px;min-width:150px;max-width:200px">';
-  r += '<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--white)" title="'+(item.nombre||'')+(item.descripcion?' | '+item.descripcion:'')+'">'+(item.nombre||'—')+'</div>';
-  if (item.descripcion) r += '<div style="font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">'+item.descripcion+'</div>';
+
+  // 3. NOMBRE (180px)
+  r += '<td style="padding:6px 8px;min-width:180px;width:180px;max-width:180px">';
+  r += '<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:176px;color:#f1f5f9" title="'+(item.nombre||'')+'">'+(item.nombre||'—')+'</div>';
+  if (item.descripcion) r += '<div style="font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:176px" title="'+item.descripcion+'">'+item.descripcion+'</div>';
   r += '</td>';
-  // 4. CATEGORÍA
-  r += '<td style="padding:7px 8px;font-size:11px;color:var(--text2);white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis">'+(item.categoria||'—')+'</td>';
-  // 5. MARCA
-  r += '<td style="padding:7px 8px;font-size:11px;color:var(--text2);white-space:nowrap;max-width:100px;overflow:hidden;text-overflow:ellipsis">'+(item.marca||'—')+'</td>';
-  // 6. UM
-  r += '<td style="padding:7px 8px;text-align:center;font-size:11px;color:var(--muted);white-space:nowrap">'+(item.unidad||'UND')+'</td>';
-  // 7. UBICACIÓN
-  r += '<td style="padding:7px 8px;white-space:nowrap"><code style="font-size:10px;color:var(--muted);background:rgba(255,255,255,.04);padding:2px 5px;border-radius:3px">'+(item.ubicacion||'—')+'</code></td>';
-  // 8. ACTUAL
-  r += '<td style="padding:7px 8px;text-align:center">';
+
+  // 4. CATEGORÍA (110px)
+  r += '<td style="padding:6px 8px;min-width:110px;width:110px;font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px" title="'+(item.categoria||'')+'">'+(item.categoria||'—')+'</td>';
+
+  // 5. MARCA (100px)
+  r += '<td style="padding:6px 8px;min-width:100px;width:100px;font-size:11px;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px" title="'+(item.marca||'')+'">'+(item.marca||'—')+'</td>';
+
+  // 6. UM (52px)
+  r += '<td style="padding:6px 4px;width:52px;min-width:52px;text-align:center;font-size:11px;color:#64748b;white-space:nowrap">'+(item.unidad||'UND')+'</td>';
+
+  // 7. UBICACIÓN (110px)
+  r += '<td style="padding:6px 8px;min-width:110px;width:110px">';
+  r += '<code style="font-size:10px;color:#64748b;white-space:nowrap">'+(item.ubicacion||'—')+'</code>';
+  r += '</td>';
+
+  // 8. ACTUAL (72px)
+  r += '<td style="padding:6px 6px;width:72px;min-width:72px;text-align:center">';
   r += '<div style="font-size:14px;font-weight:700;color:'+stockClr+'">'+stock+'</div>';
   if (smax > 0) {
-    r += '<div style="margin:3px auto 0;height:3px;background:rgba(255,255,255,.1);border-radius:99px;width:36px">';
-    r += '<div style="width:'+barPct+'%;height:3px;background:'+(agot?'#dc2626':bajo||crit?'#f59e0b':'#16a34a')+';border-radius:99px;max-width:100%"></div></div>';
+    r += '<div style="margin:2px auto 0;height:3px;background:rgba(255,255,255,.1);border-radius:99px;width:44px">';
+    r += '<div style="width:'+Math.min(barPct,100)+'%;height:3px;background:'+(agot?'#ef4444':bajo||crit?'#f59e0b':'#4ade80')+';border-radius:99px"></div>';
+    r += '</div>';
   }
   r += '</td>';
-  // 9. RESERVADO
-  r += '<td style="padding:7px 8px;text-align:center;font-size:12px;color:'+(reserv>0?'var(--electric)':'rgba(255,255,255,.25)')+'">'+reserv+'</td>';
-  // 10. DISPONIBLE
-  r += '<td style="padding:7px 8px;text-align:center"><div style="font-size:14px;font-weight:800;color:'+dispClr+'">'+disp+'</div></td>';
-  // 11. MÍN
-  r += '<td style="padding:7px 8px;text-align:center;font-size:11px;color:'+(disp<smin&&smin>0?'#f97316':'rgba(255,255,255,.35)')+'">'+( smin||'—')+'</td>';
-  // 12. MÁX
-  r += '<td style="padding:7px 8px;text-align:center;font-size:11px;color:'+(sobreS?'#7c3aed':'rgba(255,255,255,.35)')+'">'+( smax||'—')+'</td>';
-  // 13. P.REORDEN
-  r += '<td style="padding:7px 8px;text-align:center">';
-  if (reord) {
-    r += '<div style="font-size:11px;font-weight:700;color:#dc2626">'+(preord||'—')+'</div>';
-    r += '<div style="font-size:9px;color:#dc2626;font-weight:600;margin-top:1px">🔄 PEDIR</div>';
+
+  // 9. RESERV (60px)
+  r += '<td style="padding:6px 4px;width:60px;min-width:60px;text-align:center;font-size:12px;color:'+(reserv>0?'#60a5fa':'#334155')+'">'+reserv+'</td>';
+
+  // 10. DISPONIBLE (80px)
+  r += '<td style="padding:6px 6px;width:80px;min-width:80px;text-align:center">';
+  r += '<strong style="font-size:14px;font-weight:800;color:'+dispClr+'">'+disp+'</strong>';
+  r += '</td>';
+
+  // 11. SEG (56px)
+  r += '<td style="padding:6px 4px;width:56px;min-width:56px;text-align:center;font-size:11px;color:'+(crit?'#ef4444':'#475569')+'" title="Stock de Seguridad">'+(d.seg||'—')+'</td>';
+
+  // 12. MÍN (56px)
+  r += '<td style="padding:6px 4px;width:56px;min-width:56px;text-align:center;font-size:11px;color:'+(disp<smin&&smin>0?'#f59e0b':'#475569')+'">'+( smin||'—')+'</td>';
+
+  // 13. MÁX (56px)
+  r += '<td style="padding:6px 4px;width:56px;min-width:56px;text-align:center;font-size:11px;color:'+(sobreS?'#a78bfa':'#475569')+'">'+( smax||'—')+'</td>';
+
+  // 14. P.REORDEN (76px)
+  r += '<td style="padding:6px 4px;width:76px;min-width:76px;text-align:center">';
+  if (reord && disp > 0) {
+    r += '<div style="font-size:11px;font-weight:700;color:#ef4444">'+(preord||'—')+'</div>';
+    r += '<div style="font-size:9px;color:#ef4444;font-weight:600">🔄PEDIR</div>';
   } else {
-    r += '<span style="font-size:11px;color:'+(preord?'rgba(255,255,255,.4)':'rgba(255,255,255,.2)')+'">'+( preord||'—')+'</span>';
+    r += '<span style="font-size:11px;color:'+(preord?'#475569':'#1e293b')+'">'+( preord||'—')+'</span>';
   }
   r += '</td>';
-  // 14. ESTADO
-  r += '<td style="padding:7px 8px;text-align:center;white-space:nowrap">';
-  r += '<span style="font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;background:'+estBg+';color:'+estClr+'">'+estTxt+'</span>';
+
+  // 15. COBERTURA (72px)
+  r += '<td style="padding:6px 4px;width:72px;min-width:72px;text-align:center">';
+  r += '<span style="font-size:11px;font-weight:600;color:'+cobClr+'">'+cobTxt+'</span>';
   r += '</td>';
-  // 15. ACCIONES
-  r += '<td style="padding:7px 8px">';
-  r += '<div style="display:flex;gap:2px;justify-content:flex-end;align-items:center">';
-  if (typeof canDo==="function"&&canDo("entrada")) r += '<button class="btn-icon" data-id="'+(item.id||'')+'" onclick="openMovModal(\'ENTRADA\',this.dataset.id)" title="Entrada" style="color:#4ade80"><svg viewBox="0 0 24 24" width="14" height="14"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg></button>';
-  if (typeof canDo==="function"&&canDo("salida"))  r += '<button class="btn-icon" data-id="'+(item.id||'')+'" onclick="openMovModal(\'SALIDA\',this.dataset.id)" title="Salida" style="color:#f87171"><svg viewBox="0 0 24 24" width="14" height="14"><polyline points="7 13 12 18 17 13"/><line x1="12" y1="6" x2="12" y2="18"/></svg></button>';
-  if (typeof canDo==="function"&&canDo("editar_articulo")) r += '<button class="btn-icon" data-id="'+(item.id||'')+'" onclick="openNuevoArticulo(this.dataset.id)" title="Editar" style="color:rgba(255,255,255,.5)"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>';
-  r += '<button class="btn-icon" data-id="'+(item.id||'')+'" onclick="goto(\'detalle\',this.dataset.id)" title="Ver detalle" style="color:rgba(255,255,255,.5)"><svg viewBox="0 0 24 24" width="13" height="13"><polyline points="9 18 15 12 9 6"/></svg></button>';
+
+  // 16. CONSUMO/DÍA (76px)
+  r += '<td style="padding:6px 4px;width:76px;min-width:76px;text-align:center;font-size:11px;color:#475569">';
+  r += consumo > 0 ? consumo.toFixed(1) : '—';
+  r += '</td>';
+
+  // 17. LEAD TIME (70px)
+  r += '<td style="padding:6px 4px;width:70px;min-width:70px;text-align:center;font-size:11px;color:#475569">';
+  r += lead > 0 ? lead+'d' : '—';
+  r += '</td>';
+
+  // 18. COMPRA SUG (72px)
+  r += '<td style="padding:6px 4px;width:72px;min-width:72px;text-align:center">';
+  if (compra > 0) {
+    r += '<span style="font-size:11px;font-weight:700;color:#60a5fa;background:rgba(59,130,246,.12);padding:2px 6px;border-radius:10px">+'+compra+'</span>';
+  } else {
+    r += '<span style="color:#1e293b;font-size:11px">—</span>';
+  }
+  r += '</td>';
+
+  // 19. ESTADO (96px)
+  r += '<td style="padding:6px 6px;width:96px;min-width:96px;text-align:center;white-space:nowrap">';
+  r += '<span style="font-size:9px;font-weight:700;padding:3px 7px;border-radius:20px;background:'+estBg+';color:'+estClr+';white-space:nowrap;display:inline-block">'+estTxt+'</span>';
+  r += '</td>';
+
+  // 20. ACCIONES (84px)
+  r += '<td style="padding:6px 8px;width:84px;min-width:84px;white-space:nowrap">';
+  r += '<div style="display:flex;gap:3px;justify-content:flex-end;align-items:center">';
+  if (typeof canDo==='function'&&canDo('entrada')) r += '<button class="btn-icon" data-id="'+(item.id||'')+'" onclick="openMovModal(\'ENTRADA\',this.dataset.id)" title="Entrada" style="color:#4ade80;padding:3px"><svg viewBox="0 0 24 24" width="13" height="13"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg></button>';
+  if (typeof canDo==='function'&&canDo('salida'))  r += '<button class="btn-icon" data-id="'+(item.id||'')+'" onclick="openMovModal(\'SALIDA\',this.dataset.id)" title="Salida" style="color:#f87171;padding:3px"><svg viewBox="0 0 24 24" width="13" height="13"><polyline points="7 13 12 18 17 13"/><line x1="12" y1="6" x2="12" y2="18"/></svg></button>';
+  if (typeof canDo==='function'&&canDo('editar_articulo')) r += '<button class="btn-icon" data-id="'+(item.id||'')+'" onclick="openNuevoArticulo(this.dataset.id)" title="Editar" style="padding:3px"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>';
+  r += '<button class="btn-icon" data-id="'+(item.id||'')+'" onclick="goto(\'detalle\',this.dataset.id)" title="Detalle" style="padding:3px"><svg viewBox="0 0 24 24" width="13" height="13"><polyline points="9 18 15 12 9 6"/></svg></button>';
   r += '</div></td>';
+
   r += '</tr>';
   return r;
 }
 
-/* ── filterInventarioTable ───────────────────────────────────────────────── */
+
 function filterInventarioTable() {
   var inp = document.getElementById('inv-s');
   var cursorPos = inp ? inp.selectionStart : null;
@@ -12280,7 +12340,7 @@ function filterInventarioTable() {
   });
   if (tbody) {
     tbody.innerHTML = visible.length===0
-      ? '<tr><td colspan="15" style="text-align:center;padding:32px;color:var(--muted)">Sin resultados</td></tr>'
+      ? '<tr><td colspan="20" style="text-align:center;padding:32px;color:var(--muted)">Sin resultados</td></tr>'
       : visible.map(function(item){ return _buildInvRow(item); }).join('');
     if (inp) setTimeout(function(){ try{inp.focus();inp.setSelectionRange(cursorPos,cursorPos);}catch(e){} },0);
     return;
@@ -12342,25 +12402,41 @@ function _buildInventarioUI(allItems) {
     h.push('</div>');
     h.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+filtered.length+' de '+nAll+' referencias'+(invFiltro!=='TODOS'||ql?' · <span style=\"color:var(--amber)\">filtro activo</span>':'')+'</div>');
 
-    h.push('<div style="overflow-x:auto">');
-    h.push('<table style="width:100%;border-collapse:collapse;min-width:900px">');
+    // Total width: 28+90+180+110+100+52+110+72+60+80+56+56+56+76+72+76+70+72+96+84 = 1596px
+    h.push('<div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(255,255,255,.07)">');
+    h.push('<table style="width:1596px;min-width:1596px;border-collapse:collapse;table-layout:fixed">');
+    h.push('<colgroup>');
+    [28,90,180,110,100,52,110,72,60,80,56,56,56,76,72,76,70,72,96,84].forEach(function(w){
+      h.push('<col style="width:'+w+'px;min-width:'+w+'px">');
+    });
+    h.push('</colgroup>');
     h.push('<thead>');
-    h.push('<tr style="background:rgba(255,255,255,.04);border-bottom:2px solid rgba(255,255,255,.08)">');
-    h.push('<th style="padding:8px 6px;width:32px"><input type="checkbox" id="inv-chk-all" onchange="_toggleAllInvChk(this)" style="accent-color:var(--electric)"></th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);white-space:nowrap">Código</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted)">Nombre / Descripción</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted)">Categoría</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted)">Marca</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:center">UM</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted)">Ubicación</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:center">Actual</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:center">Reserv.</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--electric);text-align:center">Disponible</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:center">Mín</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:center">Máx</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:center">P.Reorden</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:center">Estado</th>');
-    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:right">Acciones</th>');
+    h.push('<tr style="background:rgba(255,255,255,.05);border-bottom:2px solid rgba(255,255,255,.1);position:sticky;top:0;z-index:10">');
+    var ths = [
+      {w:28,  align:'center', label:'<input type="checkbox" id="inv-chk-all" onchange="_toggleAllInvChk(this)" style="accent-color:#3b82f6">'},
+      {w:90,  align:'left',   label:'Código'},
+      {w:180, align:'left',   label:'Nombre'},
+      {w:110, align:'left',   label:'Categoría'},
+      {w:100, align:'left',   label:'Marca'},
+      {w:52,  align:'center', label:'UM'},
+      {w:110, align:'left',   label:'Ubicación'},
+      {w:72,  align:'center', label:'Actual'},
+      {w:60,  align:'center', label:'Reserv.'},
+      {w:80,  align:'center', label:'<span style="color:#4ade80">Disponible</span>'},
+      {w:56,  align:'center', label:'Seg.'},
+      {w:56,  align:'center', label:'Mín'},
+      {w:56,  align:'center', label:'Máx'},
+      {w:76,  align:'center', label:'P.Reorden'},
+      {w:72,  align:'center', label:'Cobertura'},
+      {w:76,  align:'center', label:'Consumo/d'},
+      {w:70,  align:'center', label:'Lead Time'},
+      {w:72,  align:'center', label:'Compra'},
+      {w:96,  align:'center', label:'Estado'},
+      {w:84,  align:'right',  label:'Acciones'},
+    ];
+    ths.forEach(function(th){
+      h.push('<th style="padding:8px '+(th.align==='center'?'4':'8')+'px;font-size:9px;font-weight:700;text-transform:uppercase;color:#64748b;text-align:'+th.align+';white-space:nowrap;overflow:hidden;background:rgba(15,23,42,.8)">'+th.label+'</th>');
+    });
     h.push('</tr></thead>');
     h.push('<tbody id="inv-tbody">' + rows + '</tbody>');
     h.push('</table></div>');
