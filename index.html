@@ -1964,7 +1964,9 @@ renders.inventario = function(q) {
             var loc = localMap[sku] || {};
             var merged = Object.assign({}, loc, api);
             ['proveedor','marca','subcategoria','descripcion','ubicacion',
-             'stock_maximo','stock_minimo','punto_reorden','consumo_diario','lead_time'
+             'stock_maximo','stock_minimo','punto_reorden','consumo_diario','lead_time',
+             'stock_seguridad','dias_cobertura','precio','codigo_barras',
+             'ultima_entrada','ultima_salida'
             ].forEach(function(f){
               if ((merged[f]===null||merged[f]===undefined||merged[f]==='')&&loc[f]) merged[f]=loc[f];
             });
@@ -4818,22 +4820,27 @@ function downloadPlantilla() {
 
   // ── Encabezados EXACTOS igual al Excel del cliente ──────────────────
   var headers = [
-    'Código',         // A — SKU / código único
-    'Nombre',         // B — Nombre del producto
-    'Descripción',    // C — Descripción detallada
-    'Categoría',      // D — Categoría
-    'Subcategoría',   // E — Subcategoría
-    'Marca',          // F — Marca o fabricante
-    'Unidad de Medida',// G — UND, KG, MT, LT, etc.
-    'Ubicación',      // H — Código de ubicación (A-01-01-A)
-    'Bodega',         // I — Nombre de la bodega
-    'Cantidad',       // J — Stock actual
-    'Stock Mínimo',   // K — Cantidad mínima
-    'Stock Máximo',   // L — Cantidad máxima
-    'Punto Reorden',  // M — Punto de reorden
-    'Costo Unitario', // N — Costo por unidad
-    'Proveedor',      // O — Nombre del proveedor
-    'Estado',         // P — Activo / Inactivo
+    'Código',           // A  — SKU / código único
+    'Nombre',           // B  — Nombre del producto
+    'Descripción',      // C  — Descripción detallada
+    'Categoría',        // D  — Categoría
+    'Subcategoría',     // E  — Subcategoría
+    'Marca',            // F  — Marca o fabricante
+    'Unidad de Medida', // G  — UND, KG, MT, LT, etc.
+    'Ubicación',        // H  — Código de ubicación
+    'Bodega',           // I  — Nombre de la bodega
+    'Cantidad',         // J  — Stock actual
+    'Stock Mínimo',     // K  — Cantidad mínima
+    'Stock Máximo',     // L  — Cantidad máxima
+    'Stock Seguridad',  // M  — Stock de seguridad
+    'Punto Reorden',    // N  — Punto de reorden
+    'Consumo Diario',   // O  — Unidades consumidas por día
+    'Lead Time',        // P  — Días de entrega del proveedor
+    'Costo Unitario',   // Q  — Costo por unidad
+    'Proveedor',        // R  — Nombre del proveedor
+    'Estado',           // S  — Activo / Inactivo
+    'Fecha Última Entrada', // T — Última entrada al inventario
+    'Fecha Última Salida',  // U — Última salida del inventario
   ];
 
   // ── Ejemplos de datos ────────────────────────────────────────────────
@@ -4841,7 +4848,8 @@ function downloadPlantilla() {
     '1000000','Lámina HR 3mm','Lámina de acero laminada en caliente 3mm',
     'Materia Prima','Láminas','Acesco',
     'UND','B01-A-01-01-01','B01',
-    '34','17','200','20','85000','Acesco S.A.S.','Activo'
+    '34','17','200','5','20','5.0','7',
+    '85000','Acesco S.A.S.','Activo','2024-01-15','2024-06-10'
   ];
   var ej2 = [
     '1000001','Tubo Sanitario 316L','Tubo sanitario acero inox 316L',
@@ -4870,11 +4878,16 @@ function downloadPlantilla() {
     ['Bodega',         'I','No', 'Nombre o código de la bodega.','B01'],
     ['Cantidad',       'J','Sí', 'Stock actual existente en inventario. Solo números.','34'],
     ['Stock Mínimo',   'K','No', 'Cantidad mínima antes de reordenar. Solo números.','17'],
-    ['Stock Máximo',   'L','No', 'Cantidad máxima permitida en inventario. Solo números.','200'],
-    ['Punto Reorden',  'M','No', 'Cantidad que dispara una orden de compra. Solo números.','20'],
-    ['Costo Unitario', 'N','No', 'Costo por unidad sin puntos de miles. Solo números.','85000'],
-    ['Proveedor',      'O','No', 'Nombre del proveedor principal.','Acesco S.A.S.'],
-    ['Estado',         'P','No', 'Estado del artículo: Activo o Inactivo.','Activo'],
+    ['Stock Máximo',     'L','No', 'Cantidad máxima permitida. Solo números.','200'],
+    ['Stock Seguridad',  'M','No', 'Stock de seguridad mínimo. Solo números.','5'],
+    ['Punto Reorden',    'N','No', 'Cantidad que dispara una orden de compra. Solo números.','20'],
+    ['Consumo Diario',   'O','No', 'Unidades promedio consumidas por día. Solo números.','5.0'],
+    ['Lead Time',        'P','No', 'Días de entrega del proveedor. Solo números.','7'],
+    ['Costo Unitario',   'Q','No', 'Costo por unidad sin puntos de miles. Solo números.','85000'],
+    ['Proveedor',        'R','No', 'Nombre del proveedor principal.','Acesco S.A.S.'],
+    ['Estado',           'S','No', 'Estado del artículo: Activo o Inactivo.','Activo'],
+    ['Fecha Última Entrada','T','No','Fecha de la última entrada. Formato AAAA-MM-DD.','2024-01-15'],
+    ['Fecha Última Salida', 'U','No','Fecha de la última salida. Formato AAAA-MM-DD.','2024-06-10'],
     [],
     ['⚠ REGLAS IMPORTANTES:'],
     ['1. NO modificar los nombres de las columnas (fila 1).'],
@@ -11609,10 +11622,21 @@ function handleImportFile(file) {
         stock_minimo:     ['stock minimo','stock mínimo','stock_minimo','stock min','minimo','mínimo','min','stk_min'],
         stock_maximo:     ['stock maximo','stock máximo','stock_maximo','stock max','maximo','máximo','max','stk_max'],
         punto_reorden:    ['punto reorden','punto_reorden','puntoreorden','reorden','reorder_point','p reorden'],
-        costo:            ['costo unitario','costo_unitario','costounitario','costo','cost',
+        costo:            ['Costo Unitario','costo unitario','costo_unitario','costounitario','costo','cost',
                            'precio costo','precio_costo','precio','unit_cost','valor_unitario','precio_unitario'],
-        proveedor:        ['proveedor','supplier','vendor'],
-        estado:           ['estado','status','activo','state'],
+        precio:           ['Precio Venta','precio venta','precio_venta','pvp','price','precio de venta'],
+        consumo_diario:   ['Consumo Diario','consumo diario','consumo_diario','consumo','demanda diaria',
+                           'demanda_diaria','consumo promedio','venta_diaria','ventas_diarias','consumo/dia'],
+        lead_time:        ['Lead Time','lead time','lead_time','leadtime','tiempo entrega',
+                           'tiempo_entrega','tiempo de entrega','dias_proveedor','plazo entrega','lt'],
+        dias_cobertura:   ['Días Cobertura','dias cobertura','dias_cobertura','cobertura','coverage_days'],
+        ultima_entrada:   ['Fecha Última Entrada','fecha ultima entrada','ultima_entrada','fecha_entrada',
+                           'ultimo ingreso','ultima entrada','fecha ingreso','fecha ultimo ingreso'],
+        ultima_salida:    ['Fecha Última Salida','fecha ultima salida','ultima_salida','fecha_salida',
+                           'ultima salida','fecha ultimo despacho','fecha despacho'],
+        codigo_barras:    ['Código de Barras','codigo de barras','codigo_barras','barcode','ean','upc','cod_barras'],
+        proveedor:        ['Proveedor','proveedor','supplier','vendor','suplidor'],
+        estado:           ['Estado','estado','status','activo','state'],
       };
 
       // Helper: parse Colombian-format numbers ($10.000, 1.500.000, "12,5" etc)
@@ -11712,7 +11736,14 @@ function handleImportFile(file) {
           stock_maximo:    g('stock_maximo')!=='' ? parseFloat(g('stock_maximo'))||null : null,
           stock_seguridad: parseFloat(g('stock_seguridad'))||0,
           punto_reorden:   parseFloat(g('punto_reorden'))||0,
+          consumo_diario:  parseFloat(g('consumo_diario'))||0,
+          lead_time:       parseFloat(g('lead_time'))||0,
+          dias_cobertura:  parseFloat(g('dias_cobertura'))||0,
           costo:           _parseCosto(g('costo')),
+          precio:          _parseCosto(g('precio'))||0,
+          codigo_barras:   g('codigo_barras'),
+          ultima_entrada:  g('ultima_entrada'),
+          ultima_salida:   g('ultima_salida'),
           proveedor:       g('proveedor'),
           estado:          g('estado')||'Activo',
         };
@@ -11759,8 +11790,11 @@ function renderSyncPreview(parsed, invalid, toCreate, toUpdate, toDeact) {
       '<td style="text-align:center;font-size:13px;font-weight:700;color:var(--navy)">'+disp+'</td>' +
       '<td style="text-align:center;font-size:12px;font-weight:700;color:#b45309">'+item.stock_minimo+'</td>' +
       '<td style="text-align:center;font-size:12px;font-weight:700;color:#1e40af">'+(item.stock_maximo!==null&&item.stock_maximo!==undefined?item.stock_maximo:'—')+'</td>' +
-      '<td style="text-align:center;font-size:12px;color:var(--muted)">'+(item.punto_reorden||item.stock_minimo*2||'—')+'</td>' +
-      '<td style="font-size:11px;color:var(--muted)">'+( item.proveedor||'—')+'</td>' +
+      '<td style="text-align:center;font-size:12px;color:var(--muted)">'+(item.punto_reorden||'—')+'</td>' +
+      '<td style="text-align:center;font-size:11px;color:var(--muted)">'+(item.consumo_diario||'—')+'</td>' +
+      '<td style="text-align:center;font-size:11px;color:var(--muted)">'+(item.lead_time?item.lead_time+'d':'—')+'</td>' +
+      '<td style="font-size:11px;color:var(--muted)">'+(item.proveedor||'—')+'</td>' +
+      '<td style="font-size:11px;color:var(--muted)">'+(item.stock_seguridad||'—')+'</td>' +
     '</tr>';
   }).join('');
 
@@ -11907,11 +11941,18 @@ function executeSync(parsed) {
   function nextBatch() {
     if (bIdx >= batches.length) { deactivateOld(); return; }
     var batch = batches[bIdx++];
+    var empId = typeof _getEmpresaId==='function' ? _getEmpresaId() : null;
     var items = batch.map(function(item) {
-      return Object.assign({}, item, {
-        created_by: SESSION.user && SESSION.user.nombre || 'Sistema',
-        _mode: 'sync_total',
-      });
+      var out = Object.assign({}, item);
+      // Garantizar empresa_id para aislamiento multiempresa
+      if (empId && empId !== '__SA__') out.empresa_id = empId;
+      out.created_by = SESSION.user && SESSION.user.nombre || 'Sistema';
+      out._mode = 'sync_total';
+      // Limpiar campos de control que no van a BD
+      delete out._row; delete out._errors;
+      // Garantizar campos calculados mínimos
+      if (!out.stock_maximo && out.stock_minimo) out.stock_maximo = out.stock_minimo * 4;
+      return out;
     });
 
     fetch('/api/articulos?action=batch', {
