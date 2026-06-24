@@ -8668,8 +8668,18 @@ function manualScan() {
 ══════════════════════════════════════════════ */
 let movFiltro = 'TODOS', movSearch = '';
 renders.movimientos = function() {
-  const items = loadItems();
+  // Cargar items con fallback: _invItems primero, luego localStorage, luego fetch Neon
+  var items = (_invItems && _invItems.length > 0) ? _invItems : _getItems();
   if (items.length === 0) {
+    // Intentar cargar desde Neon
+    fetch('/api/articulos?limit=5000')
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(res){
+        if (res && res.data && res.data.length > 0) {
+          _invItems = res.data; saveItems(res.data);
+          if (currentPage==='movimientos') renders.movimientos();
+        }
+      }).catch(function(){});
     document.getElementById('pg-movimientos').innerHTML = `
       <div class="empty-state">
         <svg viewBox="0 0 24 24"><path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01"/></svg>
@@ -8725,7 +8735,7 @@ renders.movimientos = function() {
    RENDER: REPORTES (ENHANCED)
 ══════════════════════════════════════════════ */
 renders.reportes = function() {
-  const items = loadItems();
+  const items = _getItems();
   const movs  = loadMovs();
   const noData = items.length === 0;
 
@@ -9110,6 +9120,10 @@ renders.proveedores = function() {
   var provs = loadProveedores();
   var canW  = canDo('crear_articulo');
 
+  // ── Mostrar datos locales INMEDIATAMENTE ──────────────────────────────
+  _buildProveedoresUI(provs, canW, pg);
+
+  // ── Sincronizar con API en background ────────────────────────────────
   fetch('/api/proveedores')
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res) {
@@ -10237,6 +10251,11 @@ renders.conciliacion = function() {
   var pg = document.getElementById('pg-conciliacion');
   if (!pg) return;
 
+  // ── Mostrar con datos locales inmediatamente ──────────────────────────
+  var localItems = _invItems || _getItems();
+  if (typeof _buildConciliacionUI==='function') _buildConciliacionUI(localItems, pg);
+  else if (pg && !pg.innerHTML) pg.innerHTML = '<div style="padding:20px;color:var(--muted);text-align:center">Cargando conciliación...</div>';
+
   // Refresh items from API in background
   fetch('/api/articulos?limit=5000')
     .then(function(r){ return r.ok ? r.json() : null; })
@@ -10532,6 +10551,10 @@ function exportarConciliacion() {
 renders.ciclicos = function() {
   var pg  = document.getElementById('pg-ciclicos');
   if (!pg) return;
+
+  // ── Mostrar local inmediato ───────────────────────────────────────────
+  var localCic = typeof loadCiclicos==='function' ? loadCiclicos() : (DB.get('ciclicos')||[]);
+  if (typeof _buildCiclicosUI==='function') _buildCiclicosUI(localCic, pg);
 
   // Fetch from Neon to sync cross-device
   fetch('/api/ciclicos')
@@ -11053,7 +11076,7 @@ function isBodegaBloqueada(bodegaName) {
 
 function checkBodegaBloqueo(articuloId) {
   // Check if the article's bodega is blocked
-  var items = loadItems();
+  var items = _getItems();
   var art   = items.find(function(i){ return i.id === articuloId; });
   if (!art) return false;
   var bodega = art.ubicacion || art.bodega || '';
@@ -11071,9 +11094,9 @@ function checkBodegaBloqueo(articuloId) {
 
 
 renders.auditoria = function() {
-  const audit = loadAudit();
-  const movs  = loadMovs();
-  const items = loadItems();
+  const audit = loadAudit() || [];
+  const movs  = loadMovs()  || [];
+  const items = (_invItems && _invItems.length > 0) ? _invItems : (_getItems() || []);
   if (items.length === 0 && movs.length === 0) {
     document.getElementById('pg-auditoria').innerHTML = `
       <div class="empty-state">
@@ -11130,6 +11153,10 @@ renders.usuarios = function() {
   var rol = SESSION.user && SESSION.user.rol || '';
   var isAdmin = (rol === 'ADMINISTRADOR' || rol === 'SUPER ADMINISTRADOR');
   if (!isAdmin) { document.getElementById('pg-usuarios').innerHTML = '<div class="empty-state"><p>Acceso restringido a administradores.</p></div>'; return; }
+
+  // ── Mostrar usuarios locales INMEDIATAMENTE ───────────────────────────
+  var localUsers = loadUsers();
+  _buildUsuariosUI(localUsers);
 
   // Fetch users from API and sync to localStorage
   fetch('/api/usuarios')
@@ -12002,6 +12029,10 @@ renders.ubicaciones = function() {
   var pg = document.getElementById('pg-ubicaciones');
   if (!pg) return;
 
+  // ── Mostrar local inmediato (skeleton mientras carga) ─────────────────
+  var localBod = typeof loadBodegas==='function' ? loadBodegas() : (DB.get('bodegas')||[]);
+  _buildBodegasUbicacionesUI(localBod, pg);
+
   // Fetch from Neon for cross-device sync
   fetch('/api/ubicaciones')
     .then(function(r){ return r.ok ? r.json() : null; })
@@ -12458,6 +12489,36 @@ function _toggleAllInvChk(chk) {
 renders['mis-inventarios'] = function(){ var pg=document.getElementById('pg-mis-inventarios'); if(pg) pg.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><p style="font-size:20px;margin-bottom:10px">🗂️</p><p style="font-size:14px"> Mis Inventarios — próximamente</p></div>'; };
 renders['respaldos'] = function(){ var pg=document.getElementById('pg-respaldos'); if(pg) pg.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><p style="font-size:20px;margin-bottom:10px">💾 </p><p style="font-size:14px">Respaldos — próximamente</p></div>'; };
 renders['generar-qr'] = function(){ var pg=document.getElementById('pg-generar-qr'); if(pg) pg.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><p style="font-size:20px;margin-bottom:10px">📱 </p><p style="font-size:14px">Generar QR — próximamente</p></div>'; };
+
+
+function toggleThemeMenu() {
+  var menu = document.getElementById('theme-menu');
+  if (!menu) return;
+  if (menu.style.display === 'none' || !menu.style.display) {
+    menu.style.display = 'block';
+    document.addEventListener('click', function hideMenu(e) {
+      var wrap = document.getElementById('theme-picker-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        menu.style.display = 'none';
+        document.removeEventListener('click', hideMenu);
+      }
+    });
+  } else {
+    menu.style.display = 'none';
+  }
+}
+
+
+/* ── Helper: obtener items con fallback confiable ─────────────────────── */
+function _getItems() {
+  if (_invItems && _invItems.length > 0) return _invItems;
+  var local = loadItems();
+  if (local && local.length > 0) { _invItems = local; return local; }
+  return [];
+}
+function _getMovs() {
+  return loadMovs() || [];
+}
 
 </script>
 </body>
