@@ -11888,14 +11888,38 @@ function executeSync(parsed) {
       setTimeout(nextBatch, 60);
     })
     .catch(function() {
-      // local fallback
+      // local fallback — UPSERT: preservar campos manuales, actualizar solo lo del Excel
       var localItems = loadItems();
+      var CAMPOS_EXCEL = ['nombre','descripcion','categoria','subcategoria','marca',
+        'unidad','bodega','stock_minimo','stock_maximo','stock_seguridad','punto_reorden',
+        'consumo_diario','lead_time','costo','precio','proveedor','estado',
+        'ultima_entrada','ultima_salida','codigo_barras'];
+      // Campos que NO se tocan en imports (solo edición manual o movimientos)
+      var CAMPOS_PRESERVAR = ['ubicacion','stock_reservado','stock','id','empresa_id',
+        'created_at','created_by','notas','imagen'];
       batch.forEach(function(item) {
         var idx = localItems.findIndex(function(x){ return x.sku===item.sku; });
-        if (idx>=0) { Object.assign(localItems[idx], item); updated++; }
-        else { localItems.push(item); created++; }
+        if (idx >= 0) {
+          // Actualizar solo los campos del Excel, preservar el resto
+          CAMPOS_EXCEL.forEach(function(f){
+            if (item[f] !== undefined && item[f] !== null && item[f] !== '') {
+              localItems[idx][f] = item[f];
+            }
+          });
+          // Stock del Excel solo si el producto es nuevo (no hay stock actual)
+          if (localItems[idx].stock === 0 || localItems[idx].stock === undefined) {
+            localItems[idx].stock = item.stock || 0;
+          }
+          localItems[idx].updated_at = new Date().toISOString().slice(0,10);
+          updated++;
+        } else {
+          // Nuevo producto — insertar completo
+          localItems.push(item);
+          created++;
+        }
       });
       saveItems(localItems);
+      _invItems = localItems;
       done += batch.length; errors++;
       setTimeout(nextBatch, 60);
     });
@@ -11929,11 +11953,33 @@ function executeSync(parsed) {
   }
 
   function finish() {
-    // Reload fresh data
-    _invItems = null;
+    // Reload and MERGE — no sobreescribir datos manuales con los de Neon
+    var localBefore = loadItems();
+    var localManual = {}; // preservar campos manuales por SKU
+    localBefore.forEach(function(i){
+      localManual[i.sku] = {
+        ubicacion:      i.ubicacion,
+        stock_reservado:i.stock_reservado,
+        notas:          i.notas,
+        imagen:         i.imagen,
+      };
+    });
     fetch('/api/articulos?limit=5000')
       .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(res){ if(res&&res.data){ _invItems=res.data; saveItems(res.data); } })
+      .then(function(res){
+        if(res&&res.data){
+          // Merge: API data + campos manuales preservados
+          var merged = res.data.map(function(item){
+            var manual = localManual[item.sku] || {};
+            Object.keys(manual).forEach(function(k){
+              if (manual[k] !== undefined && manual[k] !== null && manual[k] !== '') {
+                item[k] = manual[k];
+              }
+            });
+            return item;
+          });
+          _invItems = merged;
+          saveItems(res.data); } })
       .catch(function(){});
 
     auditLog('SYNC_INVENTARIO',
@@ -12222,9 +12268,13 @@ function _buildInvRow(item) {
   // 6. UM (52px)
   r += '<td style="padding:6px 4px;width:52px;min-width:52px;text-align:center;font-size:11px;color:#64748b;white-space:nowrap">'+(item.unidad||'UND')+'</td>';
 
-  // 7. UBICACIÓN (110px)
+  // 7. UBICACIÓN (110px) — solo muestra si el producto tiene ubicación asignada
   r += '<td style="padding:6px 8px;min-width:110px;width:110px">';
-  r += '<code style="font-size:10px;color:#64748b;white-space:nowrap">'+(item.ubicacion||'—')+'</code>';
+  if (item.ubicacion && item.ubicacion.trim() && item.ubicacion.trim() !== '—') {
+    r += '<code style="font-size:10px;color:#94a3b8;background:rgba(255,255,255,.04);padding:2px 5px;border-radius:3px;white-space:nowrap">'+item.ubicacion.trim()+'</code>';
+  } else {
+    r += '<span style="font-size:10px;color:rgba(255,255,255,.12);font-style:italic">Sin asignar</span>';
+  }
   r += '</td>';
 
   // 8. ACTUAL (72px)
