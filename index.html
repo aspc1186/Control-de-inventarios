@@ -1665,73 +1665,22 @@ function doLogin() {
     // Contraseña incorrecta localmente — intentar API
   }
 
-  // ── Step 2: Verify against Neon API ──────────────────────────────────
-  fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ login: login, password: pwd })
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(res) {
-    restoreBtn();
-    if (!res.ok || !res.user) {
-      // Failed API — give specific error
-      var msg = res.error || 'Credenciales incorrectas';
-      if (local) {
-        // User exists locally but password wrong
-        local.intentos = (local.intentos||0) + 1;
-        if (local.intentos >= 5 && local.rol !== 'SUPER ADMINISTRADOR') {
-          local.estado = 'BLOQUEADO';
-          showErr('Cuenta bloqueada por 5 intentos fallidos. Contacta al administrador.');
-        } else {
-          showErr('Contraseña incorrecta. Intentos restantes: ' + Math.max(0, 5 - local.intentos));
-        }
-        DB.set('usuarios', allUsers);
-      } else {
-        showErr('Usuario no encontrado: ' + login);
-      }
-      return;
-    }
-
-    // API auth successful — sync user to localStorage
-    var apiUser = res.user;
-    var existIdx = users.findIndex(function(u){ return u.username === apiUser.username; });
-    var hash = simpleHash(pwd);
-    if (existIdx >= 0) {
-      // Update local copy with API data + new hash
-      users[existIdx] = Object.assign(users[existIdx], {
-        nombre: apiUser.nombre, correo: apiUser.correo,
-        rol:    apiUser.rol,    estado: 'ACTIVO',
-        password: hash, intentos: 0
-      });
+  // ── Step 2: Usuario no encontrado localmente ─────────────────────────
+  restoreBtn();
+  if (local) {
+    // Usuario existe pero contraseña incorrecta
+    local.intentos = (local.intentos||0) + 1;
+    if (local.intentos >= 5 && local.rol !== 'SUPER ADMINISTRADOR') {
+      local.estado = 'BLOQUEADO';
+      DB.set('usuarios', allUsers);
+      showErr('Cuenta bloqueada por 5 intentos fallidos. Contacta al administrador.');
     } else {
-      // New device — create local copy from API data
-      users.push({
-        id: apiUser.id || uid(),
-        nombre: apiUser.nombre, correo: apiUser.correo || login,
-        username: apiUser.username, password: hash,
-        rol: apiUser.rol, cargo: apiUser.cargo || '',
-        area: apiUser.area || '', estado: 'ACTIVO', intentos: 0,
-        documento: '', telefono: '',
-        created_at: new Date().toISOString().slice(0,10)
-      });
+      DB.set('usuarios', allUsers);
+      showErr('Contraseña incorrecta. Intentos: ' + local.intentos + '/5');
     }
-    saveUsers(users);
-    _completarLogin(users.find(function(u){ return u.username === apiUser.username; }) || apiUser);
-  })
-  .catch(function(err) {
-    restoreBtn();
-    // Network error — try local only
-    if (local && checkPwd(pwd, local.password||'')) {
-      local.intentos = 0;
-      saveUsers(users);
-      _completarLogin(local);
-    } else if (local) {
-      showErr('Sin conexión y contraseña incorrecta. Verifica tu conexión.');
-    } else {
-      showErr('Sin conexión. No se puede verificar usuario nuevo sin internet.');
-    }
-  });
+  } else {
+    showErr('Usuario no encontrado: ' + login);
+  }
 }
 
 function _completarLogin(user) {
