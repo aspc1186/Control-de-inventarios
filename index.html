@@ -7041,7 +7041,7 @@ function _mostrarSetup2FA(user) {
 
   h.push('<div style="background:rgba(255,255,255,.04);border-radius:12px;padding:14px;margin-bottom:14px">');
   h.push('<p style="font-size:12px;font-weight:700;margin-bottom:10px">Paso 2: Verifica el código</p>');
-  h.push('<input id="setup-2fa-code" type="text" maxlength="6" placeholder="000000" style="text-align:center;font-size:22px;letter-spacing:6px;font-family:monospace;width:100%" oninput="this.value=this.value.replace(/[0-9]/g,\'\')">');
+  h.push('<input id="setup-2fa-code" type="text" maxlength="6" placeholder="000000" style="text-align:center;font-size:22px;letter-spacing:6px;font-family:monospace;width:100%" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')">');
   h.push('</div>');
 
   h.push('<div style="margin-bottom:12px;padding:10px;background:rgba(255,255,255,.03);border-radius:8px;font-size:11px;color:var(--muted)">');
@@ -12293,11 +12293,22 @@ function _buildInvRow(item) {
   r += '<span style="font-size:9px;font-weight:700;padding:3px 7px;border-radius:20px;background:'+estBg+';color:'+estClr+';white-space:nowrap;display:inline-block">'+estTxt+'</span>';
   r += '</td>';
 
-  // 19b. #RESERVA (70px)
+  // 19b. #RESERVA (70px) — muestra OTs activas para este producto
   var nRes = Number(item.stock_reservado||0);
   r += '<td style="padding:6px 6px;width:70px;min-width:70px;text-align:center;white-space:nowrap">';
   if (nRes > 0) {
-    r += '<span onclick="abrirGestionReservas()" style="cursor:pointer;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:rgba(139,92,246,.2);color:#c4b5fd;border:1px solid rgba(139,92,246,.3)" title="'+nRes+' unidades reservadas">🔒'+nRes+'</span>';
+    // Buscar OTs pendientes que incluyan este SKU
+    var resActivas = loadReservas().filter(function(rv){
+      return rv.estado === 'PENDIENTE' &&
+             rv.productos.some(function(p){ return p.sku === item.sku; });
+    });
+    var otLabel = resActivas.length > 0
+      ? resActivas.map(function(rv){ return rv.ot; }).join(', ')
+      : nRes + ' ud';
+    var tooltip = resActivas.length > 0
+      ? resActivas.map(function(rv){ return rv.ot+' | '+rv.cedula+' | '+rv.fecha; }).join('\n')
+      : nRes + ' unidades reservadas';
+    r += '<span onclick="abrirGestionReservas(\''+item.sku+'\')" style="cursor:pointer;font-size:9px;font-weight:700;padding:2px 5px;border-radius:20px;background:rgba(139,92,246,.2);color:#c4b5fd;border:1px solid rgba(139,92,246,.3);display:inline-block;max-width:66px;overflow:hidden;text-overflow:ellipsis" title="'+tooltip+'">🔒 '+otLabel+'</span>';
   } else {
     r += '<span style="font-size:11px;color:rgba(255,255,255,.15)">—</span>';
   }
@@ -12398,9 +12409,17 @@ function _buildInventarioUI(allItems) {
     });
     h.push('</div>');
     if (canCreate) h.push('<button class="btn btn-navy btn-sm" onclick="openNuevoArticulo()" style="white-space:nowrap">+ Nuevo</button>');
-    // Botón reservas visible para todos
+    // Botones de reserva según rol
+    var rolAct = SESSION.user && SESSION.user.rol || '';
+    var isConsultaRol = rolAct === 'CONSULTA DE PRODUCTOS';
+    var canVerReservas = rolAct === 'SUPER ADMINISTRADOR' || rolAct === 'ADMINISTRADOR' ||
+                         rolAct === 'ALMACENISTA' || rolAct === 'JEFE INVENTARIOS' || rolAct === 'AUDITOR';
+    // Consulta puede crear reservas
     h.push('<button class="btn btn-sm" onclick="abrirPanelReserva()" style="background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4);color:#c4b5fd;white-space:nowrap">📋 Nueva Reserva</button>');
-    h.push('<button class="btn btn-ghost btn-sm" onclick="abrirGestionReservas()" style="white-space:nowrap">📊 Ver Reservas</button>');
+    // Admin/almacenista ve y gestiona reservas
+    if (canVerReservas) {
+      h.push('<button class="btn btn-ghost btn-sm" onclick="abrirGestionReservas()" style="white-space:nowrap">📊 Ver Reservas</button>');
+    }
     h.push('</div>');
     h.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+filtered.length+' de '+nAll+' referencias'+(invFiltro!=='TODOS'||ql?' · <span style=\"color:var(--amber)\">filtro activo</span>':'')+'</div>');
 
@@ -13171,13 +13190,23 @@ function _confirmarReserva() {
 }
 
 /* ── abrirGestionReservas — ver/gestionar reservas existentes ────────── */
-function abrirGestionReservas() {
+function abrirGestionReservas(filterSku) {
   var reservas = loadReservas();
+  // Si se llama con un SKU específico, filtrar solo esas reservas pendientes
+  var filtered = filterSku
+    ? reservas.filter(function(r){ return r.estado==='PENDIENTE' && r.productos.some(function(p){ return p.sku===filterSku; }); })
+    : reservas;
   var h = [];
   h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">');
-  h.push('<h3 style="margin:0">📋 Reservas / Pedidos</h3>');
-  h.push('<span style="font-size:11px;background:rgba(59,130,246,.15);color:var(--electric);padding:3px 10px;border-radius:20px">'+reservas.length+' registros</span>');
+  h.push('<h3 style="margin:0">📋 Reservas / Órdenes de Trabajo</h3>');
+  if (filterSku) {
+    h.push('<span style="font-size:11px;background:rgba(139,92,246,.2);color:#c4b5fd;padding:3px 10px;border-radius:20px">Filtro: '+filterSku+'</span>');
+  } else {
+    h.push('<span style="font-size:11px;background:rgba(59,130,246,.15);color:var(--electric);padding:3px 10px;border-radius:20px">'+reservas.length+' reservas totales</span>');
+  }
   h.push('</div>');
+  // Usar filtered en lugar de reservas
+  var reservas = filtered;
 
   if (!reservas.length) {
     h.push('<div style="text-align:center;padding:30px;color:var(--muted)"><p style="font-size:14px">Sin reservas registradas</p></div>');
@@ -13185,7 +13214,7 @@ function abrirGestionReservas() {
     h.push('<div style="overflow-y:auto;max-height:450px">');
     h.push('<table style="width:100%;border-collapse:collapse">');
     h.push('<thead><tr style="background:rgba(255,255,255,.04)">');
-    ['#Reserva','Fecha','OT','Cédula','Productos','Usuario','Estado','Acción'].forEach(function(col){
+    ['OT','Cédula','Fecha','Productos solicitados','Solicitante','Estado','Acción'].forEach(function(col){
       h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:left">'+col+'</th>');
     });
     h.push('</tr></thead><tbody>');
@@ -13193,11 +13222,10 @@ function abrirGestionReservas() {
       var estClr = r.estado==='ENTREGADO'?'#4ade80':r.estado==='CANCELADO'?'#f87171':'#fbbf24';
       var estBg  = r.estado==='ENTREGADO'?'rgba(74,222,128,.12)':r.estado==='CANCELADO'?'rgba(248,113,113,.12)':'rgba(251,191,36,.12)';
       h.push('<tr style="border-bottom:1px solid rgba(255,255,255,.05)">');
-      h.push('<td style="padding:8px;font-family:monospace;font-size:11px;color:var(--electric)">'+r.numero+'</td>');
+      h.push('<td style="padding:8px;font-size:13px;font-weight:800;color:#c4b5fd">'+r.ot+'</td>');
+      h.push('<td style="padding:8px;font-size:12px;font-weight:600;color:var(--white)">'+r.cedula+'</td>');
       h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+r.fecha+'<br><span style="font-size:10px">'+r.hora+'</span></td>');
-      h.push('<td style="padding:8px;font-size:12px;font-weight:600">'+r.ot+'</td>');
-      h.push('<td style="padding:8px;font-size:12px">'+r.cedula+'</td>');
-      h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+r.productos.length+' ítem(s)<br>'+r.productos.map(function(p){ return p.sku+' x'+p.cantidad; }).join(', ')+'</td>');
+      h.push('<td style="padding:8px;font-size:11px"><div style="font-weight:600;color:var(--white)">'+r.productos.length+' producto(s)</div><div style="color:var(--muted);font-size:10px;margin-top:2px">'+r.productos.map(function(p){ return p.sku+' × '+p.cantidad+' '+p.unidad; }).join(' | ')+'</div></td>');
       h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+r.usuario+'</td>');
       h.push('<td style="padding:8px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+estBg+';color:'+estClr+'">'+r.estado+'</span></td>');
       h.push('<td style="padding:8px;white-space:nowrap">');
