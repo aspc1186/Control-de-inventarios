@@ -1916,6 +1916,7 @@ renders.inventario = function(q) {
   var local = _invItems && _invItems.length > 0 ? _invItems : loadItems();
   if (local && local.length > 0) {
     _invItems = local;
+    if(typeof _calcClasificacionABC==="function")_invItems=_calcClasificacionABC(_invItems);
     _buildInventarioUI(_invItems);
   } else {
     // Sin datos locales → mostrar loader prominente mientras carga Neon
@@ -8474,164 +8475,234 @@ function _snapPhoto() {
    CREAR / EDITAR ARTÍCULO — Modal profesional con imagen
 ══════════════════════════════════════════════════════════════════════════ */
 function openNuevoArticulo(editId) {
-  window._naImgData = null;
-  var items = loadItems();
-  var edit  = editId ? items.find(function(i){ return i.id===editId; }) : null;
-  var isNew = !edit;
-  var proveedores = typeof loadProveedores==='function' ? loadProveedores() : [];
-  var cats  = Array.from(new Set(items.map(function(i){ return i.categoria||''; }).filter(Boolean))).sort();
-  var marks = Array.from(new Set(items.map(function(i){ return i.marca||''; }).filter(Boolean))).sort();
+  var items   = _invItems || loadItems();
+  var item    = editId ? items.find(function(i){ return i.id===editId; }) : null;
+  var isEdit  = !!item;
+  var cats    = [...new Set((items||[]).map(function(i){return i.categoria||'';}).filter(Boolean))].sort();
+  var marcas  = [...new Set((items||[]).map(function(i){return i.marca||'';}).filter(Boolean))].sort();
+  var provs   = (typeof loadProveedores==='function' ? loadProveedores() : []).map(function(p){ return p.nombre||p.razon_social||''; }).filter(Boolean);
 
   var h = [];
   h.push('<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">');
-  h.push('<div id="na-img-preview" onclick="document.getElementById(\'na-img-file\').click()" style="width:72px;height:72px;border-radius:12px;background:rgba(59,130,246,.1);border:2px dashed rgba(59,130,246,.3);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;cursor:pointer" title="Click para cambiar foto">');
-  if (edit && edit.imagen) {
-    h.push('<img src="'+edit.imagen+'" style="width:100%;height:100%;object-fit:cover">');
+  h.push('<div id="na-img-preview" onclick="document.getElementById(\'na-img-file\').click()" style="width:60px;height:60px;border-radius:10px;background:rgba(255,255,255,.06);border:2px dashed rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;flex-shrink:0">');
+  if (item && item.imagen) {
+    h.push('<img src="'+item.imagen+'" style="width:100%;height:100%;object-fit:cover;border-radius:8px">');
   } else {
-    h.push('<span style="font-size:28px">📷</span>');
+    h.push('<span style="font-size:24px">📷</span>');
   }
   h.push('</div>');
   h.push('<div>');
-  h.push('<h3 style="margin:0 0 4px">'+(isNew?'➕ Nuevo Producto':'✏️ Editar Producto')+'</h3>');
-  if (!isNew) h.push('<p style="font-size:11px;color:var(--electric);margin:0;font-family:monospace">'+(edit.sku||edit.codigo||'')+'</p>');
-  h.push('<div style="display:flex;gap:6px;margin-top:8px">');
-  h.push('<input type="file" id="na-img-file" accept="image/*" style="display:none" onchange="_previewProductImg(this)">');
-  h.push('<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'na-img-file\').click()">📷 Foto</button>');
-  h.push('<button type="button" class="btn btn-ghost btn-sm" onclick="_captureProductImg()">📸 Cámara</button>');
-  h.push('</div></div></div>');
-
-  h.push('<div class="form-grid">');
-  h.push('<div class="form-row"><label>Código / SKU *</label>');
-  h.push('<input id="na-sku" placeholder="Ej: 1000000" style="font-family:monospace;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" value="'+(edit?edit.sku||edit.codigo||'':'')+'"'+(isNew?'':' readonly style="opacity:.7;font-family:monospace;text-transform:uppercase"')+'>');
-  h.push('</div>');
-  h.push('<div class="form-row"><label>Nombre *</label>');
-  h.push('<input id="na-nombre" placeholder="Nombre del producto" value="'+(edit?edit.nombre||'':'')+'">');
+  h.push('<h3 style="margin:0 0 4px">'+(isEdit?'✏️ Editar Producto':'➕ Nuevo Producto')+'</h3>');
+  if (!isEdit) {
+    h.push('<p style="font-size:11px;color:var(--electric);margin:0">SKU se genera automáticamente si no lo ingresas</p>');
+  } else {
+    h.push('<p style="font-size:11px;font-family:monospace;color:var(--electric);margin:0">'+(item.sku||item.codigo)+'</p>');
+  }
   h.push('</div></div>');
+  h.push('<input type="file" id="na-img-file" accept="image/*" style="display:none" onchange="_previewProductImg(this)">');
 
+  // ── Campos OBLIGATORIOS ──────────────────────────────────────────────
+  h.push('<div class="form-grid">');
+  if (!isEdit) {
+    h.push('<div class="form-row"><label>Código / SKU <span style="color:var(--muted);font-size:10px">(opcional — se genera automático)</span></label>');
+    h.push('<input id="na-sku" placeholder="Dejar vacío = auto-generado" style="font-family:monospace;text-transform:uppercase" oninput="this.value=this.value.toUpperCase().replace(/\\s+/g,\'\')">');
+    h.push('</div>');
+  }
+  h.push('<div class="form-row"><label>Nombre *</label>');
+  h.push('<input id="na-nombre" placeholder="Nombre del producto" value="'+(item?item.nombre||'':'')+'">');
+  h.push('</div></div>');
   h.push('<div class="form-row"><label>Descripción</label>');
-  h.push('<input id="na-desc" placeholder="Descripción adicional" value="'+(edit?edit.descripcion||'':'')+'">');
+  h.push('<input id="na-desc" placeholder="Descripción adicional" value="'+(item?item.descripcion||'':'')+'">');
   h.push('</div>');
-
   h.push('<div class="form-grid">');
   h.push('<div class="form-row"><label>Categoría</label>');
-  h.push('<input id="na-cat" list="na-cat-list" placeholder="Categoría" value="'+(edit?edit.categoria||'':'')+'">');
-  h.push('<datalist id="na-cat-list">'+cats.map(function(x){ return '<option value="'+x+'">'; }).join('')+'</datalist></div>');
+  h.push('<input id="na-cat" list="na-cat-list" placeholder="Ej: Materia Prima" value="'+(item?item.categoria||'':'')+'">');
+  h.push('<datalist id="na-cat-list">'+cats.map(function(c){ return '<option>'+c+'</option>'; }).join('')+'</datalist>');
+  h.push('</div>');
   h.push('<div class="form-row"><label>Marca</label>');
-  h.push('<input id="na-marca" list="na-marca-list" placeholder="Marca" value="'+(edit?edit.marca||'':'')+'">');
-  h.push('<datalist id="na-marca-list">'+marks.map(function(x){ return '<option value="'+x+'">'; }).join('')+'</datalist></div>');
-  h.push('</div><div class="form-grid">');
-
+  h.push('<input id="na-marca" list="na-marca-list" placeholder="Marca / Fabricante" value="'+(item?item.marca||'':'')+'">');
+  h.push('<datalist id="na-marca-list">'+marcas.map(function(m){ return '<option>'+m+'</option>'; }).join('')+'</datalist>');
+  h.push('</div></div>');
+  h.push('<div class="form-grid">');
   h.push('<div class="form-row"><label>Unidad de Medida</label>');
+  var ums = ['UND','KG','MT','LT','GL','MT2','MT3','TON','ROL','PAR','CJA','BLS','BOL'];
   h.push('<select id="na-unidad" style="background:var(--card2);border:1px solid var(--border2);color:var(--white);padding:8px;border-radius:8px;width:100%">');
-  ['UND','KG','GR','LB','TON','MT','CM','MM','LT','ML','M2','M3','PAR','CJA','BLS','RLL','GL'].forEach(function(u){
-    h.push('<option value="'+u+'"'+(edit&&edit.unidad===u?' selected':(!edit&&u==='UND'?' selected':''))+'>'+u+'</option>');
-  });
+  ums.forEach(function(u){ h.push('<option'+(item&&item.unidad===u?' selected':'')+'>'+u+'</option>'); });
   h.push('</select></div>');
-  h.push('<div class="form-row"><label>Ubicación</label>');
-  h.push('<input id="na-ubicacion" placeholder="B01-A-01-01-01" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" value="'+(edit?edit.ubicacion||'':'')+'">');
-  h.push('</div></div><div class="form-grid">');
-
-  h.push('<div class="form-row"><label>Proveedor</label>');
-  h.push('<input id="na-proveedor" list="na-prov-list" placeholder="Proveedor" value="'+(edit?edit.proveedor||'':'')+'">');
-  h.push('<datalist id="na-prov-list">'+proveedores.map(function(p){ return '<option value="'+(p.nombre||p.razon||'')+'">'; }).join('')+'</datalist></div>');
-  h.push('<div class="form-row"><label>Costo Unitario ($)</label>');
-  h.push('<input id="na-costo" type="number" min="0" step="1" placeholder="0" value="'+(edit?edit.costo||edit.costo_unitario||0:0)+'">');
+  h.push('<div class="form-row"><label>Subcategoría</label>');
+  h.push('<input id="na-subcat" placeholder="Subgrupo" value="'+(item?item.subcategoria||'':'')+'">');
   h.push('</div></div>');
 
-  h.push('<p style="font-size:11px;font-weight:700;color:var(--electric);margin:14px 0 8px;text-transform:uppercase;letter-spacing:.5px">📊 Niveles de Stock</p>');
-  h.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">');
-  var stockFields = [
-    { id:'na-stock',  lbl: isNew?'Stock Inicial':'Stock Actual', val:edit?edit.stock||0:0, rdonly:!isNew },
-    { id:'na-smin',   lbl:'Stock Mínimo',  val:edit?edit.stock_minimo||0:0 },
-    { id:'na-smax',   lbl:'Stock Máximo',  val:edit?edit.stock_maximo||0:0 },
-    { id:'na-reorden',lbl:'P. Reorden',    val:edit?edit.punto_reorden||0:0 },
-    { id:'na-consumo',lbl:'Consumo/día',   val:edit?edit.consumo_diario||0:0 },
-    { id:'na-leadtime',lbl:'Lead Time (d)',val:edit?edit.lead_time||0:0 },
-  ];
-  stockFields.forEach(function(sf) {
-    h.push('<div class="form-row"><label>'+sf.lbl+'</label>');
-    h.push('<input id="'+sf.id+'" type="number" min="0" value="'+sf.val+'"'+(sf.rdonly?' readonly style="opacity:.6"':'')+'>');
-    h.push('</div>');
-  });
+  // ── Campos OPCIONALES ────────────────────────────────────────────────
+  h.push('<div style="border-top:1px solid rgba(255,255,255,.07);margin:12px 0 10px;padding-top:10px">');
+  h.push('<p style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin:0 0 10px">Opcional</p>');
   h.push('</div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Proveedor</label>');
+  h.push('<input id="na-proveedor" list="na-prov-list" placeholder="Proveedor principal" value="'+(item?item.proveedor||'':'')+'">');
+  h.push('<datalist id="na-prov-list">'+provs.map(function(p){ return '<option>'+p+'</option>'; }).join('')+'</datalist>');
+  h.push('</div>');
+  h.push('<div class="form-row"><label>Costo Unitario ($)</label>');
+  h.push('<input id="na-costo" type="number" min="0" step="1" placeholder="0" value="'+(item?item.costo||'':'')+'">');
+  h.push('</div></div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Precio Venta ($)</label>');
+  h.push('<input id="na-precio" type="number" min="0" step="1" placeholder="0" value="'+(item?item.precio||'':'')+'">');
+  h.push('</div>');
+  if (!isEdit) {
+    h.push('<div class="form-row"><label>Stock Inicial</label>');
+    h.push('<input id="na-stock" type="number" min="0" step="1" placeholder="0" value="0">');
+    h.push('</div>');
+  }
+  h.push('</div>');
+
+  // ── Lead Time (único indicador que el usuario puede ingresar) ─────────
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Lead Time <span style="color:var(--muted);font-size:10px">(días entrega proveedor)</span></label>');
+  h.push('<input id="na-lead" type="number" min="0" step="1" placeholder="7" value="'+(item?item.lead_time||'':'')+'">');
+  h.push('</div>');
+  h.push('<div class="form-row"><label>Ubicación <span style="color:var(--muted);font-size:10px">(asignar en bodega)</span></label>');
+  h.push('<input id="na-ubicacion" placeholder="B01-A-01-01-A" style="text-transform:uppercase" value="'+(item?item.ubicacion||'':'')+'">');
+  h.push('</div></div>');
+
+  // ── Indicadores AUTO ──────────────────────────────────────────────────
+  h.push('<div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.15);border-radius:10px;padding:10px 12px;margin-top:8px">');
+  h.push('<p style="font-size:10px;font-weight:700;color:var(--electric);margin:0 0 6px;text-transform:uppercase">⚡ Calculados automáticamente</p>');
+  h.push('<div style="font-size:10px;color:var(--muted);line-height:1.9">');
+  h.push('📉 <strong>Stock Seguridad</strong> = Consumo/día × Lead Time (o 10% del stock)<br>');
+  h.push('🔄 <strong>Punto Reorden</strong> = (Consumo × Lead) + Stock Seguridad<br>');
+  h.push('📊 <strong>Stock Mínimo</strong> = Punto de Reorden<br>');
+  h.push('📈 <strong>Stock Máximo</strong> = Mínimo + Consumo × 30 días<br>');
+  h.push('📅 <strong>Consumo Diario</strong> = Promedio de salidas últimos 30 días<br>');
+  h.push('🅰️ <strong>Clasificación ABC</strong> = Por valor acumulado del inventario<br>');
+  h.push('💰 <strong>Valor Inventario</strong> = Stock × Costo Unitario');
+  h.push('</div></div>');
 
   h.push('<div id="na-err" style="display:none;color:var(--red);font-size:12px;margin:8px 0;padding:8px;background:rgba(239,68,68,.1);border-radius:6px"></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="_guardarNuevoArticulo('+(editId?JSON.stringify(editId):'null')+')">');
-  h.push((isNew?'➕ Crear Producto':'💾 Guardar')+'</button>');
+  h.push('<button class="btn btn-navy" onclick="_guardarNuevoArticulo(\''+( editId||'')+'\')">'+(isEdit?'💾 Guardar cambios':'➕ Crear Producto')+'</button>');
   h.push('</div>');
-
   openModal(h.join(''), 'modal-lg');
-  setTimeout(function(){ var el=document.getElementById(isNew?'na-sku':'na-nombre'); if(el) el.focus(); }, 150);
+  window._naImgData = null;
 }
 
 function _guardarNuevoArticulo(editId) {
-  var items = loadItems();
-  var g = function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
+  var items = _invItems || loadItems();
+  var g  = function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
   var gn = function(id){ return parseFloat(g(id))||0; };
 
-  var sku      = g('na-sku').toUpperCase();
-  var nombre   = g('na-nombre');
-  if (!sku)    { var e=document.getElementById('na-err'); if(e){e.textContent='El código SKU es obligatorio';e.style.display='';} return; }
-  if (!nombre) { var e2=document.getElementById('na-err'); if(e2){e2.textContent='El nombre es obligatorio';e2.style.display='';} return; }
+  var nombre = g('na-nombre');
+  if (!nombre) {
+    var e=document.getElementById('na-err');
+    if(e){e.textContent='El nombre es obligatorio';e.style.display='';}
+    return;
+  }
+
+  // SKU: manual o auto-generado
+  var skuInput = g('na-sku');
+  var sku = skuInput
+    ? skuInput.toUpperCase().replace(/\s+/g,'')
+    : _generarSKU(nombre, g('na-cat'), items);
+
+  // Validar duplicado en creación
+  if (!editId) {
+    if (items.find(function(i){
+      return (i.sku||i.codigo||'').toUpperCase() === sku;
+    })) {
+      var e2=document.getElementById('na-err');
+      if(e2){e2.textContent='Ya existe un producto con el SKU: '+sku;e2.style.display='';}
+      return;
+    }
+  }
+
+  var lead  = gn('na-lead') || 7;   // default 7 días
+  var costo = gn('na-costo');
+  var stock = editId ? 0 : gn('na-stock');
 
   var campos = {
-    nombre: nombre, descripcion: g('na-desc'), categoria: g('na-cat'),
-    marca: g('na-marca'), unidad: g('na-unidad'), ubicacion: g('na-ubicacion'),
-    proveedor: g('na-proveedor'), costo: gn('na-costo'), costo_unitario: gn('na-costo'),
-    stock_minimo: gn('na-smin'), stock_maximo: gn('na-smax'),
-    punto_reorden: gn('na-reorden'), consumo_diario: gn('na-consumo'), lead_time: gn('na-leadtime'),
-    updated_at: new Date().toISOString().slice(0,10),
+    nombre:       nombre,
+    descripcion:  g('na-desc'),
+    categoria:    g('na-cat'),
+    subcategoria: g('na-subcat'),
+    marca:        g('na-marca'),
+    unidad:       g('na-unidad') || 'UND',
+    ubicacion:    g('na-ubicacion').toUpperCase(),
+    proveedor:    g('na-proveedor'),
+    costo:        costo,
+    costo_unitario: costo,
+    precio:       gn('na-precio'),
+    lead_time:    lead,
+    updated_at:   new Date().toISOString().slice(0,10),
+    // ── CALCULADOS automáticamente — NO pedir al usuario ────────────────
+    // stock_minimo, stock_maximo, stock_seguridad, punto_reorden,
+    // consumo_diario → se calculan en _calcIndicadoresCompletos
+    // Se inicializan en 0 para que el motor los calcule
   };
   if (window._naImgData) { campos.imagen = window._naImgData; window._naImgData = null; }
 
   if (editId) {
+    // EDITAR
     var idx = items.findIndex(function(i){ return i.id===editId; });
-    if (idx<0) { showToast('Producto no encontrado','red'); return; }
+    if (idx < 0) { showToast('Producto no encontrado','red'); return; }
     Object.assign(items[idx], campos);
+    // Recalcular indicadores después de editar
+    _calcIndicadoresCompletos(items[idx]);
     saveItems(items);
     auditLog('EDITAR_ARTICULO','Editado: '+sku+' — '+nombre, SESSION.user&&SESSION.user.nombre);
-    closeModal(); showToast('✅ Producto actualizado','green');
+    closeModal();
+    showToast('✅ Producto actualizado: '+nombre,'green');
   } else {
-    if (items.find(function(i){ return (i.sku||i.codigo||'').toUpperCase()===sku; })) {
-      var e3=document.getElementById('na-err'); if(e3){e3.textContent='Ya existe un producto con el código: '+sku;e3.style.display='';}
-      return;
-    }
-    var stock = gn('na-stock');
-    var newItem = Object.assign({ id:uid(), sku:sku, codigo:sku, stock:stock, stock_reservado:0, estado:'Activo',
-      created_at:new Date().toISOString().slice(0,10), ultima_entrada:stock>0?new Date().toISOString().slice(0,10):'' }, campos);
+    // CREAR
+    var newItem = {
+      id: uid(), sku: sku, codigo: sku,
+      stock: stock, stock_reservado: 0,
+      stock_seguridad: 0, stock_minimo: 0, stock_maximo: 0,
+      punto_reorden: 0, consumo_diario: 0,
+      estado: 'Activo', estado_inventario: stock > 0 ? 'NORMAL' : 'AGOTADO',
+      created_at: new Date().toISOString().slice(0,10),
+      ultima_entrada: stock > 0 ? new Date().toISOString().slice(0,10) : '',
+      empresa_id: typeof _getEmpresaId==='function' ? _getEmpresaId() : null,
+    };
+    Object.assign(newItem, campos);
+
+    // Calcular indicadores automáticamente
+    _calcIndicadoresCompletos(newItem);
+
     items.push(newItem);
     saveItems(items);
+    _invItems = items;
+
+    // Registrar stock inicial como movimiento de ENTRADA
     if (stock > 0) {
-      var movs = typeof loadMovs==='function'?loadMovs():[];
-      var t = typeof now==='function'?now():{fecha:new Date().toISOString().slice(0,10),hora:'00:00',ts:new Date().toISOString()};
-      movs.push({ id:uid(),sku:sku,tipo:'ENTRADA',cantidad:stock,costo_unitario:campos.costo,
-        stock_resultante:stock,fecha:t.fecha,hora:t.hora,ts:t.ts,
-        usuario:SESSION.user&&SESSION.user.nombre||'Sistema', observacion:'Stock inicial' });
+      var movs = typeof loadMovs==='function' ? loadMovs() : [];
+      var t    = typeof now==='function' ? now() : { fecha: new Date().toISOString().slice(0,10), hora:'00:00', ts: new Date().toISOString() };
+      movs.push({
+        id: uid(), sku: sku, codigo: sku, tipo: 'ENTRADA',
+        cantidad: stock, costo_unitario: costo,
+        stock_resultante: stock, fecha: t.fecha, hora: t.hora, ts: t.ts,
+        usuario: SESSION.user && SESSION.user.nombre || 'Sistema',
+        observacion: 'Stock inicial',
+        empresa_id: newItem.empresa_id,
+      });
       if (typeof saveMovs==='function') saveMovs(movs);
     }
+
+    // Recalcular ABC para todos
+    if (typeof _calcClasificacionABC==='function') {
+      items = _calcClasificacionABC(items);
+      saveItems(items);
+      _invItems = items;
+    }
+
     auditLog('CREAR_ARTICULO','Creado: '+sku+' — '+nombre, SESSION.user&&SESSION.user.nombre);
-    closeModal(); showToast('✅ Producto creado: '+nombre,'green');
+    closeModal();
+    showToast('✅ Producto creado: '+nombre+' | SKU: '+sku,'green');
   }
+
   _invItems = loadItems();
   if (currentPage==='inventario') renders.inventario();
 }
-
-
-/* ══ RECOVERED MODULES ══ */
-
-// renders.movimientos call removed
-
-
-/* ══════════════════════════════════════════════
-   RENDER: ESCANER
-══════════════════════════════════════════════ */
-let scanMode = 'camera';
-renders.escaner = function() {
-  document.getElementById('pg-escaner').innerHTML = '\n    <div class="tabs">\n      <button class="tab \'+(scanMode===\'camera\'?\'active\':\'\'||\'\')+\'" onclick="setScanMode(\'camera\')">📷 Cámara</button>\n      <button class="tab \'+(scanMode===\'manual\'?\'active\':\'\'||\'\')+\'" onclick="setScanMode(\'manual\')">⌨️ Manual</button>\n    </div>\n    <div id="scan-cam" style="display:\'+(scanMode===\'camera\'?\'\':\'none\'||\'\')+\'">\n      <div class="card" style="overflow:hidden;padding:0">\n        <div style="background:var(--navy);padding:12px 16px;text-align:center">\n          <p style="color:#fff;font-size:13px;font-weight:600">Apunta la cámara al código QR del artículo</p>\n          <p style="color:rgba(255,255,255,.4);font-size:11px">Se detectará automáticamente</p>\n        </div>\n        <div style="padding:10px"><div id="qr-reader"></div></div>\n      </div>\n    </div>\n    <div id="scan-manual" style="display:\'+(scanMode===\'manual\'?\'\':\'none\'||\'\')+\'">\n      <div class="card">\n        <div class="form-row">\n          <label>Ingresar SKU manualmente</label>\n          <input id="manual-sku" type="text" placeholder="TOR-CAR-001" style="font-family:monospace;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key===\'Enter\')manualScan()">\n        </div>\n        <button class="btn btn-navy" style="width:100%;justify-content:center" onclick="manualScan()">\n          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Buscar artículo\n        </button>\n      </div>\n    </div>\n    <div id="scan-error" style="display:none;margin-top:12px" class="alert-bar"></div>\n    <div class="card" style="margin-top:14px;font-size:12px;color:var(--muted);line-height:1.7">\n      <strong style="color:var(--navy)">Instrucciones:</strong><br>\n      1. Usa Cámara en el celular — permite el acceso cuando Chrome lo solicite.<br>\n      2. Apunta al QR del artículo hasta que se detecte automáticamente.<br>\n      3. Se abre el detalle completo con stock, ubicación e historial.<br>\n      4. Desde allí puedes registrar entradas, salidas o ajustes.\n    </div>';
-  if (scanMode === 'camera') startScanner();
-};
 
 function setScanMode(m) {
   scanMode = m;
@@ -12284,12 +12355,15 @@ function _buildInvRow(item) {
   var rowBg    = agot?'rgba(239,68,68,.05)':crit?'rgba(249,115,22,.04)':bajo?'rgba(245,158,11,.03)':'';
 
   // Estado
+  // Estado del motor automático
+  var estadoAuto = d.estado || (agot?'AGOTADO':d.reord?'REORDENAR':d.crit?'CRÍTICO':sobreS?'SOBRESTOCK':'NORMAL');
   var estTxt, estBg, estClr;
-  if      (agot)   { estTxt='AGOTADO';     estBg='#7f1d1d'; estClr='#fca5a5'; }
-  else if (crit)   { estTxt='CRÍTICO';     estBg='#7c2d12'; estClr='#fdba74'; }
-  else if (bajo)   { estTxt='BAJO MÍN';   estBg='#713f12'; estClr='#fde68a'; }
-  else if (sobreS) { estTxt='SOBRE STOCK'; estBg='#3b0764'; estClr='#d8b4fe'; }
-  else             { estTxt='NORMAL';       estBg='#14532d'; estClr='#86efac'; }
+  if      (estadoAuto==='AGOTADO')    { estTxt='⚫ AGOTADO';     estBg='#7f1d1d'; estClr='#fca5a5'; }
+  else if (estadoAuto==='CRÍTICO')    { estTxt='🔴 CRÍTICO';     estBg='#7c2d12'; estClr='#fdba74'; }
+  else if (estadoAuto==='REORDENAR')  { estTxt='🟠 REORDENAR';   estBg='#713f12'; estClr='#fde68a'; }
+  else if (estadoAuto==='SOBRESTOCK') { estTxt='🔵 SOBRESTOCK';  estBg='#3b0764'; estClr='#d8b4fe'; }
+  else if (bajo)                      { estTxt='🟡 BAJO MÍN';    estBg='#713f12'; estClr='#fde68a'; }
+  else                                { estTxt='🟢 NORMAL';       estBg='#14532d'; estClr='#86efac'; }
 
   // Cobertura
   var cob    = consumo > 0 ? Math.round(disp/consumo) : null;
@@ -12311,10 +12385,16 @@ function _buildInvRow(item) {
   r += '<span style="font-family:monospace;font-size:11px;font-weight:700;color:#60a5fa;background:rgba(59,130,246,.12);padding:2px 6px;border-radius:4px;white-space:nowrap">'+(item.sku||item.codigo||'—')+'</span>';
   r += '</td>';
 
-  // 3. NOMBRE (180px)
+  // 3. NOMBRE (180px) + Clase ABC
+  var abcClr = d.clase_abc==='A'?'#fbbf24':d.clase_abc==='B'?'#60a5fa':'#94a3b8';
   r += '<td style="padding:6px 8px;min-width:180px;width:180px;max-width:180px">';
-  r += '<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:176px;color:#f1f5f9" title="'+(item.nombre||'')+'">'+(item.nombre||'—')+'</div>';
-  if (item.descripcion) r += '<div style="font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:176px" title="'+item.descripcion+'">'+item.descripcion+'</div>';
+  r += '<div style="display:flex;align-items:center;gap:4px">';
+  if (d.clase_abc && d.clase_abc!=='—') {
+    r += '<span style="font-size:9px;font-weight:800;color:'+abcClr+';background:rgba(255,255,255,.06);padding:1px 5px;border-radius:3px;flex-shrink:0">'+d.clase_abc+'</span>';
+  }
+  r += '<div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f1f5f9" title="'+(item.nombre||'')+'">'+(item.nombre||'—')+'</div>';
+  r += '</div>';
+  if (item.descripcion) r += '<div style="font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:176px">'+item.descripcion+'</div>';
   r += '</td>';
 
   // 4. CATEGORÍA (110px)
@@ -12771,7 +12851,8 @@ function _guardarMov() {
     stockDespues = stockAntes + qty;
     item.ultima_entrada = now().fecha;
   } else if (tipo==='SALIDA' || tipo==='AJUSTE_NEG') {
-    if (qty > stockAntes) { showToast('Stock insuficiente. Disponible: '+stockAntes,'red'); return; }
+    var dispActual = Math.max(0, stockAntes - Number(item.stock_reservado||0));
+    if (qty > dispActual) { showToast('Stock insuficiente. Disponible: '+dispActual+' ('+stockAntes+' - '+Number(item.stock_reservado||0)+' reservados)','red'); return; }
     stockDespues = stockAntes - qty;
     item.ultima_salida = now().fecha;
   }
@@ -12805,12 +12886,24 @@ function _guardarMov() {
   }).catch(function(){});
 
   auditLog(tipo, 'SKU: '+sku+' | Cant: '+qty+' | Obs: '+(obs||'—'), SESSION.user&&SESSION.user.nombre);
+
+  // Recalcular indicadores automáticamente después del movimiento
+  if (typeof _recalcAfterMov==='function') _recalcAfterMov(sku);
+
+  // Recalcular ABC para todos (el valor del inventario cambió)
+  if (typeof _calcClasificacionABC==='function') {
+    var allItems = _invItems || loadItems();
+    _invItems = _calcClasificacionABC(allItems);
+    saveItems(_invItems);
+  }
+
   closeModal();
   var icon = tipo==='ENTRADA'||tipo==='AJUSTE_POS' ? '⬆️' : '⬇️';
   showToast(icon+' '+tipo+': '+qty+' ud · Stock: '+stockDespues,'green');
   if (currentPage==='inventario') _buildInventarioUI(_invItems||loadItems());
   if (currentPage==='movimientos') renders.movimientos();
   if (currentPage==='historial')   renders.historial();
+  if (currentPage==='dashboard')   renders.dashboard();
   refreshAlertBadge();
 }
 
@@ -13515,6 +13608,268 @@ function _aplicarRecalculo() {
   closeModal();
   showToast('✅ Indicadores calculados para '+count+' productos','green');
   if (currentPage === 'inventario') _buildInventarioUI(_invItems || loadItems());
+}
+
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOTOR DE CÁLCULO AUTOMÁTICO — StockFlow WMS
+   Todo campo derivable se calcula aquí. Cero entrada manual de indicadores.
+══════════════════════════════════════════════════════════════════════════ */
+
+/* ── _generarSKU — genera SKU automático único ───────────────────────── */
+function _generarSKU(nombre, categoria, items) {
+  // Prefijo de categoría (3 letras)
+  var cat = (categoria || 'GEN').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,3).padEnd(3,'X');
+  // Prefijo nombre (2 letras)
+  var nom = (nombre || 'PR').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,2).padEnd(2,'X');
+  // Número secuencial
+  var existing = (items||[]).map(function(i){ return i.sku||i.codigo||''; });
+  var num = 1;
+  var sku;
+  do {
+    sku = cat + '-' + nom + '-' + String(num).padStart(4,'0');
+    num++;
+  } while (existing.includes(sku) && num < 9999);
+  return sku;
+}
+
+/* ── _calcConsumoPromedio — consumo real desde movimientos (últimos 30d) ─ */
+function _calcConsumoPromedio(sku) {
+  var movs = (typeof loadMovs==='function' ? loadMovs() : []) || [];
+  var hace30 = new Date(); hace30.setDate(hace30.getDate()-30);
+  var salidas = movs.filter(function(m){
+    if (!m || (m.sku!==sku && m.codigo!==sku)) return false;
+    if (m.tipo!=='SALIDA' && m.tipo!=='AJUSTE_NEG' && m.tipo!=='VENTA') return false;
+    try { return new Date(m.fecha) >= hace30; } catch(e){ return false; }
+  });
+  var total = salidas.reduce(function(s,m){ return s+Number(m.cantidad||0); }, 0);
+  return Math.round(total/30*100)/100; // unidades/día con 2 decimales
+}
+
+/* ── _calcStockReal — stock real desde movimientos ────────────────────── */
+function _calcStockDesdeMovs(sku) {
+  var movs = (typeof loadMovs==='function' ? loadMovs() : []) || [];
+  var skuMovs = movs.filter(function(m){ return m && (m.sku===sku||m.codigo===sku); });
+  // Ordenar por fecha asc
+  skuMovs.sort(function(a,b){ return (a.ts||a.fecha||'') < (b.ts||b.fecha||'') ? -1 : 1; });
+  var stock = 0;
+  skuMovs.forEach(function(m){
+    var qty = Number(m.cantidad||0);
+    var tipo = (m.tipo||'').toUpperCase();
+    if (tipo==='ENTRADA'||tipo==='AJUSTE_POS'||tipo==='COMPRA'||tipo==='DEVOLUCION') stock += qty;
+    else if (tipo==='SALIDA'||tipo==='AJUSTE_NEG'||tipo==='VENTA'||tipo==='MERMA') stock -= qty;
+    else if (tipo==='AJUSTE') stock += qty; // puede ser positivo o negativo
+  });
+  return Math.max(0, Math.round(stock*100)/100);
+}
+
+/* ── _calcStockReservado — desde tabla de reservas ───────────────────── */
+function _calcStockReservado(sku) {
+  var reservas = (typeof loadReservas==='function' ? loadReservas() : []) || [];
+  var ESTADOS_ACTIVOS = ['PENDIENTE','RESERVADO','POR DESPACHAR'];
+  var total = 0;
+  reservas.forEach(function(r){
+    if (!ESTADOS_ACTIVOS.includes(r.estado)) return;
+    (r.productos||[]).forEach(function(p){
+      if (p.sku===sku) total += Number(p.cantidad||0);
+    });
+  });
+  return total;
+}
+
+/* ── _calcRotacion — salidas totales / inventario promedio ──────────── */
+function _calcRotacion(sku, stockActual) {
+  var movs = (typeof loadMovs==='function' ? loadMovs() : []) || [];
+  var hace365 = new Date(); hace365.setDate(hace365.getDate()-365);
+  var salidas = movs.filter(function(m){
+    if (!m || (m.sku!==sku && m.codigo!==sku)) return false;
+    if (m.tipo!=='SALIDA' && m.tipo!=='VENTA') return false;
+    try { return new Date(m.fecha) >= hace365; } catch(e){ return false; }
+  });
+  var totalSalidas = salidas.reduce(function(s,m){ return s+Number(m.cantidad||0); },0);
+  var invPromedio  = (stockActual||0) > 0 ? (stockActual||0) : 1;
+  return Math.round(totalSalidas/invPromedio*100)/100;
+}
+
+/* ── _calcIndicadoresCompletos — motor central ───────────────────────── */
+function _calcIndicadoresCompletos(item) {
+  if (!item) return item;
+  var sku = item.sku || item.codigo;
+
+  // ── Stock real desde movimientos (si hay historial) ──────────────────
+  var movs = (typeof loadMovs==='function' ? loadMovs() : []) || [];
+  var tieneMovs = movs.some(function(m){ return m&&(m.sku===sku||m.codigo===sku); });
+  if (tieneMovs) {
+    var stockCalc = _calcStockDesdeMovs(sku);
+    // Solo sobreescribir si difiere significativamente (>1) para evitar glitches
+    if (Math.abs(stockCalc - Number(item.stock||0)) > 1) {
+      item.stock = stockCalc;
+    }
+  }
+
+  // ── Stock reservado desde reservas activas ────────────────────────────
+  item.stock_reservado = _calcStockReservado(sku);
+
+  // ── Consumo diario — promedio real de los últimos 30 días ─────────────
+  var consumoReal = _calcConsumoPromedio(sku);
+  if (consumoReal > 0) {
+    item.consumo_diario = consumoReal; // dato real de movimientos
+  }
+  var consumo  = Number(item.consumo_diario || 0);
+  var stock    = Number(item.stock          || 0);
+  var reserv   = Number(item.stock_reservado|| 0);
+  var disp     = Math.max(0, stock - reserv);
+  var lead     = Number(item.lead_time      || 7);  // default 7 días
+  var smax     = Number(item.stock_maximo   || 0);
+  var smin     = Number(item.stock_minimo   || 0);
+  var costo    = Number(item.costo || item.costo_unitario || item.precio || 0);
+
+  // ── Stock Seguridad ───────────────────────────────────────────────────
+  // Si hay consumo y lead time: seg = consumo * lead
+  // Si no: 20% del stock máximo, o 10% del stock actual
+  var seg;
+  if (consumo > 0 && lead > 0) {
+    seg = Math.round(consumo * lead);
+  } else if (smax > 0) {
+    seg = Math.round(smax * 0.20);
+  } else if (stock > 0) {
+    seg = Math.round(stock * 0.10);
+  } else {
+    seg = Number(item.stock_seguridad || 0);
+  }
+  // Solo auto-calcular si el usuario no lo definió manualmente
+  if (!item.stock_seguridad || item.stock_seguridad === 0) {
+    item.stock_seguridad = seg;
+  } else {
+    seg = Number(item.stock_seguridad);
+  }
+
+  // ── Punto de Reorden ─────────────────────────────────────────────────
+  // Punto Reorden = (Consumo × Lead Time) + Stock Seguridad
+  var preord;
+  if (consumo > 0 && lead > 0) {
+    preord = Math.round(consumo * lead + seg);
+  } else if (item.punto_reorden && item.punto_reorden > 0) {
+    preord = Number(item.punto_reorden);
+  } else if (smin > 0) {
+    preord = smin;
+  } else if (stock > 0) {
+    preord = Math.round(stock * 0.25);
+  } else {
+    preord = 0;
+  }
+  if (!item.punto_reorden || item.punto_reorden === 0) {
+    item.punto_reorden = preord;
+  } else {
+    preord = Number(item.punto_reorden);
+  }
+
+  // ── Stock Mínimo = Punto de Reorden ──────────────────────────────────
+  if (!item.stock_minimo || item.stock_minimo === 0) {
+    item.stock_minimo = preord;
+    smin = preord;
+  } else {
+    smin = Number(item.stock_minimo);
+  }
+
+  // ── Stock Máximo = Mínimo + Cobertura(30 días) ───────────────────────
+  if (!item.stock_maximo || item.stock_maximo === 0) {
+    if (consumo > 0) {
+      item.stock_maximo = Math.round(smin + consumo * 30);
+    } else if (smin > 0) {
+      item.stock_maximo = smin * 4;
+    } else if (stock > 0) {
+      item.stock_maximo = stock * 2;
+    }
+    smax = Number(item.stock_maximo || 0);
+  }
+
+  // ── Cobertura = Disponible / Consumo Diario ───────────────────────────
+  var cobertura = consumo > 0 ? Math.round(disp / consumo) : null;
+
+  // ── Compra Sugerida = Máximo - Disponible ────────────────────────────
+  var compra_sug = 0;
+  if (disp <= preord && smax > 0) compra_sug = Math.max(0, smax - disp);
+
+  // ── Valor Inventario ──────────────────────────────────────────────────
+  item.valor_inventario = Math.round(stock * costo);
+
+  // ── Rotación ─────────────────────────────────────────────────────────
+  if (tieneMovs) item.rotacion = _calcRotacion(sku, stock);
+
+  // ── Estado automático (spec ERP) ─────────────────────────────────────
+  var estado;
+  if (stock <= 0)       estado = 'AGOTADO';
+  else if (disp <= seg) estado = 'CRÍTICO';
+  else if (disp <= preord) estado = 'REORDENAR';
+  else if (smax > 0 && stock > smax) estado = 'SOBRESTOCK';
+  else                  estado = 'NORMAL';
+  item.estado_inventario = estado; // campo calculado (no sobreescribe item.estado=Activo/Inactivo)
+
+  // ── Clasificación ABC (se calcula masivamente en dashboard) ──────────
+  // item.clase_abc se asigna desde _calcClasificacionABC()
+
+  // Devolver los indicadores para la tabla
+  return {
+    stock, reserv, disp, smin, smax, seg, preord, costo,
+    consumo, lead, cobertura, compra_sug, estado,
+    valor: stock * costo,
+    rotacion: item.rotacion || 0,
+    agot:   estado === 'AGOTADO',
+    crit:   estado === 'CRÍTICO',
+    reord:  estado === 'REORDENAR',
+    sobreS: estado === 'SOBRESTOCK',
+    bajo:   disp < smin && disp > 0,
+    barPct: smax > 0 ? Math.min(100, Math.round(stock/smax*100)) : 0,
+    clase_abc: item.clase_abc || '—',
+  };
+}
+
+/* ── _calcClasificacionABC — para todos los items ────────────────────── */
+function _calcClasificacionABC(items) {
+  if (!items || !items.length) return items;
+  // Calcular valor de cada item
+  var conValor = items.map(function(i){
+    var costo = Number(i.costo||i.costo_unitario||i.precio||0);
+    return { sku: i.sku||i.codigo, valor: Number(i.stock||0)*costo };
+  });
+  // Ordenar desc por valor
+  conValor.sort(function(a,b){ return b.valor-a.valor; });
+  var total = conValor.reduce(function(s,i){ return s+i.valor; }, 0);
+  var acum  = 0;
+  var map   = {};
+  conValor.forEach(function(i){
+    acum += i.valor;
+    var pct = total > 0 ? acum/total : 0;
+    map[i.sku] = pct <= 0.80 ? 'A' : pct <= 0.95 ? 'B' : 'C';
+  });
+  // Asignar clase_abc a cada item
+  return items.map(function(i){
+    i.clase_abc = map[i.sku||i.codigo] || 'C';
+    return i;
+  });
+}
+
+/* ── Sobreescribir _calcItemIndicadores con el motor nuevo ───────────── */
+var _calcItemIndicadores_orig = typeof _calcItemIndicadores === 'function' ? _calcItemIndicadores : null;
+_calcItemIndicadores = function(item) {
+  if (!item) return {};
+  // Llamar al motor completo
+  return _calcIndicadoresCompletos(item);
+};
+
+/* ── _recalcAfterMov — recalcular item después de un movimiento ─────── */
+function _recalcAfterMov(sku) {
+  var items = _invItems || (typeof loadItems==='function' ? loadItems() : []);
+  var idx   = items.findIndex(function(i){ return (i.sku||i.codigo)===sku; });
+  if (idx < 0) return;
+  // Recalcular stock desde movimientos
+  items[idx].stock          = _calcStockDesdeMovs(sku);
+  items[idx].stock_reservado= _calcStockReservado(sku);
+  items[idx].consumo_diario = _calcConsumoPromedio(sku) || items[idx].consumo_diario || 0;
+  saveItems(items);
+  _invItems = items;
 }
 
 </script>
