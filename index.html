@@ -925,87 +925,71 @@ const DB = {
 try { if (typeof _checkPlanesVencidos === 'function') _checkPlanesVencidos(); } catch(e){}
 
 function seed() {
-  var SEED_VERSION = 'v3_2026'; // cambiar esto fuerza re-seed
-  var users = DB.get('usuarios') || [];
+  var SEED_VERSION = 'v4_2026'; // v4: credenciales simplificadas, hash corregido
+  var existing = DB.get('usuarios') || [];
 
   var seedUsers = [
     {
       id: 'sa_001', nombre: 'Super Administrador',
       username: 'superadministrador', correo: 'stockflow@outlook.es',
-      password: simpleHash('Proyecto_Inventarios_WMS2026*'),
+      password: 'erp_b59a1c55_14',
       rol: 'SUPER ADMINISTRADOR', cargo: 'Super Administrador',
       area: 'SUPER ADMINISTRADOR', estado: 'ACTIVO', intentos: 0,
-      created_at: now().fecha
+      plan_suspendido: false, created_at: now().fecha
     },
     {
       id: 'adm_001', nombre: 'Administrador',
       username: 'administrador', correo: '',
-      password: simpleHash('TI_administrador.2026*'),
+      password: 'erp_eb978626_10',
       rol: 'ADMINISTRADOR', cargo: 'Administrador',
       area: 'TI', estado: 'ACTIVO', intentos: 0,
-      created_at: now().fecha
+      plan_suspendido: false, created_at: now().fecha
     },
     {
-      id: 'alm_001', nombre: 'John Diaz',
-      username: 'jd01', correo: '',
-      password: simpleHash('Almacenista.01*'),
+      id: 'alm_001', nombre: 'Almacenista',
+      username: 'almacenista', correo: '',
+      password: 'erp_52981960_11',
       rol: 'ALMACENISTA', cargo: 'Auxiliar Almacén',
       area: 'Almacén', estado: 'ACTIVO', intentos: 0,
-      created_at: now().fecha
+      plan_suspendido: false, created_at: now().fecha
     },
     {
-      id: 'alm_002', nombre: 'JT01',
-      username: 'jt01', correo: '',
-      password: simpleHash('Almacenista.02*'),
-      rol: 'ALMACENISTA', cargo: 'Auxiliar Almacén',
+      id: 'jefe_001', nombre: 'Jefe Inventarios',
+      username: 'jefe', correo: '',
+      password: 'erp_6eb81317_9',
+      rol: 'JEFE INVENTARIOS', cargo: 'Jefe de Inventarios',
       area: 'Almacén', estado: 'ACTIVO', intentos: 0,
-      created_at: now().fecha
-    },
-    {
-      id: 'alm_003', nombre: 'CH01',
-      username: 'ch01', correo: '',
-      password: simpleHash('Jefe_Almacenista_2026*'),
-      rol: 'JEFE INVENTARIOS', cargo: 'Auxiliar Almacén',
-      area: 'Almacén', estado: 'ACTIVO', intentos: 0,
-      created_at: now().fecha
+      plan_suspendido: false, created_at: now().fecha
     },
     {
       id: 'cons_001', nombre: 'Consulta Productos',
-      username: 'cp01', correo: '',
-      password: simpleHash('ConsultaProducto*'),
+      username: 'consulta', correo: '',
+      password: 'erp_952dc798_12',
       rol: 'CONSULTA DE PRODUCTOS', cargo: 'Consultor',
-      area: 'Consultas', estado: 'ACTIVO', intentos: 0,
-      created_at: now().fecha
+      area: 'Producción', estado: 'ACTIVO', intentos: 0,
+      plan_suspendido: false, created_at: now().fecha
     },
   ];
 
-  // Verificar si ya se aplicó esta versión del seed
-  var appliedVersion = localStorage.getItem('sf_seed_version');
+  // Solo re-seed si cambió versión o no hay usuarios
+  var storedVersion = localStorage.getItem('sf_seed_version');
+  if (storedVersion === SEED_VERSION && existing.length > 0) return;
 
-  if (appliedVersion !== SEED_VERSION) {
-    // Primera vez o versión nueva: reemplazar completamente los usuarios seedeados
-    // Conservar usuarios creados manualmente (ids distintos a los seed)
-    var seedIds = seedUsers.map(function(u){ return u.id; });
-    var customUsers = users.filter(function(u){ return seedIds.indexOf(u.id) === -1 && u.id !== 'sa_001' && u.username !== 'admin' && u.username !== 'administrador'; });
-    DB.set('usuarios', seedUsers.concat(customUsers));
-    localStorage.setItem('sf_seed_version', SEED_VERSION);
-    if (!DB.get('articulos'))   DB.set('articulos', []);
-    if (!DB.get('movimientos')) DB.set('movimientos', []);
-    if (!DB.get('auditoria'))   DB.set('auditoria', []);
-  } else {
-    // Versión ya aplicada — solo garantizar que SA exista con contraseña correcta
-    var currentUsers = DB.get('usuarios') || [];
-    var saIdx = currentUsers.findIndex(function(u){ return u.id === 'sa_001'; });
-    if (saIdx === -1) {
-      currentUsers.unshift(seedUsers[0]);
-      DB.set('usuarios', currentUsers);
-    } else {
-      currentUsers[saIdx].password = seedUsers[0].password;
-      currentUsers[saIdx].estado   = currentUsers[saIdx].estado === 'BLOQUEADO' ? 'ACTIVO' : currentUsers[saIdx].estado;
-      currentUsers[saIdx].intentos = 0;
-      DB.set('usuarios', currentUsers);
-    }
-  }
+  // Mantener usuarios personalizados que no están en seed
+  var seedIds = seedUsers.map(function(u) { return u.id; });
+  var customUsers = existing.filter(function(u) { return !seedIds.includes(u.id); });
+  DB.set('usuarios', seedUsers.concat(customUsers));
+  localStorage.setItem('sf_seed_version', SEED_VERSION);
+
+  if (!DB.get('articulos'))   DB.set('articulos', []);
+  if (!DB.get('movimientos')) DB.set('movimientos', []);
+  if (!DB.get('proveedores')) DB.set('proveedores', []);
+  if (!DB.get('empresas'))    DB.set('empresas', []);
+  if (!DB.get('bodegas'))     DB.set('bodegas', []);
+  if (!DB.get('ciclicos'))    DB.set('ciclicos', []);
+  if (!DB.get('auditoria'))   DB.set('auditoria', []);
+
+  console.log('[StockFlow] Seed v4_2026 aplicado. Usuarios:', seedUsers.length + customUsers.length);
 }
 
 function uid() { return 'id_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
@@ -1018,12 +1002,12 @@ function now() {
   };
 }
 function simpleHash(str) {
-  // djb2 — stable 32-bit, works identically in all browsers
-  let h = 5381;
-  for (let i = 0; i < str.length; i++) {
-    h = ((h << 5) + h + str.charCodeAt(i)) & 0x7fffffff;
+  // djb2 — matches browser JS 32-bit arithmetic exactly
+  var h = 5381;
+  for (var i = 0; i < str.length; i++) {
+    h = (((h << 5) + h) + str.charCodeAt(i)) | 0;
   }
-  return 'erp_' + h.toString(16).padStart(8,'0') + '_' + str.length;
+  return 'erp_' + ((h >>> 0).toString(16).padStart(8, '0')) + '_' + str.length;
 }
 function checkPwd(plain, hash) {
   if (!hash) return false;
@@ -12375,6 +12359,16 @@ function _buildInvRow(item) {
   r += '<span style="font-size:9px;font-weight:700;padding:3px 7px;border-radius:20px;background:'+estBg+';color:'+estClr+';white-space:nowrap;display:inline-block">'+estTxt+'</span>';
   r += '</td>';
 
+  // 19b. #RESERVA (70px)
+  var nRes = Number(item.stock_reservado||0);
+  r += '<td style="padding:6px 6px;width:70px;min-width:70px;text-align:center;white-space:nowrap">';
+  if (nRes > 0) {
+    r += '<span onclick="abrirGestionReservas()" style="cursor:pointer;font-size:10px;font-weight:700;padding:2px 7px;border-radius:20px;background:rgba(139,92,246,.2);color:#c4b5fd;border:1px solid rgba(139,92,246,.3)" title="'+nRes+' unidades reservadas">🔒'+nRes+'</span>';
+  } else {
+    r += '<span style="font-size:11px;color:rgba(255,255,255,.15)">—</span>';
+  }
+  r += '</td>';
+
   // 20. ACCIONES (84px)
   r += '<td style="padding:6px 8px;width:84px;min-width:84px;white-space:nowrap">';
   r += '<div style="display:flex;gap:3px;justify-content:flex-end;align-items:center">';
@@ -12411,7 +12405,7 @@ function filterInventarioTable() {
   });
   if (tbody) {
     tbody.innerHTML = visible.length===0
-      ? '<tr><td colspan="20" style="text-align:center;padding:32px;color:var(--muted)">Sin resultados</td></tr>'
+      ? '<tr><td colspan="16" style="text-align:center;padding:32px;color:var(--muted)">Sin resultados</td></tr>'
       : visible.map(function(item){ return _buildInvRow(item); }).join('');
     if (inp) setTimeout(function(){ try{inp.focus();inp.setSelectionRange(cursorPos,cursorPos);}catch(e){} },0);
     return;
@@ -12470,14 +12464,17 @@ function _buildInventarioUI(allItems) {
     });
     h.push('</div>');
     if (canCreate) h.push('<button class="btn btn-navy btn-sm" onclick="openNuevoArticulo()" style="white-space:nowrap">+ Nuevo</button>');
+    // Botón reservas visible para todos
+    h.push('<button class="btn btn-sm" onclick="abrirPanelReserva()" style="background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4);color:#c4b5fd;white-space:nowrap">📋 Nueva Reserva</button>');
+    h.push('<button class="btn btn-ghost btn-sm" onclick="abrirGestionReservas()" style="white-space:nowrap">📊 Ver Reservas</button>');
     h.push('</div>');
     h.push('<div style="font-size:11px;color:var(--muted);margin-bottom:10px">'+filtered.length+' de '+nAll+' referencias'+(invFiltro!=='TODOS'||ql?' · <span style=\"color:var(--amber)\">filtro activo</span>':'')+'</div>');
 
     // Total width: 28+90+180+110+100+52+110+72+60+80+56+56+56+76+72+76+70+72+96+84 = 1596px
     h.push('<div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(255,255,255,.07)">');
-    h.push('<table style="width:1596px;min-width:1596px;border-collapse:collapse;table-layout:fixed">');
+    h.push('<table style="width:1666px;min-width:1666px;border-collapse:collapse;table-layout:fixed">');
     h.push('<colgroup>');
-    [28,90,180,110,100,52,110,72,60,80,56,56,56,76,72,76,70,72,96,84].forEach(function(w){
+    [28,90,180,110,100,52,110,72,60,80,56,56,56,76,72,76,70,72,70,96,84].forEach(function(w){
       h.push('<col style="width:'+w+'px;min-width:'+w+'px">');
     });
     h.push('</colgroup>');
@@ -12502,6 +12499,7 @@ function _buildInventarioUI(allItems) {
       {w:76,  align:'center', label:'Consumo/d'},
       {w:70,  align:'center', label:'Lead Time'},
       {w:72,  align:'center', label:'Compra'},
+      {w:70,  align:'center', label:'<span style="color:#a78bfa">#Reserva</span>'},
       {w:96,  align:'center', label:'Estado'},
       {w:84,  align:'right',  label:'Acciones'},
     ];
@@ -13008,6 +13006,361 @@ function abrirDiagnostico() {
   h.push('<button class="btn btn-navy" onclick="closeModal();goto('centro-pruebas')">🧪 Pruebas completas</button>');
   h.push('</div>');
   openModal(h.join(''));
+}
+
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MÓDULO DE RESERVAS — #Reserva para usuarios de Consulta de Productos
+   Permite a producción reservar productos con Cédula + OT
+══════════════════════════════════════════════════════════════════════════ */
+
+var _reservasDB_KEY = 'sf_reservas';
+
+function loadReservas() {
+  try { return JSON.parse(localStorage.getItem(_reservasDB_KEY) || '[]'); } catch(e){ return []; }
+}
+function saveReservas(arr) {
+  if (arr.length > 2000) arr = arr.slice(0, 2000);
+  try { localStorage.setItem(_reservasDB_KEY, JSON.stringify(arr)); } catch(e){}
+}
+
+/* ── abrirPanelReserva — modal para crear/ver reservas ──────────────── */
+function abrirPanelReserva() {
+  var items  = _invItems || loadItems();
+  var reservas = loadReservas();
+  var user   = SESSION.user && SESSION.user.nombre || 'Sistema';
+  var isConsulta = SESSION.user && SESSION.user.rol === 'CONSULTA DE PRODUCTOS';
+
+  var h = [];
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">');
+  h.push('<h3 style="margin:0">📋 Nueva Reserva / Pedido</h3>');
+  h.push('<span style="font-size:11px;color:var(--muted)">Usuario: '+user+'</span>');
+  h.push('</div>');
+
+  // Formulario de reserva
+  h.push('<div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.2);border-radius:10px;padding:14px;margin-bottom:14px">');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>🪪 Cédula del solicitante *</label>');
+  h.push('<input id="res-cedula" type="text" placeholder="Ej: 12345678" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')">');
+  h.push('</div>');
+  h.push('<div class="form-row"><label>🔧 Orden de Trabajo (OT) *</label>');
+  h.push('<input id="res-ot" type="text" placeholder="Ej: OT-2026-001" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">');
+  h.push('</div>');
+  h.push('</div>');
+  h.push('<div class="form-row"><label>📝 Observación</label>');
+  h.push('<input id="res-obs" placeholder="Descripción del trabajo o área que solicita...">');
+  h.push('</div>');
+  h.push('</div>');
+
+  // Búsqueda y selección de productos
+  h.push('<div class="form-row" style="margin-bottom:8px"><label>🔍 Buscar y agregar productos</label>');
+  h.push('<input id="res-buscar" type="text" placeholder="Código, nombre o categoría..." oninput="_buscarParaReserva(this.value)">');
+  h.push('</div>');
+  h.push('<div id="res-resultados" style="max-height:180px;overflow-y:auto;border:1px solid var(--border2);border-radius:8px;margin-bottom:12px"></div>');
+
+  // Productos seleccionados
+  h.push('<div id="res-carrito" style="margin-bottom:12px">');
+  h.push('<p style="font-size:11px;color:var(--muted);text-align:center;padding:12px">Agrega productos usando la búsqueda</p>');
+  h.push('</div>');
+
+  h.push('<div class="modal-actions">');
+  h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
+  h.push('<button class="btn btn-navy" onclick="_confirmarReserva()">📋 Confirmar Reserva</button>');
+  h.push('</div>');
+
+  openModal(h.join(''), 'modal-lg');
+  window._reservaCarrito = [];
+  setTimeout(function(){ var el=document.getElementById('res-buscar'); if(el) el.focus(); }, 150);
+}
+
+function _buscarParaReserva(q) {
+  var res = document.getElementById('res-resultados');
+  if (!res) return;
+  if (!q || q.length < 1) { res.innerHTML = ''; return; }
+  q = q.toLowerCase();
+  var items = _invItems || loadItems();
+  var found = items.filter(function(i){
+    var disp = Math.max(0, Number(i.stock||0) - Number(i.stock_reservado||0));
+    return disp > 0 && (
+      (i.sku||'').toLowerCase().includes(q) ||
+      (i.nombre||'').toLowerCase().includes(q) ||
+      (i.categoria||'').toLowerCase().includes(q) ||
+      (i.marca||'').toLowerCase().includes(q)
+    );
+  }).slice(0,15);
+
+  if (!found.length) {
+    res.innerHTML = '<p style="padding:12px;color:var(--muted);font-size:12px;text-align:center">Sin resultados disponibles para "'+q+'"</p>';
+    return;
+  }
+
+  res.innerHTML = found.map(function(item){
+    var disp = Math.max(0, Number(item.stock||0) - Number(item.stock_reservado||0));
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer" onclick="_agregarACarritoReserva(''+item.id+'')" onmouseenter="this.style.background='rgba(59,130,246,.08)'" onmouseleave="this.style.background=''">' +
+      '<span style="font-family:monospace;font-size:10px;color:var(--electric);background:rgba(59,130,246,.1);padding:2px 6px;border-radius:4px">'+item.sku+'</span>' +
+      '<div style="flex:1"><div style="font-size:12px;font-weight:600">'+item.nombre+'</div>' +
+      '<div style="font-size:10px;color:var(--muted)">'+(item.categoria||'')+(item.ubicacion?' · '+item.ubicacion:'')+'</div></div>' +
+      '<strong style="font-size:13px;color:#4ade80">'+disp+'</strong>' +
+      '<span style="font-size:10px;color:var(--muted)">'+item.unidad+'</span>' +
+      '<button style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:var(--electric);border-radius:6px;padding:3px 10px;cursor:pointer;font-size:11px">+ Agregar</button>' +
+      '</div>';
+  }).join('');
+}
+
+window._reservaCarrito = [];
+
+function _agregarACarritoReserva(itemId) {
+  var items = _invItems || loadItems();
+  var item  = items.find(function(i){ return i.id===itemId; });
+  if (!item) return;
+  var existing = window._reservaCarrito.find(function(x){ return x.id===itemId; });
+  if (existing) {
+    existing.cantidad++;
+  } else {
+    var disp = Math.max(0, Number(item.stock||0) - Number(item.stock_reservado||0));
+    window._reservaCarrito.push({ id:item.id, sku:item.sku, nombre:item.nombre, unidad:item.unidad||'UND', cantidad:1, disponible:disp });
+  }
+  _renderCarritoReserva();
+  // Clear search
+  var buscar = document.getElementById('res-buscar');
+  if (buscar) { buscar.value=''; }
+  var res = document.getElementById('res-resultados');
+  if (res) res.innerHTML = '';
+}
+
+function _renderCarritoReserva() {
+  var carrito = document.getElementById('res-carrito');
+  if (!carrito) return;
+  if (!window._reservaCarrito.length) {
+    carrito.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:12px">Agrega productos usando la búsqueda</p>';
+    return;
+  }
+  var html = '<div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase">Productos a reservar ('+window._reservaCarrito.length+')</div>';
+  html += '<div style="border:1px solid var(--border2);border-radius:8px;overflow:hidden">';
+  window._reservaCarrito.forEach(function(p, idx){
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.04)">';
+    html += '<span style="font-family:monospace;font-size:10px;color:var(--electric)">'+p.sku+'</span>';
+    html += '<div style="flex:1;font-size:12px;font-weight:600">'+p.nombre+'</div>';
+    html += '<div style="display:flex;align-items:center;gap:6px">';
+    html += '<button onclick="_cambiarCantidadReserva('+idx+',-1)" style="background:rgba(255,255,255,.06);border:none;color:var(--white);width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:14px">−</button>';
+    html += '<input id="res-qty-'+idx+'" type="number" min="1" max="'+p.disponible+'" value="'+p.cantidad+'" onchange="_setCantidadReserva('+idx+',this.value)" style="width:50px;text-align:center;background:var(--card2);border:1px solid var(--border2);color:var(--white);border-radius:4px;padding:2px 4px;font-size:12px">';
+    html += '<button onclick="_cambiarCantidadReserva('+idx+',1)" style="background:rgba(255,255,255,.06);border:none;color:var(--white);width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:14px">+</button>';
+    html += '<span style="font-size:10px;color:var(--muted)">'+p.unidad+'</span>';
+    html += '</div>';
+    html += '<span style="font-size:10px;color:var(--muted)">disp:'+p.disponible+'</span>';
+    html += '<button onclick="_quitarDeCarritoReserva('+idx+')" style="background:rgba(239,68,68,.1);border:none;color:#f87171;width:24px;height:24px;border-radius:4px;cursor:pointer">✕</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+  carrito.innerHTML = html;
+}
+
+function _cambiarCantidadReserva(idx, delta) {
+  var p = window._reservaCarrito[idx];
+  if (!p) return;
+  p.cantidad = Math.max(1, Math.min(p.disponible, p.cantidad + delta));
+  _renderCarritoReserva();
+}
+function _setCantidadReserva(idx, val) {
+  var p = window._reservaCarrito[idx];
+  if (!p) return;
+  p.cantidad = Math.max(1, Math.min(p.disponible, parseInt(val)||1));
+  _renderCarritoReserva();
+}
+function _quitarDeCarritoReserva(idx) {
+  window._reservaCarrito.splice(idx, 1);
+  _renderCarritoReserva();
+}
+
+function _confirmarReserva() {
+  var cedula = (document.getElementById('res-cedula').value||'').trim();
+  var ot     = (document.getElementById('res-ot').value||'').trim().toUpperCase();
+  var obs    = (document.getElementById('res-obs').value||'').trim();
+
+  if (!cedula) { showToast('Ingresa la cédula del solicitante','red'); document.getElementById('res-cedula').focus(); return; }
+  if (!ot)     { showToast('Ingresa la Orden de Trabajo (OT)','red'); document.getElementById('res-ot').focus(); return; }
+  if (!window._reservaCarrito.length) { showToast('Agrega al menos un producto','red'); return; }
+
+  // Validate stock
+  var items = _invItems || loadItems();
+  var itemsMap = {};
+  items.forEach(function(i){ itemsMap[i.id] = i; });
+  var errores = [];
+  window._reservaCarrito.forEach(function(p){
+    var item = itemsMap[p.id];
+    if (!item) { errores.push(p.sku+': no encontrado'); return; }
+    var disp = Math.max(0, Number(item.stock||0) - Number(item.stock_reservado||0));
+    if (p.cantidad > disp) errores.push(p.sku+': solo '+disp+' disponibles');
+  });
+  if (errores.length) { showToast('❌ '+errores.join(', '),'red'); return; }
+
+  // Create reserva
+  var t = now();
+  var numReserva = 'RES-' + t.fecha.replace(/-/g,'') + '-' + String(Date.now()).slice(-4);
+  var reserva = {
+    id:          uid(),
+    numero:      numReserva,
+    cedula:      cedula,
+    ot:          ot,
+    observacion: obs,
+    usuario:     SESSION.user && SESSION.user.nombre || 'Sistema',
+    fecha:       t.fecha,
+    hora:        t.hora,
+    ts:          t.ts,
+    estado:      'PENDIENTE',
+    productos:   window._reservaCarrito.map(function(p){ return { id:p.id, sku:p.sku, nombre:p.nombre, cantidad:p.cantidad, unidad:p.unidad }; }),
+    empresa_id:  typeof _getEmpresaId==='function' ? _getEmpresaId() : null,
+  };
+
+  // Update stock_reservado for each item
+  var updated = items.slice();
+  window._reservaCarrito.forEach(function(p){
+    var idx = updated.findIndex(function(i){ return i.id===p.id; });
+    if (idx >= 0) {
+      updated[idx].stock_reservado = Number(updated[idx].stock_reservado||0) + p.cantidad;
+    }
+  });
+  saveItems(updated);
+  _invItems = updated;
+
+  // Save reserva
+  var reservas = loadReservas();
+  reservas.unshift(reserva);
+  saveReservas(reservas);
+
+  auditLog('CREAR_RESERVA', 'Reserva: '+numReserva+' | OT: '+ot+' | Cédula: '+cedula+' | Items: '+reserva.productos.length, SESSION.user&&SESSION.user.nombre);
+  closeModal();
+  showToast('✅ Reserva '+numReserva+' creada exitosamente','green');
+  window._reservaCarrito = [];
+  if (currentPage==='inventario') _buildInventarioUI(_invItems||loadItems());
+}
+
+/* ── abrirGestionReservas — ver/gestionar reservas existentes ────────── */
+function abrirGestionReservas() {
+  var reservas = loadReservas();
+  var h = [];
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">');
+  h.push('<h3 style="margin:0">📋 Reservas / Pedidos</h3>');
+  h.push('<span style="font-size:11px;background:rgba(59,130,246,.15);color:var(--electric);padding:3px 10px;border-radius:20px">'+reservas.length+' registros</span>');
+  h.push('</div>');
+
+  if (!reservas.length) {
+    h.push('<div style="text-align:center;padding:30px;color:var(--muted)"><p style="font-size:14px">Sin reservas registradas</p></div>');
+  } else {
+    h.push('<div style="overflow-y:auto;max-height:450px">');
+    h.push('<table style="width:100%;border-collapse:collapse">');
+    h.push('<thead><tr style="background:rgba(255,255,255,.04)">');
+    ['#Reserva','Fecha','OT','Cédula','Productos','Usuario','Estado','Acción'].forEach(function(col){
+      h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:left">'+col+'</th>');
+    });
+    h.push('</tr></thead><tbody>');
+    reservas.forEach(function(r){
+      var estClr = r.estado==='ENTREGADO'?'#4ade80':r.estado==='CANCELADO'?'#f87171':'#fbbf24';
+      var estBg  = r.estado==='ENTREGADO'?'rgba(74,222,128,.12)':r.estado==='CANCELADO'?'rgba(248,113,113,.12)':'rgba(251,191,36,.12)';
+      h.push('<tr style="border-bottom:1px solid rgba(255,255,255,.05)">');
+      h.push('<td style="padding:8px;font-family:monospace;font-size:11px;color:var(--electric)">'+r.numero+'</td>');
+      h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+r.fecha+'<br><span style="font-size:10px">'+r.hora+'</span></td>');
+      h.push('<td style="padding:8px;font-size:12px;font-weight:600">'+r.ot+'</td>');
+      h.push('<td style="padding:8px;font-size:12px">'+r.cedula+'</td>');
+      h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+r.productos.length+' ítem(s)<br>'+r.productos.map(function(p){ return p.sku+' x'+p.cantidad; }).join(', ')+'</td>');
+      h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+r.usuario+'</td>');
+      h.push('<td style="padding:8px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+estBg+';color:'+estClr+'">'+r.estado+'</span></td>');
+      h.push('<td style="padding:8px;white-space:nowrap">');
+      if (r.estado==='PENDIENTE') {
+        h.push('<button onclick="_entregarReserva(''+r.id+'')" style="background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;margin-right:4px">✅ Entregar</button>');
+        h.push('<button onclick="_cancelarReserva(''+r.id+'')" style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#f87171;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px">✕ Cancelar</button>');
+      }
+      h.push('</td></tr>');
+    });
+    h.push('</tbody></table></div>');
+  }
+  h.push('<div class="modal-actions">');
+  h.push('<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>');
+  if (reservas.length) h.push('<button class="btn btn-ghost btn-sm" onclick="_exportarReservas()" style="color:var(--electric)">📥 Exportar Excel</button>');
+  h.push('</div>');
+  openModal(h.join(''), 'modal-xl');
+}
+
+function _entregarReserva(reservaId) {
+  var reservas = loadReservas();
+  var idx = reservas.findIndex(function(r){ return r.id===reservaId; });
+  if (idx < 0) return;
+  reservas[idx].estado        = 'ENTREGADO';
+  reservas[idx].fecha_entrega = now().fecha;
+  reservas[idx].entregado_por = SESSION.user && SESSION.user.nombre || 'Sistema';
+
+  // Liberar stock_reservado y descontar stock real
+  var items = _invItems || loadItems();
+  reservas[idx].productos.forEach(function(p){
+    var iIdx = items.findIndex(function(i){ return i.id===p.id; });
+    if (iIdx >= 0) {
+      items[iIdx].stock          = Math.max(0, Number(items[iIdx].stock||0) - p.cantidad);
+      items[iIdx].stock_reservado = Math.max(0, Number(items[iIdx].stock_reservado||0) - p.cantidad);
+      items[iIdx].ultima_salida   = now().fecha;
+    }
+  });
+  saveItems(items);
+  _invItems = items;
+  saveReservas(reservas);
+
+  // Registrar movimientos
+  var movs = loadMovs() || [];
+  var t = now();
+  reservas[idx].productos.forEach(function(p){
+    movs.unshift({ id:uid(), sku:p.sku, tipo:'SALIDA', cantidad:p.cantidad,
+      fecha:t.fecha, hora:t.hora, ts:t.ts,
+      usuario:SESSION.user&&SESSION.user.nombre||'Sistema',
+      observacion:'Reserva '+reservas[idx].numero+' | OT: '+reservas[idx].ot+' | Cédula: '+reservas[idx].cedula,
+      stock_resultante:0 });
+  });
+  if (movs.length > 5000) movs = movs.slice(0,5000);
+  saveMovs(movs);
+
+  auditLog('ENTREGAR_RESERVA','Reserva: '+reservas[idx].numero+' entregada', SESSION.user&&SESSION.user.nombre);
+  showToast('✅ Reserva '+reservas[idx].numero+' entregada y stock actualizado','green');
+  closeModal();
+  setTimeout(abrirGestionReservas, 300);
+  if (currentPage==='inventario') setTimeout(function(){ _buildInventarioUI(_invItems||loadItems()); }, 400);
+}
+
+function _cancelarReserva(reservaId) {
+  var reservas = loadReservas();
+  var idx = reservas.findIndex(function(r){ return r.id===reservaId; });
+  if (idx < 0) return;
+  reservas[idx].estado = 'CANCELADO';
+
+  // Liberar stock_reservado
+  var items = _invItems || loadItems();
+  reservas[idx].productos.forEach(function(p){
+    var iIdx = items.findIndex(function(i){ return i.id===p.id; });
+    if (iIdx >= 0) {
+      items[iIdx].stock_reservado = Math.max(0, Number(items[iIdx].stock_reservado||0) - p.cantidad);
+    }
+  });
+  saveItems(items); _invItems = items;
+  saveReservas(reservas);
+  showToast('Reserva cancelada y stock liberado','amber');
+  closeModal();
+  setTimeout(abrirGestionReservas, 300);
+  if (currentPage==='inventario') setTimeout(function(){ _buildInventarioUI(_invItems||loadItems()); }, 400);
+}
+
+function _exportarReservas() {
+  if (typeof XLSX==='undefined') { showToast('XLSX no disponible','red'); return; }
+  var reservas = loadReservas();
+  var rows = [['#Reserva','Fecha','Hora','OT','Cédula','SKU','Producto','Cantidad','UM','Estado','Usuario','Fecha Entrega']];
+  reservas.forEach(function(r){
+    r.productos.forEach(function(p){
+      rows.push([r.numero,r.fecha,r.hora,r.ot,r.cedula,p.sku,p.nombre,p.cantidad,p.unidad,r.estado,r.usuario,r.fecha_entrega||'']);
+    });
+  });
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = rows[0].map(function(){ return {wch:15}; });
+  XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
+  XLSX.writeFile(wb, 'reservas_stockflow.xlsx');
+  showToast('Exportado: reservas_stockflow.xlsx','green');
 }
 
 </script>
