@@ -1771,7 +1771,7 @@ function _completarLogin(user) {
 
 
 function doLogout() {
-  auditLog('LOGOUT', 'Cierre de sesión', SESSION.user?.nombre);
+  auditLog('LOGOUT', 'Cierre de sesión', (SESSION.user && SESSION.user.nombre));
   SESSION.user = null;
   document.getElementById('app-view').style.display = 'none';
   document.getElementById('login-view').style.display = '';
@@ -3807,7 +3807,7 @@ function _finalizarDespacho() {
     DB_guias_save(guias);
   }
 
-  auditLog('DESPACHO_COMPLETADO', numGuia+' | '+trans+' | '+pack?.codigo, SESSION.user&&SESSION.user.nombre);
+  auditLog('DESPACHO_COMPLETADO', numGuia+' | '+trans+' | '+(pack&&pack.codigo), SESSION.user&&SESSION.user.nombre);
   _registrarAuditoriaTecnica('INFO','Despacho', null, 'Despacho: '+numGuia+' ('+trans+') · evidencias: '+evidencias.length, 'Estado → DESPACHADO');
   closeModal();
   _packTab = 'despacho';
@@ -3884,9 +3884,9 @@ function checkPublicRoute() {
   var search = window.location.search  || '';
   var hash   = window.location.hash    || '';
   var params = new URLSearchParams(search);
-  var skuFromPath   = path.match(/\/producto\/([^/?#]+)/i);
+  var skuFromPath   = path.match(/\/producto\/([/?#]+)/i);
   var skuFromParam  = params.get('producto') || params.get('sku');
-  var skuFromHash   = hash.match(/producto=([^&]+)/i);
+  var skuFromHash   = hash.match(/producto=([&]+)/i);
   var sku = (skuFromPath && skuFromPath[1]) || skuFromParam || (skuFromHash && skuFromHash[1]);
   if (!sku) return false;
   showPublicProductCard(sku.toUpperCase());
@@ -6697,11 +6697,11 @@ function _requiere2FA(rol) {
 
 /* ── Validación avanzada de contraseña (12+ chars, mayo, mino, num, especial) */
 var _PWD_RULES = [
-  { id:'len',     rx: /^.{12,}$/,                       msg:'Mínimo 12 caracteres' },
+  { id:'len',     rx: /.{12,}$/,                       msg:'Mínimo 12 caracteres' },
   { id:'upper',   rx: /[A-Z]/,                           msg:'Al menos 1 mayúscula' },
   { id:'lower',   rx: /[a-z]/,                           msg:'Al menos 1 minúscula' },
   { id:'num',     rx: /\d/,                              msg:'Al menos 1 número' },
-  { id:'special', rx: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/,  msg:'Al menos 1 carácter especial' },
+  { id:'special', rx: /[!@#$%&*()_+\-=\[\]{};':"\\|,.<>\/?~`]/,  msg:'Al menos 1 carácter especial' },
 ];
 
 function _validatePwdAdvanced(pwd) {
@@ -6872,9 +6872,9 @@ function _sha1(data) {
     for (var t=0; t<80; t++) {
       var f,k;
       if (t<20){f=(b&c)|((~b)&d);k=0x5A827999;}
-      else if(t<40){f=b^c^d;k=0x6ED9EBA1;}
+      else if(t<40){f=bcd;k=0x6ED9EBA1;}
       else if(t<60){f=(b&c)|(b&d)|(c&d);k=0x8F1BBCDC;}
-      else{f=b^c^d;k=0xCA62C1D6;}
+      else{f=bcd;k=0xCA62C1D6;}
       var tmp=((a<<5)|(a>>>27))+f+e+k+W[t];
       e=d;d=c;c=(b<<30)|(b>>>2);b=a;a=tmp;
     }
@@ -6951,7 +6951,7 @@ function _iniciar2FALogin(user) {
   h.push('</div>');
   h.push('<div id="twofa-error" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:10px;border-radius:8px;font-size:12px;margin-bottom:12px"></div>');
   h.push('<div class="form-row"><label>Código de 6 dígitos</label>');
-  h.push('<input id="twofa-code" type="text" maxlength="6" placeholder="000000" style="text-align:center;font-size:24px;letter-spacing:8px;font-family:monospace" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')" onkeypress="if(event.key===\'Enter\')_verificar2FA()">');
+  h.push('<input id="twofa-code" type="text" maxlength="6" placeholder="000000" style="text-align:center;font-size:24px;letter-spacing:8px;font-family:monospace" oninput="this.value=this.value.replace(/[0-9]/g,\'\')" onkeypress="if(event.key===\'Enter\')_verificar2FA()">');
   h.push('</div>');
   h.push('<button class="btn btn-navy" style="width:100%;justify-content:center;padding:11px;margin-bottom:10px" onclick="_verificar2FA()">✓ Verificar</button>');
   h.push('<button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="_cancelar2FA()">← Volver</button>');
@@ -7089,7 +7089,7 @@ function _mostrarSetup2FA(user) {
 
   h.push('<div style="background:rgba(255,255,255,.04);border-radius:12px;padding:14px;margin-bottom:14px">');
   h.push('<p style="font-size:12px;font-weight:700;margin-bottom:10px">Paso 2: Verifica el código</p>');
-  h.push('<input id="setup-2fa-code" type="text" maxlength="6" placeholder="000000" style="text-align:center;font-size:22px;letter-spacing:6px;font-family:monospace;width:100%" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')">');
+  h.push('<input id="setup-2fa-code" type="text" maxlength="6" placeholder="000000" style="text-align:center;font-size:22px;letter-spacing:6px;font-family:monospace;width:100%" oninput="this.value=this.value.replace(/[0-9]/g,\'\')">');
   h.push('</div>');
 
   h.push('<div style="margin-bottom:12px;padding:10px;background:rgba(255,255,255,.03);border-radius:8px;font-size:11px;color:var(--muted)">');
@@ -7491,7 +7491,7 @@ function _genAdminEmpresa(nombreEmpresa) {
     .toLowerCase()
     .replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i')
     .replace(/[óòö]/g,'o').replace(/[úùü]/g,'u').replace(/ñ/g,'n')
-    .replace(/[^a-z0-9]/g,'').slice(0,14);
+    .replace(/[a-z0-9]/g,'').slice(0,14);
   var username = 'admin_' + slug;
   // Contraseña segura: Mayus + minús + número + especial, 12+ chars
   var special = ['!','@','#','$','*'];
@@ -8623,39 +8623,7 @@ function _guardarNuevoArticulo(editId) {
 ══════════════════════════════════════════════ */
 let scanMode = 'camera';
 renders.escaner = function() {
-  document.getElementById('pg-escaner').innerHTML = `
-    <div class="tabs">
-      <button class="tab ${scanMode==='camera'?'active':''}" onclick="setScanMode('camera')">📷 Cámara</button>
-      <button class="tab ${scanMode==='manual'?'active':''}" onclick="setScanMode('manual')">⌨️ Manual</button>
-    </div>
-    <div id="scan-cam" style="display:${scanMode==='camera'?'':'none'}">
-      <div class="card" style="overflow:hidden;padding:0">
-        <div style="background:var(--navy);padding:12px 16px;text-align:center">
-          <p style="color:#fff;font-size:13px;font-weight:600">Apunta la cámara al código QR del artículo</p>
-          <p style="color:rgba(255,255,255,.4);font-size:11px">Se detectará automáticamente</p>
-        </div>
-        <div style="padding:10px"><div id="qr-reader"></div></div>
-      </div>
-    </div>
-    <div id="scan-manual" style="display:${scanMode==='manual'?'':'none'}">
-      <div class="card">
-        <div class="form-row">
-          <label>Ingresar SKU manualmente</label>
-          <input id="manual-sku" type="text" placeholder="TOR-CAR-001" style="font-family:monospace;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')manualScan()">
-        </div>
-        <button class="btn btn-navy" style="width:100%;justify-content:center" onclick="manualScan()">
-          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Buscar artículo
-        </button>
-      </div>
-    </div>
-    <div id="scan-error" style="display:none;margin-top:12px" class="alert-bar"></div>
-    <div class="card" style="margin-top:14px;font-size:12px;color:var(--muted);line-height:1.7">
-      <strong style="color:var(--navy)">Instrucciones:</strong><br>
-      1. Usa Cámara en el celular — permite el acceso cuando Chrome lo solicite.<br>
-      2. Apunta al QR del artículo hasta que se detecte automáticamente.<br>
-      3. Se abre el detalle completo con stock, ubicación e historial.<br>
-      4. Desde allí puedes registrar entradas, salidas o ajustes.
-    </div>`;
+  document.getElementById('pg-escaner').innerHTML = '\n    <div class="tabs">\n      <button class="tab \'+(scanMode===\'camera\'?\'active\':\'\'||\'\')+\'" onclick="setScanMode(\'camera\')">📷 Cámara</button>\n      <button class="tab \'+(scanMode===\'manual\'?\'active\':\'\'||\'\')+\'" onclick="setScanMode(\'manual\')">⌨️ Manual</button>\n    </div>\n    <div id="scan-cam" style="display:\'+(scanMode===\'camera\'?\'\':\'none\'||\'\')+\'">\n      <div class="card" style="overflow:hidden;padding:0">\n        <div style="background:var(--navy);padding:12px 16px;text-align:center">\n          <p style="color:#fff;font-size:13px;font-weight:600">Apunta la cámara al código QR del artículo</p>\n          <p style="color:rgba(255,255,255,.4);font-size:11px">Se detectará automáticamente</p>\n        </div>\n        <div style="padding:10px"><div id="qr-reader"></div></div>\n      </div>\n    </div>\n    <div id="scan-manual" style="display:\'+(scanMode===\'manual\'?\'\':\'none\'||\'\')+\'">\n      <div class="card">\n        <div class="form-row">\n          <label>Ingresar SKU manualmente</label>\n          <input id="manual-sku" type="text" placeholder="TOR-CAR-001" style="font-family:monospace;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key===\'Enter\')manualScan()">\n        </div>\n        <button class="btn btn-navy" style="width:100%;justify-content:center" onclick="manualScan()">\n          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>Buscar artículo\n        </button>\n      </div>\n    </div>\n    <div id="scan-error" style="display:none;margin-top:12px" class="alert-bar"></div>\n    <div class="card" style="margin-top:14px;font-size:12px;color:var(--muted);line-height:1.7">\n      <strong style="color:var(--navy)">Instrucciones:</strong><br>\n      1. Usa Cámara en el celular — permite el acceso cuando Chrome lo solicite.<br>\n      2. Apunta al QR del artículo hasta que se detecte automáticamente.<br>\n      3. Se abre el detalle completo con stock, ubicación e historial.<br>\n      4. Desde allí puedes registrar entradas, salidas o ajustes.\n    </div>';
   if (scanMode === 'camera') startScanner();
 };
 
@@ -8682,7 +8650,7 @@ function handleScanSKU(sku) {
   const item = items.find(i => i.sku === sku);
   const errEl = document.getElementById('scan-error');
   if (!item) {
-    if (errEl) { errEl.style.display='flex'; errEl.innerHTML=`<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> SKU "${sku}" no encontrado en el sistema.`; }
+    if (errEl) { errEl.style.display='flex'; errEl.innerHTML='<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> SKU "${sku}" no encontrado en el sistema.'; }
     return;
   }
   if (errEl) errEl.style.display = 'none';
@@ -8698,72 +8666,74 @@ function manualScan() {
 ══════════════════════════════════════════════ */
 let movFiltro = 'TODOS', movSearch = '';
 renders.movimientos = function() {
-  // Cargar items con fallback: _invItems primero, luego localStorage, luego fetch Neon
+  var pg = document.getElementById('pg-movimientos');
+  if (!pg) return;
+
   var items = (_invItems && _invItems.length > 0) ? _invItems : _getItems();
-  if (items.length === 0) {
-    // Intentar cargar desde Neon
-    fetch('/api/articulos?limit=5000')
-      .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(res){
-        if (res && res.data && res.data.length > 0) {
-          _invItems = res.data; saveItems(res.data);
-          if (currentPage==='movimientos') renders.movimientos();
-        }
-      }).catch(function(){});
-    document.getElementById('pg-movimientos').innerHTML = `
-      <div class="empty-state">
-        <svg viewBox="0 0 24 24"><path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01"/></svg>
-        <p>Los movimientos aparecerán aquí una vez que<br>agregues artículos al inventario y registres<br>entradas o salidas.</p>
-        <button class="btn btn-navy" style="margin-top:14px" onclick="goto('inventario')">Ir a Inventario →</button>
-      </div>`;
+  var movs  = _getMovs();
+
+  if (items.length === 0 && movs.length === 0) {
+    pg.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24"><path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01"/></svg><p>Sin movimientos registrados.<br>Importa inventario y registra entradas o salidas.</p></div>';
     return;
   }
-  const movs = loadMovs();
-  const ql = movSearch.toLowerCase();
-  let filtered = movs;
-  if (movFiltro !== 'TODOS') filtered = filtered.filter(m => m.tipo === movFiltro || (movFiltro === 'AJUSTE' && m.tipo.startsWith('AJUSTE')));
-  if (ql) filtered = filtered.filter(m => m.sku.toLowerCase().includes(ql) || m.articulo.toLowerCase().includes(ql) || m.usuario.toLowerCase().includes(ql));
 
-  const rows = filtered.slice(0,200).map(m => `
-    <tr>
-      <td style="white-space:nowrap"><div style="font-size:12px">${m.fecha}</div><div style="font-size:10px;color:var(--muted)">${m.hora}</div></td>
-      <td><span class="badge ${m.tipo==='ENTRADA'?'b-in':m.tipo==='SALIDA'?'b-out':'b-adj'}">${m.tipo.replace('_',' ')}</span></td>
-      <td><span class="sku">${m.sku}</span></td>
-      <td class="hide-m" style="max-width:160px"><span style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px">${m.articulo}</span></td>
-      <td style="font-weight:700;color:${m.tipo==='ENTRADA'?'var(--green)':m.tipo==='SALIDA'?'var(--red)':'var(--blue)'}">${m.tipo==='ENTRADA'?'+':m.tipo==='SALIDA'?'-':'⇅'}${m.cantidad}</td>
-      <td class="hide-m" style="font-size:12px;color:var(--muted)">${m.stock_resultante}</td>
-      <td class="hide-m" style="font-size:12px">${m.usuario}</td>
-      <td class="hide-m" style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observacion||''}</td>
-    </tr>`).join('');
+  if (!movFiltro) movFiltro = '';
 
-  document.getElementById('pg-movimientos').innerHTML = `
-    <div class="toolbar">
-      <div class="search-wrap" style="flex:1">
-        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input type="text" placeholder="Buscar código o descripción, artículo, usuario…" value="${movSearch}" oninput="movSearch=this.value;renders.movimientos()">
-      </div>
-      <div style="display:flex;gap:4px;background:#f1f5f9;padding:3px;border-radius:9px">
-        ${['TODOS','ENTRADA','SALIDA','AJUSTE'].map(f => `<button class="tab ${movFiltro===f?'active':''}" style="padding:5px 9px;font-size:11px" onclick="movFiltro='${f}';renders.movimientos()">${f==='ENTRADA'?'↓ Entradas':f==='SALIDA'?'↑ Salidas':f==='AJUSTE'?'⇅ Ajustes':'Todos'}</button>`).join('')}
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <span class="badge b-in">↓ ${movs.filter(m=>m.tipo==='ENTRADA').length} entradas</span>
-      <span class="badge b-out">↑ ${movs.filter(m=>m.tipo==='SALIDA').length} salidas</span>
-      <span class="badge b-adj">⇅ ${movs.filter(m=>m.tipo.startsWith('AJUSTE')).length} ajustes</span>
-    </div>
-    ${filtered.length === 0 ? `<div class="empty-state"><p>Sin movimientos${movFiltro!=='TODOS'?' de tipo '+movFiltro:''} registrados.</p></div>` : `
-    <div class="tbl-wrap"><div class="tbl-overflow">
-      <table>
-        <thead><tr><th>Fecha/Hora</th><th>Tipo</th><th>Código</th><th class="hide-m">Artículo</th><th>Cant.</th><th class="hide-m">Stock→</th><th class="hide-m">Usuario</th><th class="hide-m">Obs.</th></tr></thead>
-        <tbody id="inv-tbody">${rows}</tbody>
-      </table>
-    </div></div>
-    <p style="font-size:11px;color:var(--muted);margin-top:8px">${filtered.length > 200 ? 'Mostrando primeros 200 registros.' : ''} Total: ${filtered.length}</p>`}`;
-};
+  var filtered = movs.filter(function(m) {
+    if (movFiltro === 'ENTRADA') return m.tipo === 'ENTRADA';
+    if (movFiltro === 'SALIDA')  return m.tipo === 'SALIDA';
+    if (movFiltro === 'AJUSTE')  return m.tipo && m.tipo.includes('AJUSTE');
+    return true;
+  }).slice(0, 200);
 
-/* ══════════════════════════════════════════════
-   RENDER: REPORTES (ENHANCED)
-══════════════════════════════════════════════ */
+  var tipos = ['','ENTRADA','SALIDA','AJUSTE'];
+  var tipoLabels = {'':'Todos','ENTRADA':'⬆️ Entradas','SALIDA':'⬇️ Salidas','AJUSTE':'🔄 Ajustes'};
+
+  var h = [];
+  h.push('<div class="toolbar" style="margin-bottom:12px">');
+  h.push('<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">');
+  tipos.forEach(function(f){
+    var active = movFiltro === f;
+    h.push('<button class="btn btn-sm '+(active?'btn-navy':'btn-ghost')+'" onclick="movFiltro=\''+f+'\';renders.movimientos()">'+tipoLabels[f]+'</button>');
+  });
+  h.push('<span style="margin-left:auto;font-size:11px;color:var(--muted)">'+filtered.length+' de '+movs.length+' movimientos</span>');
+  if (typeof exportHistorialExcel==='function') {
+    h.push('<button class="btn btn-ghost btn-sm" onclick="exportHistorialExcel()" style="color:var(--electric)">📥 Excel</button>');
+  }
+  h.push('</div></div>');
+
+  if (!filtered.length) {
+    h.push('<div class="empty-state"><p>Sin movimientos para el filtro seleccionado</p></div>');
+  } else {
+    h.push('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">');
+    h.push('<thead><tr style="background:rgba(255,255,255,.04);border-bottom:2px solid rgba(255,255,255,.08)">');
+    ['Fecha / Hora','Tipo','SKU / Producto','Cantidad','Stock','Usuario','Observación'].forEach(function(col){
+      h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:left;white-space:nowrap">'+col+'</th>');
+    });
+    h.push('</tr></thead><tbody>');
+
+    filtered.forEach(function(m) {
+      var mt = MOV_TIPOS[m.tipo] || {icon:'•',label:m.tipo||'—',color:'var(--muted)'};
+      var item = items.find(function(i){ return i.sku===m.sku||i.codigo===m.sku; });
+      var nombre = item ? (item.nombre||m.sku) : (m.sku||'—');
+      var cantSign = (m.tipo==='SALIDA'||m.tipo==='AJUSTE_NEG') ? '-' : '+';
+      var cantClr  = (m.tipo==='SALIDA'||m.tipo==='AJUSTE_NEG') ? '#f87171' : '#4ade80';
+      h.push('<tr style="border-bottom:1px solid rgba(255,255,255,.04)">');
+      h.push('<td style="padding:7px 8px;white-space:nowrap"><div style="font-size:12px">'+( m.fecha||'—')+'</div><div style="font-size:10px;color:var(--muted)">'+( m.hora||'')+'</div></td>');
+      h.push('<td style="padding:7px 8px"><span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,.06);color:'+mt.color+'">'+mt.icon+' '+mt.label+'</span></td>');
+      h.push('<td style="padding:7px 8px;max-width:200px"><div style="font-family:monospace;font-size:10px;color:var(--electric)">'+( m.sku||'—')+'</div><div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+nombre+'</div></td>');
+      h.push('<td style="padding:7px 8px;text-align:center"><strong style="font-size:14px;color:'+cantClr+'">'+cantSign+Number(m.cantidad||0)+'</strong></td>');
+      h.push('<td style="padding:7px 8px;text-align:center;font-size:12px;color:var(--muted)">'+( m.stock_resultante!==undefined?m.stock_resultante:'—')+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+( m.usuario||'—')+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(m.observacion||'')+'">'+( m.observacion||m.referencia||'—')+'</td>');
+      h.push('</tr>');
+    });
+    h.push('</tbody></table></div>');
+  }
+  pg.innerHTML = h.join('');
+}
+
+
 renders.reportes = function() {
   const items = _getItems();
   const movs  = loadMovs();
@@ -9012,8 +8982,8 @@ function exportMaestro() {
   WS2['!cols'] = [{ wch: 40 }, { wch: 25 }];
   XLSX.utils.book_append_sheet(WB, WS2, 'Resumen y Guía');
 
-  XLSX.writeFile(WB, `inventario_maestro_conciliacion_${new Date().toISOString().slice(0,10)}.xlsx`);
-  auditLog('EXPORT_MAESTRO', `Exportación maestra: ${total} artículos`, SESSION.user?.nombre);
+  XLSX.writeFile(WB, 'inventario_maestro_conciliacion_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  auditLog('EXPORT_MAESTRO', 'Exportación maestra: '+total+' artículos', (SESSION.user && SESSION.user.nombre));
   showToast('Excel Maestro descargado ✓', 'green');
 }
 
@@ -9084,7 +9054,7 @@ function exportConciliacionFisica() {
   inst['!cols'] = [{wch:8},{wch:80}];
   XLSX.utils.book_append_sheet(WB, inst, 'Instrucciones');
 
-  XLSX.writeFile(WB, `conciliacion_fisica_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(WB, 'conciliacion_fisica_'+new Date().toISOString().slice(0,10)+'.xlsx');
   showToast('Excel de Conciliación Física descargado ✓', 'green');
 }
 
@@ -9135,7 +9105,7 @@ function exportAuditoriaExcel() {
   WS3['!cols'] = [{wch:14},{wch:38},{wch:14},{wch:10},{wch:12},{wch:14},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(WB, WS3, 'Snapshot Inventario');
 
-  XLSX.writeFile(WB, `auditoria_inventario_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.writeFile(WB, 'auditoria_inventario_'+new Date().toISOString().slice(0,10)+'.xlsx');
   showToast('Excel de Auditoría descargado ✓', 'green');
 }
 
@@ -9526,13 +9496,13 @@ function _leerArchivoProveedores(file) {
         if (!rs) rowErrs.push('Razon_Social vacia');
 
         // Email validation
-        var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        var emailRe = /[\s@]+@[\s@]+\.[\s@]+$/;
         if (correo  && !emailRe.test(correo))  rowErrs.push('Correo_Compras invalido');
         if (correo2 && !emailRe.test(correo2)) rowErrs.push('Correo_Cartera invalido');
 
         // Numeric validation
-        if (tel && /[^0-9+\-\s\(\)]/.test(tel)) rowErrs.push('Telefono con caracteres invalidos');
-        if (cel && /[^0-9+\-\s]/.test(cel))     rowErrs.push('Celular invalido');
+        if (tel && /[0-9+\-\s\(\)]/.test(tel)) rowErrs.push('Telefono con caracteres invalidos');
+        if (cel && /[0-9+\-\s]/.test(cel))     rowErrs.push('Celular invalido');
         if (isNaN(tdias)||tdias<0)               rowErrs.push('Tiempo_Entrega_Dias invalido');
         if (isNaN(desc)||desc<0||desc>100)       rowErrs.push('Descuento_Comercial debe ser 0-100');
         if (!['Activo','Inactivo','Bloqueado',''].includes(estado)) rowErrs.push('Estado invalido');
@@ -11247,49 +11217,43 @@ renders.usuarios = function() {
 };
 
 function nuevoUsuario() {
-  openModal(`
-    <h3>Nuevo usuario</h3>
-    <div class="modal-sub">Crea un usuario con acceso al sistema</div>
-    <div class="form-grid">
-      <div class="form-row"><label>Nombre completo *</label><input id="u-nom" type="text" placeholder="Juan García"></div>
-      <div class="form-row"><label>Documento *</label><input id="u-doc" type="text" placeholder="CC 12345678"></div>
-    </div>
-    <div class="form-grid">
-      <div class="form-row"><label>Correo electrónico *</label><input id="u-mail" type="email" placeholder="juan@empresa.com"></div>
-      <div class="form-row"><label>Teléfono</label><input id="u-tel" type="text" placeholder="300 123 4567"></div>
-    </div>
-    <div class="form-grid">
-      <div class="form-row"><label>Usuario (login) *</label><input id="u-user" type="text" placeholder="juan.garcia"></div>
-      <div class="form-row"><label>Rol *</label>
-        <select id="u-rol">
-          <option value="SUPER ADMINISTRADOR">Super Administrador</option>
-          <option value="ADMINISTRADOR">Administrador</option>
-          <option value="SUPERVISOR">Supervisor</option>
-          <option value="ALMACENISTA">Almacenista</option>
-          <option value="COMPRAS">Compras</option>
-          <option value="CONSULTA">Consulta</option>
-          <option value="CONSULTA DE PRODUCTOS">Consulta de Productos</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-grid">
-      <div class="form-row"><label>Cargo</label><input id="u-cargo" type="text" placeholder="Almacenista"></div>
-      <div class="form-row"><label>Área</label><input id="u-area" type="text" placeholder="Almacén"></div>
-    </div>
-    <div class="form-row">
-      <label>Contraseña *</label>
-      <div style="position:relative"><input id="u-pwd" type="password" placeholder="Mín. 8 caracteres" oninput="checkPwdReqs('u-pwd','u-pwd-reqs')"><button type="button" onclick="togglePwd('u-pwd')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button></div>
-      <div id="u-pwd-reqs" class="pwd-req">
-        <span id="req-len"  class="pwd-fail">✗ Mínimo 8 caracteres</span><br>
-        <span id="req-may"  class="pwd-fail">✗ Una mayúscula</span><br>
-        <span id="req-min"  class="pwd-fail">✗ Una minúscula</span><br>
-        <span id="req-num"  class="pwd-fail">✗ Un número</span>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-navy" onclick="guardarUsuario()">Crear usuario</button>
-    </div>`, true);
+  var roles = ['ALMACENISTA','JEFE INVENTARIOS','AUDITOR','CONSULTA DE PRODUCTOS','ADMINISTRADOR'];
+  var myRol = SESSION.user && SESSION.user.rol || '';
+  var isSA2 = myRol === 'SUPER ADMINISTRADOR';
+  var isAdm = myRol === 'ADMINISTRADOR';
+  if (!isSA2 && !isAdm) { showToast('Sin permisos para crear usuarios','red'); return; }
+
+  var h = [];
+  h.push('<h3 style="margin-bottom:6px">➕ Nuevo Usuario</h3>');
+  h.push('<p style="font-size:12px;color:var(--muted);margin-bottom:14px">Crea un usuario con acceso al sistema</p>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Nombre completo *</label><input id="u-nom" type="text" placeholder="Juan García"></div>');
+  h.push('<div class="form-row"><label>Documento *</label><input id="u-doc" type="text" placeholder="CC 12345678"></div>');
+  h.push('</div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Correo electrónico</label><input id="u-mail" type="email" placeholder="juan@empresa.com"></div>');
+  h.push('<div class="form-row"><label>Teléfono</label><input id="u-tel" type="text" placeholder="300 123 4567"></div>');
+  h.push('</div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Usuario (login) *</label><input id="u-user" type="text" placeholder="juangarcia" oninput="this.value=this.value.toLowerCase().replace(/[a-z0-9_]/g,\'\')"></div>');
+  h.push('<div class="form-row"><label>Contraseña *</label><input id="u-pwd" type="password" placeholder="Mínimo 8 caracteres" oninput="checkPwdReqs(\'u-pwd\',\'u-reqs\')"></div>');
+  h.push('</div>');
+  h.push('<div id="u-reqs" style="margin-bottom:10px"></div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Cargo</label><input id="u-cargo" type="text" placeholder="Cargo en la empresa"></div>');
+  h.push('<div class="form-row"><label>Área</label><input id="u-area" type="text" placeholder="Área / Departamento"></div>');
+  h.push('</div>');
+  h.push('<div class="form-row"><label>Rol *</label>');
+  h.push('<select id="u-rol" style="background:var(--card2);border:1px solid var(--border2);color:var(--white);padding:8px;border-radius:8px;width:100%">');
+  h.push('<option value="">Seleccionar rol...</option>');
+  roles.forEach(function(r){ h.push('<option value="'+r+'">'+r+'</option>'); });
+  h.push('</select></div>');
+  h.push('<div id="u-err" style="display:none;color:var(--red);font-size:12px;padding:8px;background:rgba(239,68,68,.1);border-radius:6px;margin:8px 0"></div>');
+  h.push('<div class="modal-actions">');
+  h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
+  h.push('<button class="btn btn-navy" onclick="guardarUsuario()">➕ Crear Usuario</button>');
+  h.push('</div>');
+  openModal(h.join(''), true);
 }
 
 function checkPwdReqs(inputId, reqsId) {
@@ -11313,7 +11277,7 @@ function guardarUsuario() {
   const area = (document.getElementById('u-area')||{}).value || '';
 
   if (!nom||!user||!pwd) { alert('Nombre, usuario y contraseña son obligatorios'); return; }
-  if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(pwd)) {
+  if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(pwd)) {
     alert('La contraseña debe tener mínimo 8 caracteres, una mayúscula, una minúscula y un número');
     return;
   }
@@ -11354,36 +11318,61 @@ function editarUsuario(id) {
   var users = loadUsers();
   var u = users.find(function(usr){ return usr.id === id; });
   if (!u) return;
-  // ── PROTECCIÓN ABSOLUTA: Solo Super Admin puede editar a otro Super Admin ─
-  // Protect Super Admin AND admin accounts from non-super-admins
-  if ((u.rol === 'SUPER ADMINISTRADOR' || u.username === 'admin' || u.username === 'administrador') && !isSuperAdmin()) {
-    auditSecurity('INTENTO_EDITAR_PROTEGIDO', 'Usuario: '+u.username, 'BLOQUEADO');
-    showToast('⛔ Esta cuenta está protegida. Solo el Super Administrador puede modificarla', 'red'); return;
+  var myId = SESSION.user && SESSION.user.id;
+  var myRol = SESSION.user && SESSION.user.rol || '';
+  var isSA2 = myRol === 'SUPER ADMINISTRADOR';
+  if (!isSA2 && myId !== id) { showToast('Sin permiso para editar otros usuarios','red'); return; }
+
+  var roles = ['ALMACENISTA','JEFE INVENTARIOS','AUDITOR','CONSULTA DE PRODUCTOS','ADMINISTRADOR'];
+  var rolOpts = roles.map(function(r){
+    return '<option value="'+r+'"'+(u.rol===r?' selected':'')+'>'+r+'</option>';
+  }).join('');
+
+  var h = [];
+  h.push('<h3 style="margin-bottom:6px">✏️ Editar Usuario</h3>');
+  h.push('<p style="font-size:12px;color:var(--muted);margin-bottom:14px">@'+u.username+'</p>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Nombre completo</label><input id="eu-nom" type="text" value="'+(u.nombre||'')+'" placeholder="Nombre completo"></div>');
+  h.push('<div class="form-row"><label>Teléfono</label><input id="eu-tel" type="text" value="'+(u.telefono||'')+'" placeholder="300 123 4567"></div>');
+  h.push('</div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Correo</label><input id="eu-mail" type="email" value="'+(u.correo||'')+'" placeholder="correo@empresa.com"></div>');
+  h.push('<div class="form-row"><label>Cargo</label><input id="eu-cargo" type="text" value="'+(u.cargo||'')+'" placeholder="Cargo"></div>');
+  h.push('</div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Área</label><input id="eu-area" type="text" value="'+(u.area||'')+'" placeholder="Área / Departamento"></div>');
+  if (isSA2 || myRol === 'ADMINISTRADOR') {
+    h.push('<div class="form-row"><label>Rol</label><select id="eu-rol" style="background:var(--card2);border:1px solid var(--border2);color:var(--white);padding:8px;border-radius:8px;width:100%"><option value="">Seleccionar...</option>'+rolOpts+'</select></div>');
   }
-  openModal(`
-    <h3>Editar usuario</h3>
-    <div class="modal-sub">${u.username}</div>
-    <div class="form-grid">
-      <div class="form-row"><label>Nombre completo</label><input id="eu-nom" type="text" value="${u.nombre}"></div>
-      <div class="form-row"><label>Teléfono</label><input id="eu-tel" type="text" value="${u.telefono||''}"></div>
-    </div>
-    <div class="form-grid">
-      <div class="form-row"><label>Cargo</label><input id="eu-cargo" type="text" value="${u.cargo||''}"></div>
-      <div class="form-row"><label>Área</label><input id="eu-area" type="text" value="${u.area||''}"></div>
-    </div>
-    <div class="form-grid">
-      <div class="form-row"><label>Rol</label><select id="eu-rol">
-        ${['ALMACENISTA','SUPERVISOR','CONSULTA','ADMINISTRADOR'].map(r=>`<option value="${r}" ${u.rol===r?'selected':''}>${r}</option>`).join('')}
-      </select></div>
-      <div class="form-row"><label>Estado</label><select id="eu-estado">
-        <option value="ACTIVO" ${u.estado==='ACTIVO'?'selected':''}>Activo</option>
-        <option value="INACTIVO" ${u.estado==='INACTIVO'?'selected':''}>Inactivo</option>
-      </select></div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
-      <button class="btn btn-navy" onclick="actualizarUsuario('${id}')">Guardar cambios</button>
-    </div>`, true);
+  h.push('</div>');
+  h.push('<div class="modal-actions">');
+  h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
+  h.push('<button class="btn btn-navy" onclick="_guardarEdicionUsuario(\'+id+\')">💾 Guardar</button>');
+  h.push('</div>');
+  openModal(h.join(''));
+}
+
+function _guardarEdicionUsuario(id) {
+  var users = DB.get('usuarios') || [];
+  var idx   = users.findIndex(function(u){ return u.id===id; });
+  if (idx < 0) { closeModal(); return; }
+  var nom   = (document.getElementById('eu-nom')||{}).value||'';
+  var tel   = (document.getElementById('eu-tel')||{}).value||'';
+  var mail  = (document.getElementById('eu-mail')||{}).value||'';
+  var cargo = (document.getElementById('eu-cargo')||{}).value||'';
+  var area  = (document.getElementById('eu-area')||{}).value||'';
+  var rol   = (document.getElementById('eu-rol')||{}).value||users[idx].rol;
+  if (nom) users[idx].nombre   = nom;
+  if (tel) users[idx].telefono = tel;
+  if (mail) users[idx].correo  = mail;
+  if (cargo) users[idx].cargo  = cargo;
+  if (area)  users[idx].area   = area;
+  if (rol)   users[idx].rol    = rol;
+  DB.set('usuarios', users);
+  closeModal();
+  showToast('✅ Usuario actualizado: '+(nom||users[idx].username),'green');
+  auditLog('EDITAR_USUARIO','Editado: '+users[idx].username, SESSION.user&&SESSION.user.nombre);
+  if (currentPage==='usuarios') renders.usuarios();
 }
 
 function actualizarUsuario(id) {
@@ -11399,7 +11388,7 @@ function actualizarUsuario(id) {
     estado: document.getElementById('eu-estado').value,
   });
   saveUsers(users);
-  auditLog('EDITAR_USUARIO', `Usuario: ${users[idx].username}`, SESSION.user?.nombre);
+  auditLog('EDITAR_USUARIO', 'Usuario: ' + users[idx].username, SESSION.user && SESSION.user.nombre);
   closeModal(); renders.usuarios();
   showToast('Usuario actualizado ✓', 'green');
 }
@@ -11407,7 +11396,7 @@ function actualizarUsuario(id) {
 function resetPassword(id) {
   const nueva = prompt('Nueva contraseña (mín. 8 chars, mayúscula, minúscula, número):');
   if (!nueva) return;
-  if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(nueva)) { alert('La contraseña no cumple los requisitos'); return; }
+  if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(nueva)) { alert('La contraseña no cumple los requisitos'); return; }
   const users = loadUsers();
   const idx = users.findIndex(u => u.id === id);
   if (idx < 0) return;
@@ -11415,7 +11404,7 @@ function resetPassword(id) {
   users[idx].intentos = 0;
   users[idx].estado   = 'ACTIVO';
   saveUsers(users);
-  auditLog('RESET_PASSWORD', `Usuario: ${users[idx].username}`, SESSION.user?.nombre);
+  auditLog('RESET_PASSWORD', 'Usuario: '+users[idx].username+'', (SESSION.user && SESSION.user.nombre));
   renders.usuarios();
   showToast('Contraseña restablecida ✓', 'green');
 }
@@ -11426,7 +11415,7 @@ function toggleUserStatus(id) {
   if (idx < 0) return;
   users[idx].estado = users[idx].estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
   saveUsers(users);
-  auditLog('CAMBIAR_ESTADO', `Usuario: ${users[idx].username} → ${users[idx].estado}`, SESSION.user?.nombre);
+  auditLog('CAMBIAR_ESTADO', 'Usuario: '+users[idx].username+' → '+users[idx].estado+'', (SESSION.user && SESSION.user.nombre));
   renders.usuarios();
 }
 
@@ -11436,7 +11425,7 @@ function toggleUserStatus(id) {
 function showToast(msg, type) {
   const t = document.createElement('div');
   const bg = type==='green'?'#16a34a':type==='red'?'#dc2626':'#1a2b4a';
-  t.style.cssText = `position:fixed;bottom:20px;right:20px;background:${bg};color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.2);animation:slideIn .2s ease`;
+  t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:'+bg+';color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.2);animation:slideIn .2s ease`;
   t.textContent = msg;
   const style = document.createElement('style');
   style.textContent = '@keyframes slideIn{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}';
@@ -11464,25 +11453,12 @@ function globalSearch(q) {
 
 function highlightText(text, q) {
   if (!q) return text;
-  const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+  const re = new RegExp('(' + q.replace(/[.*+?${}()|[\]\\]/g,'\\$&') + ')', 'gi');
   return String(text).replace(re, '<mark>$1</mark>');
 }
 
 // Topbar search
 let searchTimer2;
-function openGlobalSearch() {
-  openModal(`
-    <h3>Búsqueda global</h3>
-    <div class="modal-sub">Busca por SKU, nombre, categoría, marca, descripción o ubicación</div>
-    <div class="search-wrap" style="margin-bottom:14px">
-      <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      <input id="global-q" type="text" placeholder="Escribe para buscar…" autofocus
-        oninput="doGlobalSearch(this.value)" style="padding-left:32px">
-    </div>
-    <div id="global-results"><p style="font-size:12px;color:var(--muted);text-align:center;padding:12px">Escribe al menos 2 caracteres</p></div>
-  `);
-  setTimeout(() => document.getElementById('global-q')?.focus(), 100);
-}
 
 function doGlobalSearch(q) {
   const results = globalSearch(q);
@@ -11626,7 +11602,7 @@ function handleImportFile(file) {
       // Helper: parse Colombian-format numbers ($10.000, 1.500.000, "12,5" etc)
       function _parseCosto(raw) {
         if (!raw && raw !== 0) return 0;
-        var s = String(raw).trim().replace(/^\$\s*/, '');  // remove leading $
+        var s = String(raw).trim().replace(/\$\s*/, '');  // remove leading $
         // If has dots AND commas: dots=thousand, comma=decimal (EU format)
         if (s.indexOf('.') >= 0 && s.indexOf(',') >= 0) {
           s = s.replace(/\./g,'').replace(',','.');
@@ -11642,7 +11618,7 @@ function handleImportFile(file) {
           // comma as decimal separator: 12,5 = 12.5
           s = s.replace(',', '.');
         }
-        s = s.replace(/[^\d\.]/g,'');  // remove any remaining non-numeric
+        s = s.replace(/[\d\.]/g,'');  // remove any remaining non-numeric
         var n = parseFloat(s);
         return isNaN(n) ? 0 : n;
       }
@@ -12603,14 +12579,14 @@ function _buildUserRow(u, isSuperAdmRow, isProtectedRow, isMe, canActOnUser) {
   r += '<td><span class="badge '+estC+'">'+u.estado+'</span></td>';
   r += '<td style="white-space:nowrap"><div style="display:flex;gap:4px;justify-content:flex-end">';
   if (!isProtectedRow && typeof editarUsuario==='function') {
-    r += '<button class="btn-icon" onclick="editarUsuario(''+u.id+'')" title="Editar">✏️</button>';
+    r += '<button class="btn-icon" onclick="editarUsuario(\''+u.id+'\')" title="Editar">✏️</button>';
   }
   if (canActOnUser && u.estado==='BLOQUEADO' && typeof _desbloquearUsuario==='function') {
-    r += '<button class="btn-icon" onclick="_desbloquearUsuario(''+u.id+'')" title="Desbloquear" style="color:var(--neon)">🔓</button>';
+    r += '<button class="btn-icon" onclick="_desbloquearUsuario(\''+u.id+'\')" title="Desbloquear" style="color:var(--neon)">🔓</button>';
   }
   if (!isMe && !isProtectedRow) {
-    if (typeof resetPasswordUsuario==='function') r += '<button class="btn-icon" onclick="resetPasswordUsuario(''+u.id+'')" title="Resetear contraseña" style="color:var(--amber)">🔑</button>';
-    if (typeof cambiarEstadoUsuario==='function') r += '<button class="btn-icon" onclick="cambiarEstadoUsuario(''+u.id+'')" title="'+(u.estado==='ACTIVO'?'Desactivar':'Activar')+'" style="color:'+(u.estado==='ACTIVO'?'var(--red)':'var(--neon)')+'">'+( u.estado==='ACTIVO'?'⏸':'▶')+'</button>';
+    if (typeof resetPasswordUsuario==='function') r += '<button class="btn-icon" onclick="resetPasswordUsuario(\''+u.id+'\')" title="Resetear contraseña" style="color:var(--amber)">🔑</button>';
+    if (typeof cambiarEstadoUsuario==='function') r += '<button class="btn-icon" onclick="cambiarEstadoUsuario(\''+u.id+'\')" title="'+(u.estado==='ACTIVO'?'Desactivar':'Activar')+'" style="color:'+(u.estado==='ACTIVO'?'var(--red)':'var(--neon)')+'">'+( u.estado==='ACTIVO'?'⏸':'▶')+'</button>';
   }
   r += '</div></td></tr>';
   return r;
@@ -12766,11 +12742,11 @@ function resetPasswordUsuario(userId) {
   h.push('<h3 style="margin-bottom:12px">🔑 Resetear contraseña</h3>');
   h.push('<p style="font-size:13px;color:var(--text2);margin-bottom:14px">Usuario: <strong>'+u.username+'</strong></p>');
   h.push('<div class="form-row"><label>Nueva contraseña *</label>');
-  h.push('<input id="rp-pwd" type="password" placeholder="Mínimo 8 caracteres" oninput="checkPwdReqs('rp-pwd','rp-reqs')">');
+  h.push('<input id="rp-pwd" type="password" placeholder="Mínimo 8 caracteres" oninput="checkPwdReqs(\'rp-pwd\',\'rp-reqs\')">');
   h.push('<div id="rp-reqs" class="pwd-req" style="margin-top:6px"></div></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="_confirmarResetPwd(''+userId+'')">🔑 Resetear</button>');
+  h.push('<button class="btn btn-navy" onclick="_confirmarResetPwd(\'+userId+\')">🔑 Resetear</button>');
   h.push('</div>');
   openModal(h.join(''));
 }
@@ -12893,7 +12869,7 @@ function openInfoModal() {
   h.push('</div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>');
-  h.push('<button class="btn btn-ghost" onclick="closeModal();goto('usuarios')" style="color:var(--electric)">⚙️ Mi Perfil</button>');
+  h.push('<button class="btn btn-ghost" onclick="closeModal();goto(\'usuarios\')" style="color:var(--electric)">⚙️ Mi Perfil</button>');
   h.push('<button class="btn btn-ghost" onclick="closeModal();doLogout()" style="color:var(--red)">← Cerrar Sesión</button>');
   h.push('</div>');
   openModal(h.join(''));
@@ -12918,7 +12894,7 @@ function openReorderModal(itemId) {
   h.push('<div class="form-row"><label>Proveedor</label><input id="ro-prov" value="'+(item.proveedor||'')+'"></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="closeModal();openMovModal('ENTRADA',''+item.id+'')">⬆️ Registrar Entrada</button>');
+  h.push('<button class="btn btn-navy" onclick="closeModal();openMovModal(\'ENTRADA\',\''+item.id+'\')">⬆️ Registrar Entrada</button>');
   h.push('</div>');
   openModal(h.join(''));
 }
@@ -12952,7 +12928,7 @@ function _globalSearch(q) {
   if (!found.length) { results.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Sin resultados para "'+q+'"</p>'; return; }
   results.innerHTML = found.map(function(item){
     var disp = Math.max(0, Number(item.stock||0)-Number(item.stock_reservado||0));
-    return '<div onclick="closeModal();goto('inventario');invSearch=''+item.sku+'';filterInventarioTable()" style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;border-radius:8px" onmouseenter="this.style.background='rgba(255,255,255,.04)'" onmouseleave="this.style.background=''">' +
+    return '<div onclick="closeModal();goto(\'inventario\');invSearch=\''+item.sku+'\';filterInventarioTable()" style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;border-radius:8px" onmouseenter="this.style.background=\'rgba(255,255,255,.04)\'" onmouseleave="this.style.background=\'\'\'>' +
       '<span style="font-family:monospace;font-size:10px;color:var(--electric);background:rgba(59,130,246,.1);padding:2px 6px;border-radius:4px">'+item.sku+'</span>' +
       '<div style="flex:1"><div style="font-size:12px;font-weight:600">'+item.nombre+'</div><div style="font-size:10px;color:var(--muted)">'+(item.categoria||'')+(item.proveedor?' · '+item.proveedor:'')+'</div></div>' +
       '<strong style="font-size:13px;color:'+(disp>0?'var(--neon)':'var(--red)')+'">'+disp+'</strong>' +
@@ -13001,9 +12977,9 @@ function abrirDiagnostico() {
   h.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(totalSize/1024).toFixed(1)+'KB de ~50KB ('+pct+'%)</div>');
   h.push('</div>');
   h.push('<div class="modal-actions">');
-  if (tech.length > 0) h.push('<button class="btn btn-ghost btn-sm" onclick="limpiarAuditoriaTecnica();closeModal();showToast('Auditoría técnica limpiada','green')" style="color:var(--amber)">🧹 Limpiar errores</button>');
+  if (tech.length > 0) h.push('<button class="btn btn-ghost btn-sm" onclick="limpiarAuditoriaTecnica();closeModal();showToast(\'Auditoría técnica limpiada\',\'green\')" style="color:var(--amber)">🧹 Limpiar errores</button>');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>');
-  h.push('<button class="btn btn-navy" onclick="closeModal();goto('centro-pruebas')">🧪 Pruebas completas</button>');
+  h.push('<button class="btn btn-navy" onclick="closeModal();goto(\'centro-pruebas\')">🧪 Pruebas completas</button>');
   h.push('</div>');
   openModal(h.join(''));
 }
@@ -13042,7 +13018,7 @@ function abrirPanelReserva() {
   h.push('<div style="background:rgba(59,130,246,.06);border:1px solid rgba(59,130,246,.2);border-radius:10px;padding:14px;margin-bottom:14px">');
   h.push('<div class="form-grid">');
   h.push('<div class="form-row"><label>🪪 Cédula del solicitante *</label>');
-  h.push('<input id="res-cedula" type="text" placeholder="Ej: 12345678" oninput="this.value=this.value.replace(/[^0-9]/g,\'\')">');
+  h.push('<input id="res-cedula" type="text" placeholder="Ej: 12345678" oninput="this.value=this.value.replace(/[0-9]/g,\'\')">');
   h.push('</div>');
   h.push('<div class="form-row"><label>🔧 Orden de Trabajo (OT) *</label>');
   h.push('<input id="res-ot" type="text" placeholder="Ej: OT-2026-001" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">');
@@ -13097,7 +13073,7 @@ function _buscarParaReserva(q) {
 
   res.innerHTML = found.map(function(item){
     var disp = Math.max(0, Number(item.stock||0) - Number(item.stock_reservado||0));
-    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer" onclick="_agregarACarritoReserva(''+item.id+'')" onmouseenter="this.style.background='rgba(59,130,246,.08)'" onmouseleave="this.style.background=''">' +
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer" onclick="_agregarACarritoReserva(\'+item.id+\')" onmouseenter="this.style.background=\'rgba(59,130,246,.08)\'" onmouseleave="this.style.background=\'\'">' +
       '<span style="font-family:monospace;font-size:10px;color:var(--electric);background:rgba(59,130,246,.1);padding:2px 6px;border-radius:4px">'+item.sku+'</span>' +
       '<div style="flex:1"><div style="font-size:12px;font-weight:600">'+item.nombre+'</div>' +
       '<div style="font-size:10px;color:var(--muted)">'+(item.categoria||'')+(item.ubicacion?' · '+item.ubicacion:'')+'</div></div>' +
@@ -13268,8 +13244,8 @@ function abrirGestionReservas() {
       h.push('<td style="padding:8px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+estBg+';color:'+estClr+'">'+r.estado+'</span></td>');
       h.push('<td style="padding:8px;white-space:nowrap">');
       if (r.estado==='PENDIENTE') {
-        h.push('<button onclick="_entregarReserva(''+r.id+'')" style="background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;margin-right:4px">✅ Entregar</button>');
-        h.push('<button onclick="_cancelarReserva(''+r.id+'')" style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#f87171;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px">✕ Cancelar</button>');
+        h.push('<button onclick="_entregarReserva(\'+r.id+\')" style="background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;margin-right:4px">✅ Entregar</button>');
+        h.push('<button onclick="_cancelarReserva(\'+r.id+\')" style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#f87171;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px">✕ Cancelar</button>');
       }
       h.push('</td></tr>');
     });
