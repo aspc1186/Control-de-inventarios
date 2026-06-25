@@ -2338,6 +2338,9 @@ function _getUbiEstadoResumen(inv) {
            usuarios: usuarios, pct: Math.round(contadas/total*100) };
 }
 
+// Variable global para conteo activo (inventario cíclico)
+var _conteoActivo = null;  // { inv, invId, ubicacion } cuando hay un conteo en curso
+
 // Periodic sync for multi-user inventories (poll every 30s if in conteo)
 (function _initMultiUserSync() {
   setInterval(function() {
@@ -7435,10 +7438,16 @@ if (_origLogout2) {
 var _origShowErr = typeof showErr === 'function' ? showErr : null;
 
 /* ── Botón de configuración de seguridad en Usuarios ─────────────────────── */
-// Agregar botón en Tab Accesos
+// Stub: _buildTabAccesos puede no existir si el módulo de usuarios no lo define
+function _buildTabAccesos() {
+  // Retorna HTML vacío por defecto — puede ser sobreescrita por el módulo de usuarios
+  return '';
+}
+
+// Agregar botón en Tab Accesos (override seguro)
 var _origBuildTabAccesos = _buildTabAccesos;
 _buildTabAccesos = function() {
-  var base = _origBuildTabAccesos();
+  var base = (typeof _origBuildTabAccesos === 'function') ? _origBuildTabAccesos() : '';
   var extra = '<div style="display:flex;justify-content:flex-end;margin-bottom:12px">';
   extra += '<button class="btn btn-ghost btn-sm" onclick="_abrirConfigSeguridad()">🛡️ Config. Seguridad</button>';
   extra += '</div>';
