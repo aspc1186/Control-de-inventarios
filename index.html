@@ -11581,12 +11581,13 @@ function handleImportFile(file) {
         unidad:       ['unidad','unit','um','unidad de medida','unidad_medida'],
         ubicacion:    ['ubicacion','ubicacion_bodega','posicion','location','bodega_posicion'],
         bodega:       ['bodega','warehouse','almacen'],
-        stock:        ['cantidad','qty','stock','stock actual','stock_actual','existencia','saldo','inventario'],
+        stock:        ['cantidad','qty','stock','stock actual','stock_actual','existencia','saldo',
+                       'inventario','current stock','on hand','en mano','físico','fisico'],
         stock_reservado:  ['stock reservado','stock_reservado','reservado','comprometido'],
         stock_disponible: ['stock disponible','stock_disponible','disponible'],
         stock_seguridad:  ['stock seguridad','stock_seguridad','seguridad','safety_stock'],
-        stock_minimo:     ['stock minimo','stock mínimo','stock_minimo','stock min','minimo','mínimo','min','stk_min'],
-        stock_maximo:     ['stock maximo','stock máximo','stock_maximo','stock max','maximo','máximo','max','stk_max'],
+        stock_minimo:     ['Stock Mínimo','Stock Minimo','stock minimo','stock mínimo','stock_minimo','stock min','minimo','mínimo','min','stk_min','minimum','qty min','cantidad minima'],
+        stock_maximo:     ['Stock Máximo','Stock Maximo','stock maximo','stock máximo','stock_maximo','stock max','maximo','máximo','max','stk_max','maximum','qty max','cantidad maxima'],
         punto_reorden:    ['punto reorden','punto_reorden','puntoreorden','reorden','reorder_point','p reorden'],
         costo:            ['Costo Unitario','costo unitario','costo_unitario','costounitario','costo','cost',
                            'precio costo','precio_costo','precio','unit_cost','valor_unitario','precio_unitario'],
@@ -11713,6 +11714,13 @@ function handleImportFile(file) {
           proveedor:       g('proveedor'),
           estado:          g('estado')||'Activo',
         };
+        // Auto-calcular stock_minimo/maximo/seguridad si vienen vacíos pero hay stock
+        if (!item.stock_minimo && item.stock > 0) {
+          item.stock_minimo    = Math.round(item.stock * 0.20);   // 20% del stock actual
+          item.stock_seguridad = Math.round(item.stock * 0.10);   // 10% del stock actual
+          item.stock_maximo    = item.stock_maximo || Math.round(item.stock * 2);  // 2x stock actual
+          item.punto_reorden   = item.punto_reorden || Math.round(item.stock * 0.25);
+        }
 
         if (errs.length) invalid.push(item);
         else parsed.push(item);
@@ -12346,21 +12354,23 @@ function _buildInvRow(item) {
   r += '</td>';
 
   // 11. SEG (56px)
-  r += '<td style="padding:6px 4px;width:56px;min-width:56px;text-align:center;font-size:11px;color:'+(crit?'#ef4444':'#475569')+'" title="Stock de Seguridad">'+(d.seg||'—')+'</td>';
+  r += '<td style="padding:6px 4px;width:56px;min-width:56px;text-align:center;font-size:11px;color:'+(crit?'#ef4444':d.seg>0?'#94a3b8':'rgba(255,255,255,.2)')+'" title="Stock de Seguridad">'+(d.seg>0?d.seg:'—')+'</td>';
 
   // 12. MÍN (56px)
-  r += '<td style="padding:6px 4px;width:56px;min-width:56px;text-align:center;font-size:11px;color:'+(disp<smin&&smin>0?'#f59e0b':'#475569')+'">'+( smin||'—')+'</td>';
+  r += '<td style="padding:6px 4px;width:56px;min-width:56px;text-align:center;font-size:11px;color:'+(smin>0&&disp<smin?'#f59e0b':smin>0?'#94a3b8':'rgba(255,255,255,.2)')+'">'+( smin>0?smin:'—')+'</td>';
 
   // 13. MÁX (56px)
-  r += '<td style="padding:6px 4px;width:56px;min-width:56px;text-align:center;font-size:11px;color:'+(sobreS?'#a78bfa':'#475569')+'">'+( smax||'—')+'</td>';
+  r += '<td style="padding:6px 4px;width:56px;min-width:56px;text-align:center;font-size:11px;color:'+(sobreS?'#a78bfa':smax>0?'#94a3b8':'rgba(255,255,255,.2)')+'">'+( smax>0?smax:'—')+'</td>';
 
-  // 14. P.REORDEN (76px)
+    // 14. P.REORDEN (76px)
   r += '<td style="padding:6px 4px;width:76px;min-width:76px;text-align:center">';
-  if (reord && disp > 0) {
+  if (reord) {
     r += '<div style="font-size:11px;font-weight:700;color:#ef4444">'+(preord||'—')+'</div>';
-    r += '<div style="font-size:9px;color:#ef4444;font-weight:600">🔄PEDIR</div>';
+    r += '<div style="font-size:9px;color:#ef4444;font-weight:600">🔄 PEDIR</div>';
+  } else if (preord > 0) {
+    r += '<span style="font-size:11px;color:#475569">'+preord+'</span>';
   } else {
-    r += '<span style="font-size:11px;color:'+(preord?'#475569':'#1e293b')+'">'+( preord||'—')+'</span>';
+    r += '<span style="font-size:11px;color:rgba(255,255,255,.2)">—</span>';
   }
   r += '</td>';
 
@@ -12509,6 +12519,11 @@ function _buildInventarioUI(allItems) {
     });
     h.push('</div>');
     if (canCreate) h.push('<button class="btn btn-navy btn-sm" onclick="openNuevoArticulo()" style="white-space:nowrap">+ Nuevo</button>');
+    // Botón recalcular indicadores (solo visible si hay items sin mín/máx)
+    var sinIndicadores = (allItems||[]).filter(function(i){ return !i.stock_minimo || i.stock_minimo===0; }).length;
+    if (sinIndicadores > 0) {
+      h.push('<button class="btn btn-sm" onclick="_recalcularIndicadoresMasivo()" style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);color:#fbbf24;white-space:nowrap" title="'+sinIndicadores+' productos sin mínimos/máximos">⚙️ Calcular indicadores ('+sinIndicadores+')</button>');
+    }
     // Botones de reserva según rol
     var rolAct = SESSION.user && SESSION.user.rol || '';
     var isConsultaRol = rolAct === 'CONSULTA DE PRODUCTOS';
@@ -13426,6 +13441,80 @@ function _exportarReservas() {
   XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
   XLSX.writeFile(wb, 'reservas_stockflow.xlsx');
   showToast('Exportado: reservas_stockflow.xlsx','green');
+}
+
+
+
+/* ── _recalcularIndicadoresMasivo — calcula mín/máx/seg para todos los items ── */
+function _recalcularIndicadoresMasivo() {
+  var items = _invItems || loadItems();
+  if (!items || !items.length) { showToast('Sin items para calcular','red'); return; }
+
+  var sinMin = items.filter(function(i){ return !i.stock_minimo || i.stock_minimo===0; }).length;
+
+  var h = [];
+  h.push('<h3 style="margin-bottom:10px">⚙️ Calcular Indicadores Masivo</h3>');
+  h.push('<p style="font-size:12px;color:var(--muted);margin-bottom:14px">'+sinMin+' productos sin mínimos/máximos definidos. Se calcularán automáticamente basándose en el stock actual.</p>');
+  h.push('<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:12px;margin-bottom:14px">');
+  h.push('<p style="font-size:11px;font-weight:600;color:#fbbf24;margin-bottom:8px">Fórmulas que se aplicarán:</p>');
+  h.push('<div style="font-size:11px;color:var(--text2);line-height:1.8">');
+  h.push('📉 <strong>Stock Mínimo</strong> = Stock Actual × 20%<br>');
+  h.push('🔵 <strong>Stock Máximo</strong> = Stock Actual × 200%<br>');
+  h.push('🛡️ <strong>Stock Seguridad</strong> = Stock Actual × 10%<br>');
+  h.push('🔄 <strong>Punto Reorden</strong> = Stock Actual × 25%<br>');
+  h.push('📦 <strong>Consumo Diario</strong> = Stock / 30 días (estimado)');
+  h.push('</div></div>');
+  h.push('<p style="font-size:11px;color:var(--muted);margin-bottom:14px">Solo se modifican los productos que tienen esos campos en 0. Los valores existentes se respetan.</p>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>% para Stock Mínimo</label><input id="rc-pmin" type="number" value="20" min="5" max="80"> <small style="color:var(--muted)">% del stock</small></div>');
+  h.push('<div class="form-row"><label>% para Stock Máximo</label><input id="rc-pmax" type="number" value="200" min="110" max="500"> <small style="color:var(--muted)">% del stock</small></div>');
+  h.push('</div>');
+  h.push('<div class="form-row"><label>Lead Time por defecto (días)</label><input id="rc-lead" type="number" value="7" min="1" max="90"></div>');
+  h.push('<div class="modal-actions">');
+  h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
+  h.push('<button class="btn btn-navy" onclick="_aplicarRecalculo()">⚙️ Aplicar a '+sinMin+' productos</button>');
+  h.push('</div>');
+  openModal(h.join(''));
+}
+
+function _aplicarRecalculo() {
+  var pmin = parseFloat(document.getElementById('rc-pmin').value||20) / 100;
+  var pmax = parseFloat(document.getElementById('rc-pmax').value||200) / 100;
+  var lead = parseFloat(document.getElementById('rc-lead').value||7);
+
+  var items = _invItems || loadItems();
+  var count = 0;
+  items = items.map(function(item) {
+    var s = Number(item.stock || 0);
+    if (s <= 0) return item; // Sin stock → no calcular
+    var changed = false;
+
+    if (!item.stock_minimo    || item.stock_minimo === 0)    { item.stock_minimo    = Math.max(1, Math.round(s * pmin));    changed = true; }
+    if (!item.stock_maximo    || item.stock_maximo === 0)    { item.stock_maximo    = Math.round(s * pmax);                 changed = true; }
+    if (!item.stock_seguridad || item.stock_seguridad === 0) { item.stock_seguridad = Math.max(1, Math.round(s * 0.10));   changed = true; }
+    if (!item.punto_reorden   || item.punto_reorden === 0)   { item.punto_reorden   = Math.max(1, Math.round(s * 0.25));   changed = true; }
+    if (!item.consumo_diario  || item.consumo_diario === 0)  { item.consumo_diario  = Math.max(0.1, Math.round(s/30*10)/10); changed = true; }
+    if (!item.lead_time       || item.lead_time === 0)       { item.lead_time       = lead;                                  changed = true; }
+    if (changed) count++;
+    return item;
+  });
+
+  saveItems(items);
+  _invItems = items;
+
+  // Sync a Neon en background
+  var toSync = items.filter(function(i){ return Number(i.stock||0) > 0; });
+  if (toSync.length > 0) {
+    fetch('/api/articulos', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ items: toSync, mode: 'update_indicadores' })
+    }).catch(function(){});
+  }
+
+  closeModal();
+  showToast('✅ Indicadores calculados para '+count+' productos','green');
+  if (currentPage === 'inventario') _buildInventarioUI(_invItems || loadItems());
 }
 
 </script>
