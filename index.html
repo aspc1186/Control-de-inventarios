@@ -1023,22 +1023,66 @@ function loadItems() {
   var all = DB.get('articulos') || [];
   var eid = _getEmpresaId();
   if (eid === '__SA__') {
-    // SA solo ve sus propios items (empresa_id === '__SA__' o null/undefined sin empresa)
-    return all.filter(function(i){ return i.empresa_id === '__SA__' || !i.empresa_id; });
+    // SA ve TODOS los items (sin filtro de empresa)
+    return all;
   }
   if (eid) {
     // Empresa cliente: SOLO sus items con su empresa_id exacto
     return all.filter(function(i){ return i.empresa_id === eid; });
   }
-  return [];
+  // Sin empresa asignada → devolver todos (para evitar tabla vacía)
+  return all;
 }
 function saveItems(items) {
   var eid = _getEmpresaId();
-  var all = DB.get('articulos') || [];
-  // Remove existing items for this empresa and replace
-  var other = all.filter(function(i){ return i.empresa_id !== eid; });
-  var mine  = items.map(function(i){ return Object.assign({}, i, {empresa_id: eid}); });
-  DB.set('articulos', other.concat(mine));
+  var isSA = eid === '__SA__';
+
+  // SA: reemplaza todos (es el dueño de todo el inventario)
+  // Empresa: UPSERT - actualiza los suyos, preserva los de otras empresas
+  if (isSA) {
+    // SA guarda SIN forzar empresa_id — preserva el que cada item ya tiene
+    var allExisting = DB.get('articulos') || [];
+    var skuMap = {};
+    items.forEach(function(i){ skuMap[i.sku||i.codigo||i.id] = i; });
+    // Reemplazar los que están en la lista, conservar el resto
+    var updated = allExisting.map(function(ex){
+      var key = ex.sku||ex.codigo||ex.id;
+      return skuMap[key] ? Object.assign({}, ex, skuMap[key]) : ex;
+    });
+    // Agregar nuevos que no existían
+    items.forEach(function(i){
+      var key = i.sku||i.codigo||i.id;
+      var exists = allExisting.some(function(ex){ return (ex.sku||ex.codigo||ex.id)===key; });
+      if (!exists) updated.push(i);
+    });
+    try {
+      DB.set('articulos', updated);
+    } catch(e) {
+      // QuotaExceededError - guardar solo campos esenciales
+      var slim = updated.map(function(i){ return {
+        id:i.id, sku:i.sku||i.codigo, nombre:i.nombre, categoria:i.categoria,
+        marca:i.marca, unidad:i.unidad, ubicacion:i.ubicacion, bodega:i.bodega,
+        stock:i.stock, stock_minimo:i.stock_minimo, stock_maximo:i.stock_maximo,
+        stock_reservado:i.stock_reservado||0, stock_seguridad:i.stock_seguridad,
+        punto_reorden:i.punto_reorden, consumo_diario:i.consumo_diario,
+        lead_time:i.lead_time, costo:i.costo, proveedor:i.proveedor,
+        estado:i.estado, empresa_id:i.empresa_id
+      }; });
+      try { DB.set('articulos', slim); } catch(e2) {
+        try { DB.set('articulos', slim.slice(0,800)); } catch(e3) {}
+      }
+    }
+  } else {
+    // Empresa: UPSERT — preservar items de otras empresas
+    var all = DB.get('articulos') || [];
+    var other = all.filter(function(i){ return i.empresa_id !== eid; });
+    var mine  = items.map(function(i){ return Object.assign({}, i, {empresa_id: eid}); });
+    try {
+      DB.set('articulos', other.concat(mine));
+    } catch(e) {
+      try { DB.set('articulos', mine); } catch(e2) {}
+    }
+  }
 }
 function loadMovs() {
   var all = DB.get('movimientos') || [];
@@ -1868,23 +1912,27 @@ renders.inventario = function(q) {
   // Mostrar skeleton inmediato
   pg.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted)">Cargando inventario...</div>';
 
-  // Cargar datos
-  if (_invItems && _invItems.length > 0) {
+  // Cargar datos: local primero, Neon como fuente principal
+  var local = _invItems && _invItems.length > 0 ? _invItems : loadItems();
+  if (local && local.length > 0) {
+    _invItems = local;
     _buildInventarioUI(_invItems);
   } else {
-    var local = loadItems();
-    if (local && local.length > 0) {
-      _invItems = local;
-      _buildInventarioUI(_invItems);
-    } else {
-      _buildInventarioUI([]);
-    }
+    // Sin datos locales → mostrar loader prominente mientras carga Neon
+    pg.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px;color:var(--muted)">' +
+      '<div style="font-size:40px;margin-bottom:16px;animation:spin 1s linear infinite">⟳</div>' +
+      '<p style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:6px">Cargando inventario desde Neon...</p>' +
+      '<p style="font-size:12px">Primera carga o caché limpiado</p>' +
+      '</div>';
   }
 
-  // Sync desde Neon en background
+  // Sync desde Neon — SIEMPRE, para tener datos frescos
   if (!_invFetching) {
     _invFetching = true;
-    fetch('/api/articulos?limit=5000')
+    // SA: sin filtro empresa → ver todos. Empresa: filtrar por empresa_id
+    var _eid = _getEmpresaId();
+    var _apiUrl = '/api/articulos?limit=5000' + (_eid && _eid !== '__SA__' ? '&empresa_id='+_eid : '');
+    fetch(_apiUrl)
       .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(res) {
         if (res && res.data && res.data.length > 0) {
@@ -11864,6 +11912,8 @@ function executeSync(parsed) {
       var out = Object.assign({}, item);
       // Garantizar empresa_id para aislamiento multiempresa
       if (empId && empId !== '__SA__') out.empresa_id = empId;
+      // SA: preservar empresa_id original del item (no forzar '__SA__')
+      else if (!out.empresa_id) out.empresa_id = null;
       out.created_by = SESSION.user && SESSION.user.nombre || 'Sistema';
       out._mode = 'sync_total';
       // Limpiar campos de control que no van a BD
@@ -12555,6 +12605,9 @@ function _getItems() {
   if (_invItems && _invItems.length > 0) return _invItems;
   var local = loadItems();
   if (local && local.length > 0) { _invItems = local; return local; }
+  // Fallback: leer directamente sin filtro de empresa (para SA)
+  var raw = DB.get('articulos') || [];
+  if (raw.length > 0) { _invItems = raw; return raw; }
   return [];
 }
 function _getMovs() {
