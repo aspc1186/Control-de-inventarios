@@ -1934,6 +1934,14 @@ function seed() {
 
   localStorage.setItem('sf_seed_version', SEED_VERSION);
   console.log('[StockFlow] Seed v6_2026 aplicado. Usuarios sistema: ' + SYSTEM_USERS.length + ', custom: ' + customUsers.length);
+  console.log('=== CREDENCIALES DEL SISTEMA ===');
+  console.log('ROOT              | root             | StockFlow2026*');
+  console.log('Super Admin       | superadministrador | StockFlow2026*');
+  console.log('Administrador     | administrador    | Admin.2026');
+  console.log('Almacenista       | almacenista      | Almacen2026');
+  console.log('Jefe Inventarios  | jefe             | Jefe.2026');
+  console.log('Consulta          | consulta         | Consulta2026');
+  console.log('================================');
 }
 
 function uid() { return 'id_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
@@ -2728,8 +2736,9 @@ function _completarLogin(user) {
   var tu = document.getElementById('topbar-user');
   if (tu) { tu.textContent = (user.nombre||'U').charAt(0).toUpperCase(); tu.title = user.nombre + ' — ' + user.rol; }
 
-  applyRoleUI();
-  _updatePlanBadge();
+  try { applyRoleUI(); } catch(e) { console.error('[SF] applyRoleUI error:', e); }
+  try { applyPlanUI(); } catch(e) { console.error('[SF] applyPlanUI error:', e); }
+  try { _updatePlanBadge(); } catch(e) {}
 
   // ── Reset dashboard refresh guard and pre-load cache ──────────────
   window._dashRefreshing = false;
@@ -2870,12 +2879,13 @@ var _invFetching = false;  // prevent concurrent fetches
 
 function goto(page, param) {
   // Role access check
-  var rol   = SESSION.user && SESSION.user.rol || 'CONSULTA';
-  var rp2 = PERMISOS[rol] || PERMISOS['CONSULTA'];
-  var perms = (rp2 && rp2.modulos) ? rp2.modulos : rp2;
-  var isFullAdmin = (rol === 'ADMINISTRADOR' || rol === 'SUPER ADMINISTRADOR' || rol === 'ROOT');
-  // ROOT y SA tienen acceso total
-  if (rol === 'SUPER ADMINISTRADOR' || rol === 'ROOT') isFullAdmin = true;
+  var rol = SESSION.user && SESSION.user.rol || 'CONSULTA';
+  var isRoot      = (rol === 'ROOT');
+  var isFullAdmin = isRoot || rol==='SUPER ADMINISTRADOR' || rol==='ADMINISTRADOR';
+  // ROOT y SA: acceso total sin verificar plan/empresa
+  if (isFullAdmin) {
+    // saltar toda verificación de permisos
+  }
   var isConsultaP = (rol === 'CONSULTA DE PRODUCTOS');
   // Consulta de Productos: redirect to consulta-productos instead of dashboard
   if (!isFullAdmin && page !== 'dashboard' && page !== 'detalle' && !perms.includes(page)) {
@@ -3104,7 +3114,7 @@ renders.dashboard = function() {
   if (!pg) { window._dashboardRendering = false; console.error('[SF] pg-dashboard NOT FOUND'); return; }
 
   var rol = (SESSION.user && SESSION.user.rol) || '';
-  var isGer = rol==='SUPER ADMINISTRADOR'||rol==='ADMINISTRADOR'||rol==='JEFE INVENTARIOS';
+  var isGer = rol==='ROOT'||rol==='SUPER ADMINISTRADOR'||rol==='ADMINISTRADOR'||rol==='JEFE INVENTARIOS';
 
   try {
     if (isGer) { _renderDashboardEjecutivo(); }
@@ -6454,129 +6464,115 @@ function canAjustar(modulo)  { return canAccion(modulo, 'ajustar'); }
 
 /* ── Apply plan-based UI visibility ─────────────────────────────────── */
 function applyPlanUI() {
-  var user     = SESSION.user;
+  var user = SESSION.user;
   if (!user) return;
-  var isSA     = user.rol === 'SUPER ADMINISTRADOR';
-  // Forzar carga de empresa/plan si no está en SESSION
-  if (!isSA && !SESSION.plan && typeof _initEmpresaSession === 'function') {
-    _initEmpresaSession();
-  }
-  var plan = isSA ? 'WMS' : (SESSION.plan || getEmpresaPlan() || 'FREE');
-  var planDef  = PLANES[plan] || PLANES['FREE'];
-  // Módulos nuevos que siempre se muestran (no dependen del plan)
-  var SIEMPRE_VISIBLES = ['dashboard','inventario','proveedores','gerencial',
-                          'ubicaciones','generar-qr','escaner'];
-  var rol      = user.rol;
-  var rolMods  = PERMISOS[rol] || [];
 
-  // Módulos permitidos = plan ∩ rol (SA = todo)
-  var isFullAdmin3 = isSA || (user.rol === 'ROOT');
-    var disponibles = isFullAdmin3
-      ? allNavIds.slice()
-      : (planDef && planDef.modulos ? planDef.modulos.filter(function(m){
-          var rm = Array.isArray(rolMods) ? rolMods : [];
-          return rm.indexOf(m) >= 0;
-        }) : []);
+  var rol = user.rol || '';
 
-  // Plan badge
-  var badge = document.getElementById('plan-badge');
-  if (badge) {
-    var pd = PLANES[plan] || {};
-    badge.textContent = isSA ? 'PLATFORM' : (pd.nombre || plan);
-    badge.style.background = plan==='WMS'?'rgba(59,130,246,.2)':plan==='PRO'?'rgba(139,92,246,.2)':plan==='LITE'?'rgba(16,185,129,.15)':'rgba(100,116,139,.15)';
-    badge.style.color = plan==='WMS'?'var(--electric)':plan==='PRO'?'var(--purple)':plan==='LITE'?'var(--neon)':'var(--muted)';
-    // Solo SA puede hacer click para cambiar plan
-    badge.style.cursor = isSA ? 'pointer' : 'default';
-    badge.onclick = isSA ? abrirConfigEmpresa : null;
-    badge.title   = isSA ? 'Configurar empresa/plan' : 'Plan: ' + (pd.nombre || plan);
-  }
+  // ── ROOT y SA: acceso total, sin plan ni empresa ──────────────────
+  var isRoot = (rol === 'ROOT');
+  var isSA   = (rol === 'SUPER ADMINISTRADOR') || isRoot;
+  var isFullAdmin = isRoot || isSA;
 
-  // ── Ocultar TODO primero ──────────────────────────────────────────────
+  // ── TODOS los IDs de nav (declarados PRIMERO) ─────────────────────
   var allNavIds = [
-    // Principal
     'inventario','importar','historial','proveedores',
-    // Operaciones
     'movimientos','traslados','reportes',
-    // Bodegas
     'ubicaciones','generar-qr','escaner',
-    // Analítica
     'gerencial',
-    // Conteos
     'ciclicos','conciliacion','mis-inventarios',
-    // Seguridad
     'auditoria',
-    // Administración
     'empresas','usuarios','integraciones','respaldos',
-    // Sistema
     'centro-pruebas','salud-sistema',
   ];
-  var allSecIds = ['nav-sec-operaciones','nav-sec-bodegas','nav-sec-analytics',
-    'nav-sec-inventarios','nav-sec-seguridad','nav-sec-admin','nav-sec-sistema'];
+  var allSecIds = [
+    'nav-sec-operacion','nav-sec-analitica','nav-sec-bodegas',
+    'nav-sec-seguridad','nav-sec-admin','nav-sec-sistema',
+  ];
 
-  allNavIds.forEach(function(id){
-    var el = document.getElementById('nav-'+id);
+  // ── Calcular módulos disponibles DESPUÉS de declarar allNavIds ─────
+  var plan    = isFullAdmin ? 'WMS' : (SESSION.plan || (typeof getEmpresaPlan==='function' ? getEmpresaPlan() : null) || 'FREE');
+  var planDef = (typeof PLANES!=='undefined' && PLANES) ? (PLANES[plan] || PLANES['FREE'] || {modulos:[]}) : {modulos:[]};
+  var rolPerms= (typeof PERMISOS!=='undefined' && PERMISOS) ? (PERMISOS[rol] || {}) : {};
+  var rolMods = rolPerms.modulos || [];
+
+  // ROOT/SA: todos los módulos. Otros: intersección plan ∩ rol
+  var disponibles = isFullAdmin
+    ? allNavIds.slice()
+    : planDef.modulos.filter(function(m) {
+        return Array.isArray(rolMods) ? rolMods.indexOf(m) >= 0 : false;
+      });
+
+  // ── Plan badge ────────────────────────────────────────────────────
+  var badge = document.getElementById('plan-badge');
+  if (badge) {
+    var pd = planDef || {};
+    badge.textContent  = isRoot ? 'ROOT' : isSA ? 'PLATFORM' : (pd.nombre || plan);
+    badge.style.background = isRoot ? 'rgba(239,68,68,.2)' : plan==='WMS' ? 'rgba(59,130,246,.2)' : 'rgba(107,114,128,.2)';
+    badge.style.color      = isRoot ? '#fca5a5' : plan==='WMS' ? 'var(--electric)' : '#94a3b8';
+    badge.style.cursor     = isFullAdmin ? 'pointer' : 'default';
+    badge.onclick          = isFullAdmin ? (typeof abrirConfigEmpresa==='function' ? abrirConfigEmpresa : null) : null;
+  }
+
+  // ── Ocultar TODO primero ──────────────────────────────────────────
+  allNavIds.forEach(function(id) {
+    var el = document.getElementById('nav-' + id);
     if (el) el.style.display = 'none';
   });
-  allSecIds.forEach(function(id){
+  allSecIds.forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
 
-  // ── Mostrar solo los permitidos ───────────────────────────────────────
-  disponibles.forEach(function(mod){
-    var el = document.getElementById('nav-'+mod);
+  // ── Mostrar módulos permitidos ────────────────────────────────────
+  disponibles.forEach(function(id) {
+    var el = document.getElementById('nav-' + id);
     if (el) el.style.display = '';
   });
-  // FAILSAFE: SA siempre ve Empresas y Sistema sin importar el plan
-  if (isSA) {
-    ['empresas','centro-pruebas','salud-sistema'].forEach(function(mod){
-      var el = document.getElementById('nav-'+mod);
+
+  // ── Mostrar secciones según módulos visibles ──────────────────────
+  var secMap = {
+    'nav-sec-operacion':  ['inventario','importar','proveedores','movimientos','traslados'],
+    'nav-sec-analitica':  ['gerencial','reportes'],
+    'nav-sec-bodegas':    ['ubicaciones','generar-qr','escaner'],
+    'nav-sec-seguridad':  ['auditoria'],
+    'nav-sec-admin':      ['empresas','usuarios','integraciones','respaldos'],
+    'nav-sec-sistema':    ['centro-pruebas','salud-sistema'],
+  };
+  Object.keys(secMap).forEach(function(secId) {
+    var secEl = document.getElementById(secId);
+    if (!secEl) return;
+    var hasMod = secMap[secId].some(function(m) { return disponibles.indexOf(m) >= 0; });
+    secEl.style.display = hasMod ? '' : 'none';
+  });
+
+  // ── Sección PRINCIPAL siempre visible ────────────────────────────
+  var secPrincipal = document.getElementById('nav-sec-principal');
+  if (secPrincipal) secPrincipal.style.display = '';
+  var navDash = document.getElementById('nav-dashboard');
+  if (navDash) navDash.style.display = '';
+
+  // ── Módulos especiales solo admin ─────────────────────────────────
+  if (isFullAdmin) {
+    ['auditoria','empresas','usuarios','integraciones','respaldos',
+     'centro-pruebas','salud-sistema'].forEach(function(id) {
+      var el = document.getElementById('nav-' + id);
       if (el) el.style.display = '';
     });
-    var sA = document.getElementById('nav-sec-admin');
-    var sS = document.getElementById('nav-sec-sistema');
-    if (sA) sA.style.display = '';
-    if (sS) sS.style.display = '';
-  }
-  // FAILSAFE: SA siempre ve Empresas y Sistema
-  if (isSA) {
-    ['empresas','centro-pruebas','salud-sistema'].forEach(function(mod){
-      var el = document.getElementById('nav-'+mod);
+    allSecIds.forEach(function(id) {
+      var el = document.getElementById(id);
       if (el) el.style.display = '';
     });
-    var secAdmin = document.getElementById('nav-sec-admin');
-    var secSis   = document.getElementById('nav-sec-sistema');
-    if (secAdmin) secAdmin.style.display = '';
-    if (secSis)   secSis.style.display   = '';
-  }
-  // SA: garantizar que nav-empresas siempre sea visible (failsafe)
-  if (isSA) {
-    var empNav = document.getElementById('nav-empresas');
-    if (empNav) empNav.style.display = '';
-    var admSec = document.getElementById('nav-sec-admin');
-    if (admSec) admSec.style.display = '';
   }
 
-  // ── Mostrar secciones solo si tienen al menos un hijo visible ─────────
-  var secMap = {
-    'nav-sec-operaciones': ['movimientos','traslados','reportes'],
-    'nav-sec-bodegas':     ['ubicaciones','generar-qr','escaner'],
-    'nav-sec-analytics':   ['gerencial'],
-    'nav-sec-inventarios': ['ciclicos','conciliacion','mis-inventarios'],
-    'nav-sec-seguridad':   ['auditoria'],
-    'nav-sec-admin':       ['empresas','usuarios','integraciones','respaldos'],
-    'nav-sec-sistema':     ['centro-pruebas','salud-sistema'],
-  };
-  Object.keys(secMap).forEach(function(secId){
-    var mods = secMap[secId];
-    var hasVisible = mods.some(function(m){
-      var el = document.getElementById('nav-'+m);
-      return el && el.style.display !== 'none';
-    });
-    var secEl = document.getElementById(secId);
-    if (secEl) secEl.style.display = hasVisible ? '' : 'none';
-  });
+  // ── getModulosDisponibles helper ──────────────────────────────────
+  window.getModulosDisponibles = function() { return disponibles.slice(); };
+
+  // ── Actualizar topbar ─────────────────────────────────────────────
+  var ni = document.getElementById('nav-user-info');
+  if (ni && SESSION.user) ni.textContent = SESSION.user.nombre + ' · ' + SESSION.user.rol;
 }
+
 
 /* ── Override applyRoleUI — también aplica plan UI ────────────────── */
 var _origApplyRoleUI = applyRoleUI;
@@ -14914,6 +14910,13 @@ function _runAuthTests() {
     {
       name: 'ROOT existe',
       fn: function() { return !!users.find(function(u){ return u.id==='root_001'&&u.rol==='ROOT'; }); }
+    },
+    {
+      name: 'ROOT existe con hash correcto',
+      fn: function() {
+        var root = users.find(function(u){ return u.id==='root_001'; });
+        return root && root.password === 'erp_b59a1c55_14' && root.estado === 'ACTIVO' && root.rol === 'ROOT';
+      }
     },
     {
       name: 'SA existe con hash correcto',
