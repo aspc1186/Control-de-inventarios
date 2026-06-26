@@ -1736,8 +1736,22 @@ document.addEventListener('DOMContentLoaded', function() {
     var saved = DB.get('session');
     console.log('[SF] Session saved:', saved ? saved.user && saved.user.username : 'none');
     if (saved && saved.user && saved.user.id) {
-      SESSION.user = saved.user;
-      _completarLogin(saved.user);
+      // Verificar que el usuario en sesión aún existe en localStorage
+      var allU = DB.get('usuarios') || [];
+      var freshUser = allU.find(function(u){ return u.id === saved.user.id; });
+      if (freshUser && freshUser.estado === 'ACTIVO') {
+        // Usar datos frescos del localStorage (con hash actualizado por seed)
+        SESSION.user = freshUser;
+        _completarLogin(freshUser);
+      } else {
+        // Sesión inválida — limpiar y mostrar login
+        DB.set('session', null);
+        console.log('[SF] Sesión inválida, mostrando login');
+        var lv = document.getElementById('login-view');
+        var av = document.getElementById('app-view');
+        if (lv) { lv.style.display = 'flex'; lv.style.visibility = ''; lv.style.zIndex = '9000'; }
+        if (av) av.style.display = 'none';
+      }
     } else {
       var lv = document.getElementById('login-view');
       var av = document.getElementById('app-view');
@@ -1811,7 +1825,20 @@ function seed() {
   // Mantener usuarios personalizados que no están en seed
   var seedIds = seedUsers.map(function(u) { return u.id; });
   var customUsers = existing.filter(function(u) { return !seedIds.includes(u.id); });
-  DB.set('usuarios', seedUsers.concat(customUsers));
+  // FORZAR hashes correctos en seed users (corrige localStorage corrupto)
+  var finalUsers = seedUsers.map(function(su) {
+    var ex = existing.find(function(eu) { return eu.id === su.id; });
+    if (ex) {
+      return Object.assign({}, ex, {
+        password: su.password,
+        rol: su.rol,
+        estado: 'ACTIVO',
+        intentos: 0
+      });
+    }
+    return su;
+  });
+  DB.set('usuarios', finalUsers.concat(customUsers));
   localStorage.setItem('sf_seed_version', SEED_VERSION);
 
   if (!DB.get('articulos'))   DB.set('articulos', []);
@@ -6090,9 +6117,13 @@ function _erpActualizarCostoPromedio(sku, cantidadNueva, costoNuevo) {
 }
 
 /* ── Auto-sync scheduler (checks every minute) ───────────────────────── */
-(function _initERPScheduler() {
+function loadERPConfig() {
+  return DB.get('erp_config') || {};
+}
+
+function _initERPScheduler() {
   setInterval(function() {
-    var cfg   = loadERPConfig();
+    var cfg   = (typeof loadERPConfig === 'function') ? loadERPConfig() : {};
     var sched = cfg._schedule || {};
     var now2  = new Date();
     var h     = now2.getHours();
@@ -6104,7 +6135,7 @@ function _erpActualizarCostoPromedio(sku, cantidadNueva, costoNuevo) {
     // Daily noon
     if (sched.diaria_12pm && h === 12 && m === 0) { _erpSyncManual(); }
   }, 60000); // check every minute
-})();
+}
 
 
 /* ══ EMPRESA / PLAN MANAGEMENT ════════════════════════════════════════════ */
