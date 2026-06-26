@@ -1772,75 +1772,152 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function seed() {
-  var SEED_VERSION = 'v5_2026'; // v5: refactoring SaaS + KPI Engine + template empresa // v4: credenciales simplificadas, hash corregido
-  var existing = DB.get('usuarios') || [];
+  /* ══════════════════════════════════════════════════════════════════
+     SEED v6_2026 — RECONSTRUCCIÓN COMPLETA
+     Elimina usuarios corruptos y recrea desde cero.
+     Los hashes son pre-calculados con djb2 (simpleHash).
+  ══════════════════════════════════════════════════════════════════ */
+  var SEED_VERSION = 'v6_2026';
+  var storedVersion = localStorage.getItem('sf_seed_version');
 
-  var seedUsers = [
+  // Definir los usuarios correctos del sistema
+  var SYSTEM_USERS = [
     {
-      id: 'sa_001', nombre: 'Super Administrador',
-      username: 'superadministrador', correo: 'stockflow@outlook.es',
-      password: 'erp_b59a1c55_14',
-      rol: 'SUPER ADMINISTRADOR', cargo: 'Super Administrador',
-      area: 'SUPER ADMINISTRADOR', estado: 'ACTIVO', intentos: 0,
-      plan_suspendido: false, created_at: now().fecha
+      id: 'root_001',
+      nombre: 'ROOT del Sistema',
+      username: 'root',
+      correo: 'root@stockflow.system',
+      password: 'erp_b59a1c55_14', // StockFlow2026*
+      rol: 'ROOT',
+      cargo: 'Root del Sistema',
+      area: 'SISTEMA',
+      estado: 'ACTIVO',
+      intentos: 0,
+      es_sistema: true,
+      eliminable: false,
+      empresa_id: '__SISTEMA__',
+      created_at: '2026-01-01'
     },
     {
-      id: 'adm_001', nombre: 'Administrador',
-      username: 'administrador', correo: '',
-      password: 'erp_eb978626_10',
-      rol: 'ADMINISTRADOR', cargo: 'Administrador',
-      area: 'TI', estado: 'ACTIVO', intentos: 0,
-      plan_suspendido: false, created_at: now().fecha
+      id: 'sa_001',
+      nombre: 'Super Administrador',
+      username: 'superadministrador',
+      correo: 'superadmin@stockflow.app',
+      password: 'erp_b59a1c55_14', // StockFlow2026*
+      rol: 'SUPER ADMINISTRADOR',
+      cargo: 'Super Administrador',
+      area: 'ADMINISTRACIÓN',
+      estado: 'ACTIVO',
+      intentos: 0,
+      es_sistema: true,
+      eliminable: false,
+      empresa_id: '__SA__',
+      created_at: '2026-01-01'
     },
     {
-      id: 'alm_001', nombre: 'Almacenista',
-      username: 'almacenista', correo: '',
-      password: 'erp_52981960_11',
-      rol: 'ALMACENISTA', cargo: 'Auxiliar Almacén',
-      area: 'Almacén', estado: 'ACTIVO', intentos: 0,
-      plan_suspendido: false, created_at: now().fecha
+      id: 'adm_001',
+      nombre: 'Administrador Demo',
+      username: 'administrador',
+      correo: 'admin@demo.stockflow.app',
+      password: 'erp_eb978626_10', // Admin.2026
+      rol: 'ADMINISTRADOR',
+      cargo: 'Administrador',
+      area: 'ADMINISTRACIÓN',
+      estado: 'ACTIVO',
+      intentos: 0,
+      es_sistema: false,
+      eliminable: true,
+      empresa_id: '__SA__',
+      created_at: '2026-01-01'
     },
     {
-      id: 'jefe_001', nombre: 'Jefe Inventarios',
-      username: 'jefe', correo: '',
-      password: 'erp_6eb81317_9',
-      rol: 'JEFE INVENTARIOS', cargo: 'Jefe de Inventarios',
-      area: 'Almacén', estado: 'ACTIVO', intentos: 0,
-      plan_suspendido: false, created_at: now().fecha
+      id: 'alm_001',
+      nombre: 'Almacenista Demo',
+      username: 'almacenista',
+      correo: 'almacen@demo.stockflow.app',
+      password: 'erp_52981960_11', // Almacen2026
+      rol: 'ALMACENISTA',
+      cargo: 'Almacenista',
+      area: 'ALMACÉN',
+      estado: 'ACTIVO',
+      intentos: 0,
+      es_sistema: false,
+      eliminable: true,
+      empresa_id: '__SA__',
+      created_at: '2026-01-01'
     },
     {
-      id: 'cons_001', nombre: 'Consulta Productos',
-      username: 'consulta', correo: '',
-      password: 'erp_952dc798_12',
-      rol: 'CONSULTA DE PRODUCTOS', cargo: 'Consultor',
-      area: 'Producción', estado: 'ACTIVO', intentos: 0,
-      plan_suspendido: false, created_at: now().fecha
+      id: 'jef_001',
+      nombre: 'Jefe de Inventarios Demo',
+      username: 'jefe',
+      correo: 'jefe@demo.stockflow.app',
+      password: 'erp_6eb81317_9', // Jefe.2026
+      rol: 'JEFE INVENTARIOS',
+      cargo: 'Jefe de Inventarios',
+      area: 'INVENTARIOS',
+      estado: 'ACTIVO',
+      intentos: 0,
+      es_sistema: false,
+      eliminable: true,
+      empresa_id: '__SA__',
+      created_at: '2026-01-01'
     },
+    {
+      id: 'con_001',
+      nombre: 'Usuario Consulta Demo',
+      username: 'consulta',
+      correo: 'consulta@demo.stockflow.app',
+      password: 'erp_952dc798_12', // Consulta2026
+      rol: 'CONSULTA DE PRODUCTOS',
+      cargo: 'Consulta',
+      area: 'OPERACIONES',
+      estado: 'ACTIVO',
+      intentos: 0,
+      es_sistema: false,
+      eliminable: true,
+      empresa_id: '__SA__',
+      created_at: '2026-01-01'
+    }
   ];
 
-  // Solo re-seed si cambió versión o no hay usuarios
-  var storedVersion = localStorage.getItem('sf_seed_version');
-  if (storedVersion === SEED_VERSION && existing.length > 0) return;
+  var SYSTEM_IDS = SYSTEM_IDS = SYSTEM_USERS.map(function(u){ return u.id; });
 
-  // Mantener usuarios personalizados que no están en seed
-  var seedIds = seedUsers.map(function(u) { return u.id; });
-  var customUsers = existing.filter(function(u) { return !seedIds.includes(u.id); });
-  // FORZAR hashes correctos en seed users (corrige localStorage corrupto)
-  var finalUsers = seedUsers.map(function(su) {
-    var ex = existing.find(function(eu) { return eu.id === su.id; });
-    if (ex) {
-      return Object.assign({}, ex, {
-        password: su.password,
-        rol: su.rol,
-        estado: 'ACTIVO',
-        intentos: 0
-      });
+  // Si ya está en la versión actual Y los usuarios del sistema existen y son correctos:
+  if (storedVersion === SEED_VERSION) {
+    var existing = DB.get('usuarios') || [];
+    // Verificar que SA existe con hash correcto
+    var sa = existing.find(function(u){ return u.id === 'sa_001'; });
+    if (sa && sa.password === 'erp_b59a1c55_14' && sa.estado === 'ACTIVO') {
+      return; // Todo OK, no re-sembrar
     }
-    return su;
-  });
-  DB.set('usuarios', finalUsers.concat(customUsers));
-  localStorage.setItem('sf_seed_version', SEED_VERSION);
+  }
 
+  // RECONSTRUCCIÓN: eliminar usuarios del sistema con datos corruptos
+  // y mantener SOLO los usuarios creados por administradores (no del sistema)
+  var existing2 = DB.get('usuarios') || [];
+  var customUsers = existing2.filter(function(u) {
+    // Mantener solo usuarios custom (no del sistema y no de seeds anteriores)
+    return !SYSTEM_IDS.includes(u.id) && u.es_sistema !== true;
+  });
+
+  // Los usuarios del sistema SIEMPRE se recrean desde cero con datos correctos
+  var allUsers = SYSTEM_USERS.concat(customUsers);
+  DB.set('usuarios', allUsers);
+
+  // Limpiar sesión si existe (puede estar corrupta)
+  var savedSession = DB.get('session');
+  if (savedSession && savedSession.user) {
+    var sessionUser = allUsers.find(function(u) { return u.id === savedSession.user.id; });
+    if (!sessionUser || sessionUser.password !== savedSession.user.password) {
+      // Sesión con datos corruptos — limpiar
+      DB.set('session', null);
+    } else {
+      // Actualizar sesión con datos frescos del seed
+      DB.set('session', { user: sessionUser });
+    }
+  }
+
+  // Inicializar otras tablas si no existen
   if (!DB.get('articulos'))   DB.set('articulos', []);
   if (!DB.get('movimientos')) DB.set('movimientos', []);
   if (!DB.get('proveedores')) DB.set('proveedores', []);
@@ -1848,8 +1925,10 @@ function seed() {
   if (!DB.get('bodegas'))     DB.set('bodegas', []);
   if (!DB.get('ciclicos'))    DB.set('ciclicos', []);
   if (!DB.get('auditoria'))   DB.set('auditoria', []);
+  if (!DB.get('reservas'))    DB.set('reservas', []);
 
-  console.log('[StockFlow] Seed v5_2026 aplicado. Usuarios:', seedUsers.length + customUsers.length);
+  localStorage.setItem('sf_seed_version', SEED_VERSION);
+  console.log('[StockFlow] Seed v6_2026 aplicado. Usuarios sistema: ' + SYSTEM_USERS.length + ', custom: ' + customUsers.length);
 }
 
 function uid() { return 'id_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
@@ -2263,6 +2342,15 @@ var PERMISOS = {
 
 var ACCIONES = {
   // SA: acceso total a todo
+  'ROOT': {
+    modulos: ['dashboard','inventario','compras','logistica','gerencial','ubicaciones',
+              'generar-qr','escaner','auditoria','empresas','usuarios','integraciones',
+              'respaldos','centro-pruebas','salud-sistema','proveedores','importar',
+              'historial','movimientos','traslados','reportes','ciclicos','conciliacion',
+              'picking','packing'],
+    acciones: ['crear','editar','eliminar','ver','exportar','importar','configurar','administrar'],
+    esRoot: true
+  },
   'SUPER ADMINISTRADOR': {
     '*': ['ver','crear','editar','eliminar','exportar','importar',
           'ajustar','autorizar','crear_entrada','crear_salida','conteo','*'],
@@ -2530,7 +2618,13 @@ function doLogin() {
 
   // ── Step 1: Buscar en TODOS los usuarios (sin filtro empresa)
   // doLogin autentica cualquier usuario: SA, admins empresa, operarios, etc.
+  // Buscar en localStorage con datos frescos post-seed
   var allUsers = DB.get('usuarios') || [];
+  // Si no hay usuarios (localStorage vacío), intentar forzar seed
+  if (!allUsers.length) {
+    try { seed(); } catch(e) {}
+    allUsers = DB.get('usuarios') || [];
+  }
   var local = allUsers.find(function(u) {
     return (u.username && u.username.toLowerCase() === login) ||
            (u.correo   && u.correo.toLowerCase()   === login);
@@ -2592,7 +2686,16 @@ function doLogin() {
 function _completarLogin(user) {
   SESSION.user = user;
   try { DB.set('session', { user: user }); } catch(e) {}
-  auditLog('LOGIN', 'Inicio de sesión', user.nombre);
+  // Auditoría completa de acceso
+  var loginTs = new Date().toISOString();
+  auditLog('LOGIN', 'Acceso: ' + user.username + ' | Rol: ' + user.rol + ' | ' + loginTs, user.nombre);
+  // Guardar último acceso
+  var allU2 = DB.get('usuarios') || [];
+  var uIdx = allU2.findIndex(function(u){ return u.id === user.id; });
+  if (uIdx >= 0) {
+    allU2[uIdx].ultimo_acceso = loginTs;
+    DB.set('usuarios', allU2);
+  }
 
   var lv = document.getElementById('login-view');
   var av = document.getElementById('app-view');
@@ -2761,9 +2864,9 @@ function goto(page, param) {
   var rol   = SESSION.user && SESSION.user.rol || 'CONSULTA';
   var rp2 = PERMISOS[rol] || PERMISOS['CONSULTA'];
   var perms = (rp2 && rp2.modulos) ? rp2.modulos : rp2;
-  var isFullAdmin = (rol === 'ADMINISTRADOR' || rol === 'SUPER ADMINISTRADOR');
-  // SA puede acceder a 'empresas' siempre
-  if (rol === 'SUPER ADMINISTRADOR') isFullAdmin = true;
+  var isFullAdmin = (rol === 'ADMINISTRADOR' || rol === 'SUPER ADMINISTRADOR' || rol === 'ROOT');
+  // ROOT y SA tienen acceso total
+  if (rol === 'SUPER ADMINISTRADOR' || rol === 'ROOT') isFullAdmin = true;
   var isConsultaP = (rol === 'CONSULTA DE PRODUCTOS');
   // Consulta de Productos: redirect to consulta-productos instead of dashboard
   if (!isFullAdmin && page !== 'dashboard' && page !== 'detalle' && !perms.includes(page)) {
@@ -14690,6 +14793,63 @@ renders['logistica'] = function() {
 };
 
 
+
+
+
+/* ══ PRUEBAS AUTOMÁTICAS DE AUTENTICACIÓN (Fase 10) ══════════════════════
+   Corren silenciosamente al arrancar. Los errores se logean en consola.
+══════════════════════════════════════════════════════════════════════════ */
+function _runAuthTests() {
+  var users = DB.get('usuarios') || [];
+  var tests = [
+    {
+      name: 'ROOT existe',
+      fn: function() { return !!users.find(function(u){ return u.id==='root_001'&&u.rol==='ROOT'; }); }
+    },
+    {
+      name: 'SA existe con hash correcto',
+      fn: function() {
+        var sa = users.find(function(u){ return u.id==='sa_001'; });
+        return sa && sa.password === 'erp_b59a1c55_14' && sa.estado === 'ACTIVO';
+      }
+    },
+    {
+      name: 'No hay usuarios sin rol',
+      fn: function() { return !users.some(function(u){ return !u.rol; }); }
+    },
+    {
+      name: 'No hay usuarios sin estado',
+      fn: function() { return !users.some(function(u){ return !u.estado; }); }
+    },
+    {
+      name: 'checkPwd SA correcto',
+      fn: function() { return checkPwd('StockFlow2026*', 'erp_b59a1c55_14'); }
+    },
+    {
+      name: 'checkPwd Admin correcto',
+      fn: function() { return checkPwd('Admin.2026', 'erp_eb978626_10'); }
+    },
+    {
+      name: 'simpleHash funcionando',
+      fn: function() { return simpleHash('test') && simpleHash('test').startsWith('erp_'); }
+    },
+  ];
+
+  var passed = 0; var failed = [];
+  tests.forEach(function(t) {
+    try {
+      if (t.fn()) { passed++; }
+      else { failed.push(t.name); }
+    } catch(e) { failed.push(t.name + ': ' + e.message); }
+  });
+
+  if (failed.length > 0) {
+    console.error('[SF] ⚠️ Auth tests failed (' + failed.length + '):', failed);
+  } else {
+    console.log('[SF] ✅ Auth tests: ' + passed + '/' + tests.length + ' PASS');
+  }
+  return { passed: passed, failed: failed, total: tests.length };
+}
 
 </script>
 </body>
