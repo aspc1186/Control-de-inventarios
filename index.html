@@ -2507,12 +2507,14 @@ function doLogin() {
     var stored = local.password || local.password_hash || '';
     // Verificar contraseña normal
     if (stored && checkPwd(pwd, stored)) {
+      console.log('[SF] Login OK:', local.username, local.rol);
       local.intentos = 0;
       DB.set('usuarios', allUsers);
       restoreBtn();
       _completarLogin(local);
       return;
     }
+    console.log('[SF] checkPwd failed. stored:', stored, 'computed:', simpleHash(pwd));
     // Verificar código de recuperación temporal
     if (local.reset_token && local.reset_expiry) {
       var hoyRec = new Date().toISOString().slice(0,10);
@@ -2575,15 +2577,28 @@ function _completarLogin(user) {
     if (cached && cached.length > 0) { _invItems = cached; }
   }
 
-  // ── Navigate to dashboard (sync Neon in background) ───────────────
+  // ── Navigate to dashboard ─────────────────────────────────────────
   var destino = 'dashboard';
   if (SESSION.user && SESSION.user.rol === 'CONSULTA DE PRODUCTOS') {
     destino = 'consulta-productos';
   }
-  goto(destino);
+  try {
+    goto(destino);
+  } catch(e) {
+    console.error('[SF] goto error:', e);
+    // Fallback: mostrar dashboard manualmente
+    document.querySelectorAll('.page-inner > div').forEach(function(d){ d.style.display='none'; });
+    var pg = document.getElementById('pg-dashboard');
+    if (pg) pg.style.display = '';
+    currentPage = 'dashboard';
+    try { renders.dashboard && renders.dashboard(); } catch(e2) {
+      console.error('[SF] renders.dashboard error:', e2);
+      if (pg) pg.innerHTML = '<div style="padding:30px;color:white"><h2>✅ Sesión iniciada</h2><p>Bienvenido, ' + user.nombre + '</p></div>';
+    }
+  }
 
-  // Background sync from Neon (no bloquea el login)
-  _syncAllFromNeon(null);
+  // Background sync desde Neon
+  try { _syncAllFromNeon(null); } catch(e) {}
 }
 
 /* ── _syncAllFromNeon — carga datos desde Neon en background ─────────── */
@@ -2898,6 +2913,7 @@ function _renderDashboardEjecutivo() {
 }
 
 renders.dashboard = function() {
+  console.log('[SF] renders.dashboard called, rol:', SESSION.user && SESSION.user.rol);
   // Dashboard Inteligente — adapta según rol del usuario
   var rol = SESSION.user && SESSION.user.rol || '';
   var isSA  = rol === 'SUPER ADMINISTRADOR';
