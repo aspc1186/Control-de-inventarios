@@ -1710,9 +1710,9 @@ var _invItems     = null;
 var _invFetching  = false;
 var _provSearch   = '';
 var _bodSearch    = '';
-const DB = {
-  get: k => { try { return JSON.parse(localStorage.getItem('erp_'+k)||'null') } catch { return null } },
-  set: (k,v) => localStorage.setItem('erp_'+k, JSON.stringify(v)),
+var DB = {
+  get: function(k) { try { return JSON.parse(localStorage.getItem('erp_'+k)||'null'); } catch(e) { return null; } },
+  set: function(k,v) { localStorage.setItem('erp_'+k, JSON.stringify(v)); }
 };
 
 // ── Initial data seed ──────────────────────────────────
@@ -1810,12 +1810,12 @@ function seed() {
   if (!DB.get('ciclicos'))    DB.set('ciclicos', []);
   if (!DB.get('auditoria'))   DB.set('auditoria', []);
 
-  console.log('[StockFlow] Seed v4_2026 aplicado. Usuarios:', seedUsers.length + customUsers.length);
+  console.log('[StockFlow] Seed v5_2026 aplicado. Usuarios:', seedUsers.length + customUsers.length);
 }
 
 function uid() { return 'id_' + Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
 function now() {
-  const d = new Date();
+  var d = new Date();
   return {
     fecha: d.toLocaleDateString('es-CO',{year:'numeric',month:'2-digit',day:'2-digit'}),
     hora:  d.toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit',second:'2-digit'}),
@@ -2131,13 +2131,13 @@ function registrarMov(tipo, articuloId, cantidad, extra) {
 /* ══════════════════════════════════════════════
    SESSION / AUTH
 ══════════════════════════════════════════════ */
-let SESSION = { user: null, empresa: null, plan: null };
+var SESSION = { user: null, empresa: null, plan: null };
 /* ══ PLANES — módulos habilitados por plan contratado ═════════════════════
    LITE : Inventario básico
    PRO  : Inventario + Proveedores + Reportes Gerenciales
    WMS  : Todo — incluye Traslados, Cíclicos, Integraciones ERP
 ══════════════════════════════════════════════════════════════════════════ */
-const PLANES = {
+var PLANES = {
   FREE: {
     nombre: 'Free',
     modulos: ['dashboard','inventario','importar','movimientos','reportes','proveedores'],
@@ -2170,7 +2170,7 @@ const PLANES = {
   },
 };
 
-const PERMISOS = {
+var PERMISOS = {
   // SA — acceso total a la plataforma, sin restricciones
   'SUPER ADMINISTRADOR': [
     'dashboard','inventario','importar','movimientos','reportes',
@@ -2222,7 +2222,7 @@ const PERMISOS = {
   ],
 };
 
-const ACCIONES = {
+var ACCIONES = {
   // SA: acceso total a todo
   'SUPER ADMINISTRADOR': {
     '*': ['ver','crear','editar','eliminar','exportar','importar',
@@ -2665,14 +2665,14 @@ function applyRoleUI() {
 
 
 function togglePwd(id) {
-  const el = document.getElementById(id);
+  var el = document.getElementById(id);
   el.type = el.type === 'password' ? 'text' : 'password';
 }
 
 /* ══════════════════════════════════════════════
    NAVIGATION
 ══════════════════════════════════════════════ */
-const PAGE_TITLES = {
+var PAGE_TITLES = {
   empresas:'Empresas Cliente',
   dashboard:'Dashboard', inventario:'Inventario', 'generar-qr':'Generar QR',
   escaner:'Escáner QR', movimientos:'Movimientos', importar:'Importar desde Excel',
@@ -2681,8 +2681,8 @@ const PAGE_TITLES = {
   usuarios:'Usuarios', detalle:'Detalle Artículo',
   'centro-pruebas': '🧪 Centro de Pruebas Automáticas',
 };
-let currentPage = '', scannerInst = null;
-let invSearch = '', invFiltro = 'TODOS';
+var currentPage = '', scannerInst = null;
+var invSearch = '', invFiltro = 'TODOS';
 // Inventory global state
 var _invItems    = null;   // in-memory cache — source of truth
 var _invFetching = false;  // prevent concurrent fetches
@@ -2747,7 +2747,7 @@ function refreshAlertBadge() {
    MODAL
 ══════════════════════════════════════════════ */
 function openModal(html, lg) {
-  const box = document.getElementById('modal-box');
+  var box = document.getElementById('modal-box');
   box.innerHTML = html;
   box.className = 'modal' + (lg ? ' modal-lg' : '');
   document.getElementById('modal-wrap').classList.add('show');
@@ -2757,7 +2757,7 @@ function closeModal() { document.getElementById('modal-wrap').classList.remove('
 /* ══════════════════════════════════════════════
    RENDER: DASHBOARD
 ══════════════════════════════════════════════ */
-const renders = {};
+var renders = {};
 
 /* ══════════════════════════════════════════════════════════════════════════
    RENDER: INVENTARIO
@@ -5364,9 +5364,9 @@ function _renderGerencial(K, targetId) {
   function dias(n) { return n!==null&&n!==undefined ? Math.round(n)+'d' : '—'; }
 
   // ── Filtros disponibles ──────────────────────────────────────────────
-  var bodegas   = [...new Set(K.items.map(function(i){return i.bodega;}))].sort();
-  var cats      = [...new Set(K.items.map(function(i){return i.categoria;}))].sort();
-  var provsList = [...new Set(K.items.map(function(i){return i.proveedor;}))].filter(Boolean).sort();
+  var bodegas   = Array.from(new Set(K.items.map(function(i){return i.bodega;}))).sort();
+  var cats      = Array.from(new Set(K.items.map(function(i){return i.categoria;}))).sort();
+  var provsList = Array.from(new Set(K.items.map(function(i){return i.proveedor;}))).filter(Boolean).sort();
   var f = window._gerFiltros || {};
 
   var h = [];
@@ -8997,8 +8997,8 @@ function openNuevoArticulo(editId) {
   var items   = _invItems || loadItems();
   var item    = editId ? items.find(function(i){ return i.id===editId; }) : null;
   var isEdit  = !!item;
-  var cats    = [...new Set((items||[]).map(function(i){return i.categoria||'';}).filter(Boolean))].sort();
-  var marcas  = [...new Set((items||[]).map(function(i){return i.marca||'';}).filter(Boolean))].sort();
+  var cats    = Array.from(new Set((items||[]).map(function(i){return i.categoria||'';}).filter(Boolean))).sort();
+  var marcas  = Array.from(new Set((items||[]).map(function(i){return i.marca||'';}).filter(Boolean))).sort();
   var provs   = (typeof loadProveedores==='function' ? loadProveedores() : []).map(function(p){ return p.nombre||p.razon_social||''; }).filter(Boolean);
 
   var h = [];
@@ -9230,21 +9230,21 @@ function setScanMode(m) {
 }
 function startScanner() {
   if (scannerInst) return;
-  setTimeout(() => {
-    const el = document.getElementById('qr-reader');
+  setTimeout(function() {
+    var el = document.getElementById('qr-reader');
     if (!el) return;
     scannerInst = new Html5QrcodeScanner('qr-reader', {fps:10, qrbox:{width:240,height:240}, rememberLastUsedCamera:true}, false);
-    scannerInst.render(txt => {
-      scannerInst.clear().catch(()=>{});
+    scannerInst.render(function(txt) {
+      scannerInst.clear().catch(function() {});
       scannerInst = null;
       handleScanSKU(txt.trim());
-    }, ()=>{});
+    }, function() {});
   }, 300);
 }
 function handleScanSKU(sku) {
-  const items = loadItems();
-  const item = items.find(i => i.sku === sku);
-  const errEl = document.getElementById('scan-error');
+  var items = loadItems();
+  var item = items.find(function(i) { return i.sku === sku; });
+  var errEl = document.getElementById('scan-error');
   if (!item) {
     if (errEl) { errEl.style.display='flex'; errEl.innerHTML='<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> SKU "${sku}" no encontrado en el sistema.'; }
     return;
@@ -9253,14 +9253,14 @@ function handleScanSKU(sku) {
   goto('detalle', item.id);
 }
 function manualScan() {
-  const sku = (document.getElementById('manual-sku')||{value:''}).value.trim().toUpperCase();
+  var sku = (document.getElementById('manual-sku')||{value:''}).value.trim().toUpperCase();
   if (sku) handleScanSKU(sku);
 }
 
 /* ══════════════════════════════════════════════
    RENDER: MOVIMIENTOS
 ══════════════════════════════════════════════ */
-let movFiltro = 'TODOS', movSearch = '';
+var movFiltro = 'TODOS', movSearch = '';
 renders.movimientos = function() {
   var pg = document.getElementById('pg-movimientos');
   if (!pg) return;
@@ -9331,112 +9331,48 @@ renders.movimientos = function() {
 
 
 renders.reportes = function() {
-  const items = _getItems();
-  const movs  = loadMovs();
-  const noData = items.length === 0;
-
-  document.getElementById('pg-reportes').innerHTML = `
-    ${noData ? `<div class="alert-bar" style="background:var(--blue-bg);border-color:#bfdbfe;color:#1e40af">
-      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-      <span>Los reportes se habilitarán una vez que agregues artículos al inventario.</span>
-    </div>` : ''}
-
-    <!-- ══ KARDEX: INDICADORES CLAVE ══════════════════════════════════════ -->
-    <div id="kardex-kpis" style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-        <div>
-          <h2 style="font-size:16px;font-weight:700;color:var(--white);margin-bottom:2px">📊 Indicadores de Inventario (Kardex)</h2>
-          <p style="font-size:11px;color:var(--muted)">Métricas clave actualizadas en tiempo real</p>
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="exportarKardexIndicadores()">📥 Exportar Indicadores</button>
-      </div>
-      <div id="kardex-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
-        <div style="text-align:center;padding:20px;color:var(--muted)">Cargando indicadores...</div>
-      </div>
-    </div>
-
-    <!-- Exportación Maestra destacada -->
-    <div class="card" style="border:2px solid var(--amber);margin-bottom:18px;background:linear-gradient(135deg,#fffbeb,#fff)">
-      <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
-        <div style="font-size:32px">⭐</div>
-        <div style="flex:1;min-width:200px">
-          <div style="font-weight:800;font-size:16px;color:var(--navy);margin-bottom:4px">Exportación Maestra para Conciliación</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Archivo único con <strong>31 columnas</strong> consolidadas. Incluye columnas para conteo físico, diferencias automáticas, semáforo de estado y campos para responsables de conteo. Ideal para conciliaciones masivas, tablas dinámicas y auditorías.</div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-amber" onclick="exportMaestro()" ${noData?'disabled':''}>
-              <svg viewBox="0 0 24 24" width="14" height="14"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Descargar Excel Maestro
-            </button>
-            <button class="btn btn-navy" onclick="exportConciliacionFisica()" ${noData?'disabled':''}>
-              <svg viewBox="0 0 24 24" width="14" height="14"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-              Excel Conciliación Física
-            </button>
-            <button class="btn btn-ghost" onclick="exportAuditoriaExcel()" ${noData?'disabled':''}>
-              <svg viewBox="0 0 24 24" width="14" height="14"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-              Excel Auditoría
-            </button>
-          </div>
-        </div>
-        <div style="background:#fff8e1;border-radius:10px;padding:10px 14px;font-size:11px;color:#92400e;min-width:180px">
-          <strong>Columnas incluidas:</strong><br>
-          ✓ 26 columnas de inventario<br>
-          ✓ 5 columnas de conteo físico<br>
-          ✓ Diferencia automática<br>
-          ✓ Valor diferencia<br>
-          ✓ Semáforo visual (verde/amarillo/rojo)
-        </div>
-      </div>
-    </div>
-
-    <!-- Reportes estándar -->
-    <div class="section-title" style="margin-bottom:12px"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Reportes Estándar</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px">
-      ${[
-        {title:'Inventario completo',      desc:'Lista con stock, ubicación y valor de todos los artículos.',  fn:'rptInventario',   color:'#1a2b4a', icon:'📦'},
-        {title:'Stock crítico y agotados', desc:'Artículos bajo mínimo o sin existencias.',                    fn:'rptStockCritico', color:'#dc2626', icon:'⚠️'},
-        {title:'Kardex por artículo',      desc:'Historial cronológico de movimientos por referencia.',        fn:'rptKardex',       color:'#2563eb', icon:'📋'},
-        {title:'Movimientos generales',    desc:'Todas las entradas, salidas y ajustes registrados.',          fn:'rptMovimientos',  color:'#16a34a', icon:'↕️'},
-        {title:'KPI gerenciales',          desc:'Indicadores clave: rotación, valor, exactitud inventario.',   fn:'rptKPI',          color:'#f59e0b', icon:'📊'},
-      ].map(r => `
-        <div class="card" style="border-top:3px solid ${r.color}">
-          <div style="font-size:22px;margin-bottom:7px">${r.icon}</div>
-          <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:3px">${r.title}</div>
-          <div style="font-size:11.5px;color:var(--muted);margin-bottom:12px">${r.desc}</div>
-          <div style="display:flex;gap:7px">
-            <button class="btn btn-ghost btn-sm" onclick="${r.fn}('excel')" ${noData?'disabled':''}>
-              <svg viewBox="0 0 24 24" width="12" height="12"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Excel
-            </button>
-            <button class="btn btn-ghost btn-sm" onclick="${r.fn}('pdf')" ${noData?'disabled':''}>
-              <svg viewBox="0 0 24 24" width="12" height="12"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>PDF
-            </button>
-          </div>
-        </div>`).join('')}
-    </div>`;
-  // Build Kardex KPIs
-  if (!noData) setTimeout(_buildKardexGrid, 50);
+  var pg = document.getElementById('pg-reportes');
+  if (!pg) return;
+  var items = _invItems || loadItems();
+  var noData = !items || items.length === 0;
+  var h = [];
+  if (noData) {
+    h.push('<div class="alert-bar" style="background:var(--blue-bg);border-color:#bfdbfe;color:#1d4ed8;margin-bottom:16px">');
+    h.push('<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>');
+    h.push('<span>Los reportes se habilitarán una vez que agregues artículos al inventario.</span>');
+    h.push('</div>');
+  }
+  h.push('<!-- KARDEX: INDICADORES CLAVE -->');
+  h.push('<div id="pg-reportes-kpis"></div>');
+  if (typeof _buildDashboardKPIs === 'function' && items && items.length) {
+    var kpiHtml = _buildDashboardKPIs(items);
+    h.push(kpiHtml||'');
+  }
+  pg.innerHTML = h.join('');
 };
+;
 
 /* ══════════════════════════════════════════════
    EXPORTACIONES MAESTRAS
 ══════════════════════════════════════════════ */
 function getLastMovUser(sku) {
-  const movs = loadMovs().filter(m => m.sku === sku);
+  var movs = loadMovs().filter(function(m) { return m.sku === sku; });
   return movs.length ? movs[0].usuario : '';
 }
 function getLastMovDate(sku) {
-  const movs = loadMovs().filter(m => m.sku === sku);
+  var movs = loadMovs().filter(function(m) { return m.sku === sku; });
   return movs.length ? movs[0].fecha + ' ' + movs[0].hora : '';
 }
 
 function exportMaestro() {
-  const items = loadItems();
+  var items = loadItems();
   if (!items.length) return;
 
-  const WB = XLSX.utils.book_new();
+  var WB = XLSX.utils.book_new();
   WB.Props = { Title: 'Inventario Maestro para Conciliación', Author: 'StockFlow' };
 
   // Build rows with all 31 columns
-  const headers = [
+  var headers = [
     'Código','Código QR','Nombre Artículo','Descripción','Categoría','Subcategoría','Marca',
     'Unidad de Medida','Ubicación','Bodega','Pasillo','Estante','Nivel','Posición',
     'Stock Actual','Stock Mínimo','Stock Máximo','Punto de Reorden',
@@ -9445,14 +9381,14 @@ function exportMaestro() {
     'Conteo Físico','Diferencia','Valor Diferencia','Observación de Conteo','Responsable Conteo','Fecha Conteo'
   ];
 
-  const dataRows = items.map(item => {
-    const ubicParts = (item.ubicacion||'').split('-');
-    const bodega   = ubicParts[0]||'';
-    const pasillo  = ubicParts[1]||'';
-    const estante  = ubicParts[2]||'';
-    const nivel    = ubicParts[3]||'';
-    const posicion = ubicParts[4]||'';
-    const estado   = item.stock === 0 ? 'AGOTADO' : item.stock <= item.stock_minimo ? 'STOCK BAJO' : 'NORMAL';
+  var dataRows = items.map(function(item) {
+    var ubicParts = (item.ubicacion||'').split('-');
+    var bodega   = ubicParts[0]||'';
+    var pasillo  = ubicParts[1]||'';
+    var estante  = ubicParts[2]||'';
+    var nivel    = ubicParts[3]||'';
+    var posicion = ubicParts[4]||'';
+    var estado   = item.stock === 0 ? 'AGOTADO' : item.stock <= item.stock_minimo ? 'STOCK BAJO' : 'NORMAL';
     return [
       item.sku,                                          // SKU
       item.sku,                                          // Código QR (mismo SKU)
@@ -9485,21 +9421,21 @@ function exportMaestro() {
     ];
   });
 
-  const wsData = [headers, ...dataRows];
-  const WS = XLSX.utils.aoa_to_sheet(wsData);
+  var wsData = [headers].concat(dataRows);
+  var WS = XLSX.utils.aoa_to_sheet(wsData);
 
   // Column widths
-  const colWidths = [
+  var colWidths = [
     14,14,40,30,16,16,14,14,16,8,8,8,8,8,
     12,12,12,14,13,13,14,14,22,20,12,22,
     13,13,15,28,20,14
   ];
-  WS['!cols'] = colWidths.map(w => ({ wch: w }));
+  WS['!cols'] = colWidths.map(function(w) { return { wch: w }; });
 
   // Style header row (row 0)
-  const range = XLSX.utils.decode_range(WS['!ref']);
-  for (let C = range.s.c; C <= range.e.c; C++) {
-    const cell = XLSX.utils.encode_cell({ r: 0, c: C });
+  var range = XLSX.utils.decode_range(WS['!ref']);
+  for (var C = range.s.c; C <= range.e.c; C++) {
+    var cell = XLSX.utils.encode_cell({ r: 0, c: C });
     if (!WS[cell]) continue;
     WS[cell].s = {
       fill: { fgColor: { rgb: '1A2B4A' } },
@@ -9510,9 +9446,9 @@ function exportMaestro() {
   }
 
   // Style conciliacion columns (cols 26-31 = Q..AF) with light yellow header
-  const concilStartCol = 26;
-  for (let C = concilStartCol; C <= range.e.c; C++) {
-    const cell = XLSX.utils.encode_cell({ r: 0, c: C });
+  var concilStartCol = 26;
+  for (var C = concilStartCol; C <= range.e.c; C++) {
+    var cell = XLSX.utils.encode_cell({ r: 0, c: C });
     if (!WS[cell]) continue;
     WS[cell].s = {
       fill: { fgColor: { rgb: 'F59E0B' } },
@@ -9522,24 +9458,24 @@ function exportMaestro() {
   }
 
   // Color data rows by estado
-  dataRows.forEach((row, rIdx) => {
-    const r = rIdx + 1; // 0-indexed, row 0 is header
-    const estado = row[24]; // Estado column index
-    let fgColor = null;
+  dataRows.forEach(function(row, rIdx) {
+    var r = rIdx + 1; // 0-indexed, row 0 is header
+    var estado = row[24]; // Estado column index
+    var fgColor = null;
     if (estado === 'AGOTADO')    fgColor = 'FEE2E2'; // red-light
     else if (estado === 'STOCK BAJO') fgColor = 'FEF9C3'; // yellow-light
 
     if (fgColor) {
-      for (let C = 0; C <= 25; C++) {
-        const cell = XLSX.utils.encode_cell({ r, c: C });
+      for (var C = 0; C <= 25; C++) {
+        var cell = XLSX.utils.encode_cell({ r, c: C });
         if (!WS[cell]) { WS[cell] = { v: '', t: 's' }; }
         WS[cell].s = { fill: { fgColor: { rgb: fgColor } } };
       }
     }
 
     // Light blue for conciliacion columns
-    for (let C = concilStartCol; C <= range.e.c; C++) {
-      const cell = XLSX.utils.encode_cell({ r, c: C });
+    for (var C = concilStartCol; C <= range.e.c; C++) {
+      var cell = XLSX.utils.encode_cell({ r, c: C });
       if (!WS[cell]) { WS[cell] = { v: '', t: 's' }; }
       WS[cell].s = { fill: { fgColor: { rgb: 'EFF6FF' } } };
     }
@@ -9551,16 +9487,16 @@ function exportMaestro() {
   XLSX.utils.book_append_sheet(WB, WS, 'Inventario Maestro');
 
   // Summary sheet
-  const total = items.length;
-  const valorTotal = items.reduce((s,i) => s + i.stock*(i.costo||0), 0);
-  const agotados   = items.filter(i => i.stock === 0).length;
-  const bajo       = items.filter(i => i.stock > 0 && i.stock <= i.stock_minimo).length;
-  const sumData = [
+  var total = items.length;
+  var valorTotal = items.reduce(function(s,i) { return s + i.stock*(i.costo||0); }, 0);
+  var agotados   = items.filter(function(i) { return i.stock === 0; }).length;
+  var bajo       = items.filter(function(i) { return i.stock > 0 && i.stock <= i.stock_minimo; }).length;
+  var sumData = [
     ['RESUMEN EJECUTIVO'],
     [''],
     ['Indicador', 'Valor'],
     ['Total referencias', total],
-    ['Total unidades', items.reduce((s,i)=>s+i.stock,0)],
+    ['Total unidades', items.reduce(function(s,i) { return s+i.stock; },0)],
     ['Valor total inventario', +valorTotal.toFixed(2)],
     ['Artículos agotados', agotados],
     ['Artículos stock bajo', bajo],
@@ -9574,7 +9510,7 @@ function exportMaestro() {
     ['4. Completa "Observación de Conteo", "Responsable Conteo" y "Fecha Conteo"'],
     ['5. Usa tablas dinámicas para análisis por categoría, bodega o ubicación'],
   ];
-  const WS2 = XLSX.utils.aoa_to_sheet(sumData);
+  var WS2 = XLSX.utils.aoa_to_sheet(sumData);
   WS2['!cols'] = [{ wch: 40 }, { wch: 25 }];
   XLSX.utils.book_append_sheet(WB, WS2, 'Resumen y Guía');
 
@@ -9584,11 +9520,11 @@ function exportMaestro() {
 }
 
 function exportConciliacionFisica() {
-  const items = loadItems();
+  var items = loadItems();
   if (!items.length) return;
 
-  const WB = XLSX.utils.book_new();
-  const headers = [
+  var WB = XLSX.utils.book_new();
+  var headers = [
     'Código','Nombre Artículo','Categoría','Ubicación','Unidad','Stock Sistema',
     'Stock Mínimo','Estado Sistema','Conteo Físico 1','Responsable 1',
     'Conteo Físico 2 (Verificación)','Responsable 2',
@@ -9596,8 +9532,8 @@ function exportConciliacionFisica() {
     'Semáforo','Observaciones','Fecha Conteo','¿Requiere Ajuste?'
   ];
 
-  const dataRows = items.map(item => {
-    const estado = item.stock===0?'AGOTADO':item.stock<=item.stock_minimo?'STOCK BAJO':'NORMAL';
+  var dataRows = items.map(function(item) {
+    var estado = item.stock===0?'AGOTADO':item.stock<=item.stock_minimo?'STOCK BAJO':'NORMAL';
     return [
       item.sku, item.nombre, item.categoria||'', item.ubicacion||'',
       item.unidad||'UND', item.stock, item.stock_minimo||0, estado,
@@ -9605,13 +9541,13 @@ function exportConciliacionFisica() {
     ];
   });
 
-  const WS = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-  WS['!cols'] = [14,36,14,14,8,12,12,12,14,18,20,18,12,14,14,10,28,14,14].map(w=>({wch:w}));
+  var WS = XLSX.utils.aoa_to_sheet([headers].concat(dataRows));
+  WS['!cols'] = [14,36,14,14,8,12,12,12,14,18,20,18,12,14,14,10,28,14,14].map(function(w) { return {wch:w}; });
 
   // Header styling
-  const range = XLSX.utils.decode_range(WS['!ref']);
-  for (let C = range.s.c; C <= range.e.c; C++) {
-    const cell = XLSX.utils.encode_cell({r:0,c:C});
+  var range = XLSX.utils.decode_range(WS['!ref']);
+  for (var C = range.s.c; C <= range.e.c; C++) {
+    var cell = XLSX.utils.encode_cell({r:0,c:C});
     if (!WS[cell]) continue;
     WS[cell].s = {
       fill:{fgColor:{rgb:C>=8?'F59E0B':'1A2B4A'}},
@@ -9621,10 +9557,10 @@ function exportConciliacionFisica() {
   }
 
   // Alternate row shading
-  dataRows.forEach((row, rIdx) => {
+  dataRows.forEach(function(row, rIdx) {
     if (rIdx % 2 === 0) return;
-    for (let C = 0; C <= range.e.c; C++) {
-      const cell = XLSX.utils.encode_cell({r:rIdx+1,c:C});
+    for (var C = 0; C <= range.e.c; C++) {
+      var cell = XLSX.utils.encode_cell({r:rIdx+1,c:C});
       if (!WS[cell]) WS[cell] = {v:'',t:'s'};
       WS[cell].s = { fill:{fgColor:{rgb:'F8FAFC'}} };
     }
@@ -9634,7 +9570,7 @@ function exportConciliacionFisica() {
   XLSX.utils.book_append_sheet(WB, WS, 'Conteo Físico');
 
   // Instructions sheet
-  const inst = XLSX.utils.aoa_to_sheet([
+  var inst = XLSX.utils.aoa_to_sheet([
     ['INSTRUCCIONES PARA EL CONTEO FÍSICO'],[''],
     ['Paso','Acción'],
     ['1','Imprime esta hoja o trabaja directamente en Excel con tablet/laptop'],
@@ -9655,49 +9591,50 @@ function exportConciliacionFisica() {
 }
 
 function exportAuditoriaExcel() {
-  const WB = XLSX.utils.book_new();
+  var WB = XLSX.utils.book_new();
 
   // Sheet 1: Movimientos detallados
-  const movs = loadMovs();
-  const movHeaders = ['Fecha','Hora','Tipo','Código','Artículo','Cantidad','Stock Anterior','Stock Resultante','Variación','Usuario','Área','Proveedor','Factura','Observación'];
-  const movRows = movs.map(m => [
+  var movs = loadMovs();
+  var movHeaders = ['Fecha','Hora','Tipo','Código','Artículo','Cantidad','Stock Anterior','Stock Resultante','Variación','Usuario','Área','Proveedor','Factura','Observación'];
+  var movRows = movs.map(function(m) { return [
     m.fecha, m.hora, m.tipo, m.sku, m.articulo,
     m.cantidad, m.stock_anterior, m.stock_resultante,
     m.stock_resultante - m.stock_anterior,
     m.usuario, m.area||'', m.proveedor||'', m.factura||'', m.observacion||''
-  ]);
-  const WS1 = XLSX.utils.aoa_to_sheet([movHeaders,...movRows]);
-  WS1['!cols'] = [12,10,14,14,36,10,14,14,10,18,14,16,12,28].map(w=>({wch:w}));
-  for (let C = 0; C < movHeaders.length; C++) {
-    const cell = XLSX.utils.encode_cell({r:0,c:C});
+  ]; });
+  var WS1 = XLSX.utils.aoa_to_sheet([movHeaders].concat(movRows));
+  WS1['!cols'] = [12,10,14,14,36,10,14,14,10,18,14,16,12,28].map(function(w) { return {wch:w}; });
+  for (var C = 0; C < movHeaders.length; C++) {
+    var cell = XLSX.utils.encode_cell({r:0,c:C});
     if (!WS1[cell]) continue;
     WS1[cell].s = { fill:{fgColor:{rgb:'1A2B4A'}}, font:{bold:true,color:{rgb:'FFFFFF'},sz:9} };
   }
   XLSX.utils.book_append_sheet(WB, WS1, 'Movimientos');
 
   // Sheet 2: Auditoría de acciones
-  const audit = loadAudit();
-  const auditHeaders = ['Fecha','Hora','Acción','Detalle','Usuario'];
-  const auditRows = audit.map(a => [a.fecha, a.hora, a.accion, a.detalle, a.usuario]);
-  const WS2 = XLSX.utils.aoa_to_sheet([auditHeaders,...auditRows]);
+  var audit = loadAudit();
+  var auditHeaders = ['Fecha','Hora','Acción','Detalle','Usuario'];
+  var auditRows = audit.map(function(a) { return [a.fecha, a.hora, a.accion, a.detalle, a.usuario]; });
+  var WS2 = XLSX.utils.aoa_to_sheet([auditHeaders].concat(auditRows));
   WS2['!cols'] = [{wch:12},{wch:10},{wch:20},{wch:60},{wch:22}];
-  for (let C = 0; C < auditHeaders.length; C++) {
-    const cell = XLSX.utils.encode_cell({r:0,c:C});
+  for (var C = 0; C < auditHeaders.length; C++) {
+    var cell = XLSX.utils.encode_cell({r:0,c:C});
     if (!WS2[cell]) continue;
     WS2[cell].s = { fill:{fgColor:{rgb:'1A2B4A'}}, font:{bold:true,color:{rgb:'FFFFFF'},sz:9} };
   }
   XLSX.utils.book_append_sheet(WB, WS2, 'Auditoría Acciones');
 
   // Sheet 3: Inventario snapshot
-  const items = loadItems();
-  const invHeaders = ['Código','Nombre','Ubicación','Stock','Estado','Valor Total','Última Entrada','Última Salida'];
-  const invRows = items.map(i => [
+  var items = loadItems();
+  var invHeaders = ['Código','Nombre','Ubicación','Stock','Estado','Valor Total','Última Entrada','Última Salida'];
+  var invRows = items.map(function(i) { return [
     i.sku, i.nombre, i.ubicacion||'', i.stock,
     i.stock===0?'AGOTADO':i.stock<=i.stock_minimo?'STOCK BAJO':'NORMAL',
-    +(i.stock*(i.costo||0)).toFixed(2),
+    (i.stock*(i.costo||0)).toFixed(2),
     i.ultima_entrada||'', i.ultima_salida||''
-  ]);
-  const WS3 = XLSX.utils.aoa_to_sheet([invHeaders,...invRows]);
+  ]; })
+  var WS3data = [invHeaders].concat(invRows);
+  var WS3 = XLSX.utils.aoa_to_sheet(WS3data);
   WS3['!cols'] = [{wch:14},{wch:38},{wch:14},{wch:10},{wch:12},{wch:14},{wch:14},{wch:14}];
   XLSX.utils.book_append_sheet(WB, WS3, 'Snapshot Inventario');
 
@@ -11690,58 +11627,59 @@ function checkBodegaBloqueo(articuloId) {
 
 
 renders.auditoria = function() {
-  const audit = loadAudit() || [];
-  const movs  = loadMovs()  || [];
-  const items = (_invItems && _invItems.length > 0) ? _invItems : (_getItems() || []);
-  if (items.length === 0 && movs.length === 0) {
-    document.getElementById('pg-auditoria').innerHTML = `
-      <div class="empty-state">
-        <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <p>La auditoría registrará todas las acciones del sistema.<br>Comenzará a poblarse cuando agregues artículos<br>y uses la aplicación.</p>
-      </div>`;
+  var pg = document.getElementById('pg-auditoria');
+  if (!pg) return;
+  var rol = SESSION.user && SESSION.user.rol || '';
+  var canAudit = rol==='SUPER ADMINISTRADOR'||rol==='ADMINISTRADOR'||rol==='AUDITOR';
+  if (!canAudit) {
+    pg.innerHTML = '<div class="empty-state"><p>Sin permiso para ver auditoría</p></div>';
     return;
   }
-  const rows = audit.slice(0,300).map(a => `
-    <tr>
-      <td style="white-space:nowrap"><div style="font-size:12px">${a.fecha}</div><div style="font-size:10px;color:var(--muted)">${a.hora}</div></td>
-      <td>${badgeAudit(a.accion)}</td>
-      <td style="font-size:12px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.detalle}</td>
-      <td class="hide-m" style="font-size:12px">${a.usuario}</td>
-    </tr>`).join('');
+  var audit = DB.get('auditoria') || [];
+  var tech  = DB.get('auditoria_tecnica') || [];
+  var h = [];
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">');
+  h.push('<h3 style="margin:0;font-size:16px">🛡️ Auditoría del Sistema</h3>');
+  h.push('<div style="display:flex;gap:8px">');
+  if (tech.length > 0) {
+    h.push('<button class="btn btn-ghost btn-sm" onclick="limpiarAuditoriaTecnica();closeModal();showToast(\'Auditoría técnica limpiada\',\'green\')" style="color:var(--amber)">🧹 Limpiar errores</button>');
+  }
+  h.push('<button class="btn btn-ghost btn-sm" onclick="exportarAuditoriaExcel&&exportarAuditoriaExcel()" style="color:var(--electric)">📥 Exportar</button>');
+  h.push('</div></div>');
 
-  document.getElementById('pg-auditoria').innerHTML = `
-    <div class="toolbar">
-      <div style="font-size:12px;color:var(--muted)">Registro inmutable de todas las acciones del sistema</div>
-      <button class="btn btn-ghost btn-sm" onclick="exportAuditoria()">
-        <svg viewBox="0 0 24 24" width="13" height="13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Exportar
-      </button>
-    </div>
-    <div class="tbl-wrap"><div class="tbl-overflow">
-      <table>
-        <thead><tr><th>Fecha / Hora</th><th>Acción</th><th>Detalle</th><th class="hide-m">Usuario</th></tr></thead>
-        <tbody id="inv-tbody">${rows}</tbody>
-      </table>
-    </div></div>
-    <p style="font-size:11px;color:var(--muted);margin-top:8px">Total: ${audit.length} registros</p>
-    \`;
-    // Auditoría técnica section
-    var techAudit = [];
-    try { techAudit = JSON.parse(localStorage.getItem('sf_auditoria_tecnica') || '[]'); } catch(e){}
-    var techSection = '';
-    if (techAudit.length > 0) {
-      techSection = '<div style="margin-top:16px;padding:12px;background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:10px">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
-        '<p style="font-size:12px;font-weight:700;color:#f87171">⚠️ Auditoría Técnica: ' + techAudit.length + ' registros</p>' +
-        '<button class="btn btn-ghost btn-sm" onclick="limpiarAuditoriaTecnica();renders.auditoria()" style="font-size:11px;color:#4ade80">🧹 Limpiar</button>' +
-        '</div>' +
-        techAudit.slice(0,20).map(function(r) {
-          return '<div style="font-size:11px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.05);color:'+(r.tipo_error==='CORRECCIÓN'||r.tipo_error==='INFO'?'var(--muted)':'#f87171')+'">' +
-            r.fecha + ' ' + r.hora + ' — <strong>' + r.modulo + '</strong>: ' + r.descripcion + '</div>';
-        }).join('') +
-        (techAudit.length > 20 ? '<p style="font-size:10px;color:var(--muted);margin-top:6px">... y ' + (techAudit.length-20) + ' más</p>' : '') +
-        '</div>';
-    }
-    document.getElementById('pg-auditoria').innerHTML += techSection;};
+  if (!audit.length && !tech.length) {
+    h.push('<div class="empty-state"><p>Sin registros de auditoría</p></div>');
+    pg.innerHTML = h.join(''); return;
+  }
+
+  // Tabla principal
+  h.push('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">');
+  h.push('<thead><tr style="background:rgba(255,255,255,.04);border-bottom:2px solid rgba(255,255,255,.08)">');
+  ['Fecha','Hora','Acción','Descripción','Usuario','Empresa'].forEach(function(col){
+    h.push('<th style="padding:8px;font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);text-align:left">'+col+'</th>');
+  });
+  h.push('</tr></thead><tbody>');
+
+  var rows = audit.slice(0,300);
+  if (!rows.length) {
+    h.push('<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--muted)">Sin registros</td></tr>');
+  } else {
+    rows.forEach(function(a) {
+      var clr = a.tipo==='LOGIN'?'#4ade80':a.tipo==='LOGOUT'?'#f87171':a.tipo&&a.tipo.includes('ERROR')?'#ef4444':'#94a3b8';
+      h.push('<tr style="border-bottom:1px solid rgba(255,255,255,.04)">');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted);white-space:nowrap">'+(a.fecha||'—')+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted);white-space:nowrap">'+(a.hora||'—')+'</td>');
+      h.push('<td style="padding:7px 8px"><span style="font-size:10px;font-weight:700;color:'+clr+';background:'+clr+'18;padding:2px 8px;border-radius:20px;white-space:nowrap">'+(a.tipo||'—')+'</span></td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(a.descripcion||'')+'">'+(a.descripcion||'—')+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+(a.usuario||'Sistema')+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+(a.empresa||'—')+'</td>');
+      h.push('</tr>');
+    });
+  }
+  h.push('</tbody></table></div>');
+  pg.innerHTML = h.join('');
+};
+;
 
 function badgeAudit(accion) {
   if (accion === 'LOGIN')  return '<span class="badge b-ok">LOGIN</span>';
@@ -11755,8 +11693,8 @@ function badgeAudit(accion) {
 }
 
 function exportAuditoria() {
-  const audit = loadAudit();
-  const data = audit.map(a => ({ 'Fecha':a.fecha,'Hora':a.hora,'Acción':a.accion,'Detalle':a.detalle,'Usuario':a.usuario }));
+  var audit = loadAudit();
+  var data = audit.map(function(a) { return { 'Fecha':a.fecha,'Hora':a.hora,'Acción':a.accion,'Detalle':a.detalle,'Usuario':a.usuario }; });
   exportExcel([{name:'Auditoría', data}], 'auditoria');
 }
 
@@ -11798,17 +11736,18 @@ renders.usuarios = function() {
     })
     .catch(function(){});
 
-  const users = loadUsers();
-  const myId  = SESSION.user && SESSION.user.id;
-  const myUser= SESSION.user && SESSION.user.username;
-  const rows = users.map(u => {
-    const isSuperAdmRow = u.rol === 'SUPER ADMINISTRADOR';
+  var users = loadUsers();
+  var myId  = SESSION.user && SESSION.user.id;
+  var myUser= SESSION.user && SESSION.user.username;
+  var rows = users.map(function(u) {
+    var isSuperAdmRow = u.rol === 'SUPER ADMINISTRADOR';
     // Admin account (username='admin') is also fully protected for all other users
-    const isAdminAccount= u.username === 'admin' || u.username === 'administrador';
-    const isProtectedRow= isSuperAdmRow || isAdminAccount;
-    const isMe          = u.id === myId || u.username === myUser;
-    const canActOnUser  = !isProtectedRow && !isMe;
+    var isAdminAccount= u.username === 'admin' || u.username === 'administrador';
+    var isProtectedRow= isSuperAdmRow || isAdminAccount;
+    var isMe          = u.id === myId || u.username === myUser;
+    var canActOnUser  = !isProtectedRow && !isMe;
     return _buildUserRow(u, isSuperAdmRow, isProtectedRow, isMe, canActOnUser);
+  });
 
 };
 
@@ -11853,8 +11792,8 @@ function nuevoUsuario() {
 }
 
 function checkPwdReqs(inputId, reqsId) {
-  const pwd = document.getElementById(inputId).value;
-  const set = (id, ok) => { const e=document.getElementById(id); if(e){e.className=ok?'pwd-ok':'pwd-fail';e.textContent=(ok?'✓':'✗')+e.textContent.slice(1)} };
+  var pwd = document.getElementById(inputId).value;
+  var set = function(id, ok) { var e=document.getElementById(id); if(e){e.className=ok?'pwd-ok':'pwd-fail';e.textContent=(ok?'✓':'✗')+e.textContent.slice(1)} };
   set('req-len', pwd.length >= 8);
   set('req-may', /[A-Z]/.test(pwd));
   set('req-min', /[a-z]/.test(pwd));
@@ -11862,15 +11801,15 @@ function checkPwdReqs(inputId, reqsId) {
 }
 
 function guardarUsuario() {
-  const nom  = document.getElementById('u-nom').value.trim();
-  const doc  = document.getElementById('u-doc').value.trim();
-  const mail = document.getElementById('u-mail').value.trim().toLowerCase();
-  const user = document.getElementById('u-user').value.trim().toLowerCase();
-  const pwd  = document.getElementById('u-pwd').value;
-  const rol  = document.getElementById('u-rol').value || 'CONSULTA';
-  const tel  = (document.getElementById('u-tel')||{}).value || '';
-  const cargo= (document.getElementById('u-cargo')||{}).value || '';
-  const area = (document.getElementById('u-area')||{}).value || '';
+  var nom  = document.getElementById('u-nom').value.trim();
+  var doc  = document.getElementById('u-doc').value.trim();
+  var mail = document.getElementById('u-mail').value.trim().toLowerCase();
+  var user = document.getElementById('u-user').value.trim().toLowerCase();
+  var pwd  = document.getElementById('u-pwd').value;
+  var rol  = document.getElementById('u-rol').value || 'CONSULTA';
+  var tel  = (document.getElementById('u-tel')||{}).value || '';
+  var cargo= (document.getElementById('u-cargo')||{}).value || '';
+  var area = (document.getElementById('u-area')||{}).value || '';
 
   if (!nom||!user||!pwd) { alert('Nombre, usuario y contraseña son obligatorios'); return; }
   if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(pwd)) {
@@ -11878,12 +11817,12 @@ function guardarUsuario() {
     return;
   }
 
-  const users = loadUsers();
-  if (users.find(u => u.username === user))  { alert('Ese nombre de usuario ya existe'); return; }
-  if (mail && users.find(u => u.correo === mail)) { alert('Ese correo ya está registrado'); return; }
+  var users = loadUsers();
+  if (users.find(function(u) { return u.username === user; }))  { alert('Ese nombre de usuario ya existe'); return; }
+  if (mail && users.find(function(u) { return u.correo === mail; })) { alert('Ese correo ya está registrado'); return; }
 
-  const hash = simpleHash(pwd);
-  const newUser = {
+  var hash = simpleHash(pwd);
+  var newUser = {
     id: uid(), nombre: nom, documento: doc, correo: mail,
     telefono: tel, username: user, password: hash,
     cargo, area, rol, estado: 'ACTIVO', intentos: 0,
@@ -11972,8 +11911,8 @@ function _guardarEdicionUsuario(id) {
 }
 
 function actualizarUsuario(id) {
-  const users = loadUsers();
-  const idx = users.findIndex(u => u.id === id);
+  var users = loadUsers();
+  var idx = users.findIndex(function(u) { return u.id === id; });
   if (idx < 0) return;
   Object.assign(users[idx], {
     nombre: document.getElementById('eu-nom').value.trim(),
@@ -11990,11 +11929,11 @@ function actualizarUsuario(id) {
 }
 
 function resetPassword(id) {
-  const nueva = prompt('Nueva contraseña (mín. 8 chars, mayúscula, minúscula, número):');
+  var nueva = prompt('Nueva contraseña (mín. 8 chars, mayúscula, minúscula, número):');
   if (!nueva) return;
   if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(nueva)) { alert('La contraseña no cumple los requisitos'); return; }
-  const users = loadUsers();
-  const idx = users.findIndex(u => u.id === id);
+  var users = loadUsers();
+  var idx = users.findIndex(function(u) { return u.id === id; });
   if (idx < 0) return;
   users[idx].password = simpleHash(nueva);
   users[idx].intentos = 0;
@@ -12006,8 +11945,8 @@ function resetPassword(id) {
 }
 
 function toggleUserStatus(id) {
-  const users = loadUsers();
-  const idx = users.findIndex(u => u.id === id);
+  var users = loadUsers();
+  var idx = users.findIndex(function(u) { return u.id === id; });
   if (idx < 0) return;
   users[idx].estado = users[idx].estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
   saveUsers(users);
@@ -12019,15 +11958,15 @@ function toggleUserStatus(id) {
    TOAST
 ══════════════════════════════════════════════ */
 function showToast(msg, type) {
-  const t = document.createElement('div');
-  const bg = type==='green'?'#16a34a':type==='red'?'#dc2626':'#1a2b4a';
-  t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:'+bg+';color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.2);animation:slideIn .2s ease`;
+  var t = document.createElement('div');
+  var bg = type==='green'?'#16a34a':type==='red'?'#dc2626':'#1a2b4a';
+  t.style.cssText = 'position:fixed;bottom:20px;right:20px;background:'+bg+';color:#fff;padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,.2);animation:slideIn .2s ease';
   t.textContent = msg;
-  const style = document.createElement('style');
+  var style = document.createElement('style');
   style.textContent = '@keyframes slideIn{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}';
   document.head.appendChild(style);
   document.body.appendChild(t);
-  setTimeout(() => t.remove(), 3000);
+  setTimeout(function() { t.remove(); }, 3000);
 }
 
 /* ══════════════════════════════════════════════
@@ -12035,59 +11974,63 @@ function showToast(msg, type) {
 ══════════════════════════════════════════════ */
 function globalSearch(q) {
   if (!q || q.trim().length < 2) return [];
-  const ql = q.trim().toLowerCase();
-  return loadItems().filter(i =>
-    i.sku.toLowerCase().includes(ql) ||
-    i.nombre.toLowerCase().includes(ql) ||
-    (i.categoria||'').toLowerCase().includes(ql) ||
-    (i.descripcion||'').toLowerCase().includes(ql) ||
-    (i.ubicacion||'').toLowerCase().includes(ql) ||
-    (i.marca||'').toLowerCase().includes(ql) ||
-    (i.proveedor||'').toLowerCase().includes(ql)
-  ).slice(0, 20);
+  var ql = q.trim().toLowerCase();
+  return loadItems().filter(function(i) {
+    return (i.sku||'').toLowerCase().includes(ql) ||
+      (i.nombre||'').toLowerCase().includes(ql) ||
+      (i.categoria||'').toLowerCase().includes(ql) ||
+      (i.descripcion||'').toLowerCase().includes(ql) ||
+      (i.ubicacion||'').toLowerCase().includes(ql) ||
+      (i.marca||'').toLowerCase().includes(ql) ||
+      (i.proveedor||'').toLowerCase().includes(ql);
+  }).slice(0, 20);
 }
 
 function highlightText(text, q) {
   if (!q) return text;
-  const re = new RegExp('(' + q.replace(/[.*+?${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+  var re = new RegExp('(' + q.replace(/[.*+?${}()|[\]\\]/g,'\\$&') + ')', 'gi');
   return String(text).replace(re, '<mark>$1</mark>');
 }
 
 // Topbar search
-let searchTimer2;
+var searchTimer2;
 
 function doGlobalSearch(q) {
-  const results = globalSearch(q);
-  const el = document.getElementById('global-results');
+  var results = globalSearch(q);
+  var el = document.getElementById('global-results');
   if (!el) return;
   if (!q || q.length < 2) {
     el.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:12px">Escribe al menos 2 caracteres</p>';
     return;
   }
   if (!results.length) {
-    el.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:12px">Sin resultados para "'+q+'"</p>';
+    el.innerHTML = '<p style="font-size:12px;color:var(--muted);text-align:center;padding:12px">Sin resultados para: <strong>'+q+'</strong></p>';
     return;
   }
-  el.innerHTML = results.map(item => {
-    const bajo = item.stock <= item.stock_minimo;
-    const agot = item.stock === 0;
-    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f1f5f9;cursor:pointer" onclick="closeModal();goto('detalle','${item.id}')">
-      <div style="flex:1;min-width:0">
-        <div style="display:flex;align-items:center;gap:7px;margin-bottom:2px">
-          <span class="sku" style="font-size:10.5px">${highlightText(item.sku, q)}</span>
-          <span class="badge ${agot?'b-low':bajo?'b-warn':'b-ok'}" style="font-size:9.5px">${agot?'Agotado':bajo?'Bajo':'OK'}</span>
-        </div>
-        <p style="font-size:12.5px;font-weight:600;color:var(--navy)">${highlightText(item.nombre, q)}</p>
-        <p style="font-size:11px;color:var(--muted)">${highlightText(item.categoria||'', q)}${item.ubicacion?' · '+highlightText(item.ubicacion, q):''}</p>
-      </div>
-      <div style="text-align:right;flex-shrink:0">
-        <p style="font-weight:700;font-size:14px;color:${agot?'var(--red)':bajo?'#b45309':'var(--green)'}">${item.stock}</p>
-        <p style="font-size:10px;color:var(--muted)">${item.unidad||'UND'}</p>
-      </div>
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#94a3b8" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-    </div>`;
-  }).join('') + (results.length === 20 ? `<p style="font-size:11px;color:var(--muted);text-align:center;padding:8px">Mostrando primeros 20 resultados.</p>` : '');
+  var h = [];
+  results.slice(0,20).forEach(function(item) {
+    var sku   = item.sku||item.codigo||'—';
+    var nom   = item.nombre||'—';
+    var cat   = item.categoria||'';
+    var stock = Number(item.stock||0);
+    var stClr = stock<=0?'#ef4444':stock<(item.stock_minimo||10)?'#f59e0b':'#4ade80';
+    h.push('<div onclick="closeModal();goto(\'inventario\');window._invSearchStr=\''+sku+'\';setTimeout(function(){filterInventarioTable&&filterInventarioTable()},300)"');
+    h.push(' style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;border-radius:6px;padding:8px"');
+    h.push(' onmouseenter="this.style.background=\'rgba(255,255,255,.04)\'" onmouseleave="this.style.background=\'\'">');
+    h.push('<div style="width:36px;height:36px;border-radius:8px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">📦</div>');
+    h.push('<div style="flex:1;min-width:0">');
+    h.push('<div style="font-size:12px;font-weight:600;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+nom+'</div>');
+    h.push('<div style="font-size:10px;color:var(--muted)">'+sku+(cat?' · '+cat:'')+'</div>');
+    h.push('</div>');
+    h.push('<div style="font-size:12px;font-weight:700;color:'+stClr+';flex-shrink:0">'+stock+'</div>');
+    h.push('</div>');
+  });
+  if (results.length > 20) {
+    h.push('<p style="font-size:11px;color:var(--muted);text-align:center;padding:8px">...y '+(results.length-20)+' más</p>');
+  }
+  el.innerHTML = h.join('');
 }
+
 
 /* ══════════════════════════════════════════════
    RENDER: IMPORTAR EXCEL
