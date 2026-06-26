@@ -1710,8 +1710,6 @@ var _invItems     = null;
 var _invFetching  = false;
 var _provSearch   = '';
 var _bodSearch    = '';
-var _histData     = null;
-var _histFetching = false;
 const DB = {
   get: k => { try { return JSON.parse(localStorage.getItem('erp_'+k)||'null') } catch { return null } },
   set: (k,v) => localStorage.setItem('erp_'+k, JSON.stringify(v)),
@@ -1720,6 +1718,32 @@ const DB = {
 // ── Initial data seed ──────────────────────────────────
 // Verificar planes vencidos al cargar el sistema
 try { if (typeof _checkPlanesVencidos === 'function') _checkPlanesVencidos(); } catch(e){}
+
+// ── Arranque del sistema ─────────────────────────────────────────────────
+// Se ejecuta DESPUÉS de que todas las funciones están definidas
+document.addEventListener('DOMContentLoaded', function() {
+  // 1. Sembrar datos de prueba si es primera vez
+  try { seed(); } catch(e) { console.error('seed error:', e); }
+
+  // 2. Restaurar sesión si existe
+  try {
+    var saved = DB.get('session');
+    if (saved && saved.user && saved.user.id) {
+      SESSION.user = saved.user;
+      _completarLogin(saved.user);
+    } else {
+      // Sin sesión: mostrar pantalla de login
+      var lv = document.getElementById('login-view');
+      var av = document.getElementById('app-view');
+      if (lv) lv.style.display = '';
+      if (av) av.style.display = 'none';
+    }
+  } catch(e) {
+    console.error('session restore error:', e);
+    var lv = document.getElementById('login-view');
+    if (lv) lv.style.display = '';
+  }
+});
 
 function seed() {
   var SEED_VERSION = 'v5_2026'; // v5: refactoring SaaS + KPI Engine + template empresa // v4: credenciales simplificadas, hash corregido
@@ -2526,6 +2550,7 @@ function doLogin() {
 
 function _completarLogin(user) {
   SESSION.user = user;
+  try { DB.set('session', { user: user }); } catch(e) {}
   auditLog('LOGIN', 'Inicio de sesión', user.nombre);
 
   var lv = document.getElementById('login-view');
@@ -2563,6 +2588,7 @@ function _completarLogin(user) {
 function doLogout() {
   auditLog('LOGOUT', 'Cierre de sesión', (SESSION.user && SESSION.user.nombre));
   SESSION.user = null;
+  try { DB.set('session', null); } catch(e) {}
   document.getElementById('app-view').style.display = 'none';
   document.getElementById('login-view').style.display = '';
   document.getElementById('l-pwd').value = '';
@@ -2807,6 +2833,30 @@ function _renderInvProductos(q) {
       });
   }
 };
+
+/* ── _renderDashboardEjecutivo = Dashboard Gerencial completo ─────────── */
+function _renderDashboardEjecutivo() {
+  // Render KPI gerencial directo en pg-dashboard
+  var pg = document.getElementById('pg-dashboard');
+  if (!pg) return;
+  try {
+    var K = (typeof _KPI_get === 'function') ? _KPI_get({}) : null;
+    if (K) {
+      _renderGerencial(K, 'pg-dashboard'); // render en dashboard
+      // Si _renderGerencial escribe en pg-gerencial, copiar a pg-dashboard
+      var pgG = document.getElementById('pg-gerencial');
+      if (pgG && pgG.innerHTML && !pg.innerHTML) {
+        pg.innerHTML = pgG.innerHTML;
+        pgG.innerHTML = '';
+      }
+    } else {
+      _renderDashboardOperativo();
+    }
+  } catch(e) {
+    console.error('Dashboard ejecutivo error:', e);
+    _renderDashboardOperativo();
+  }
+}
 
 renders.dashboard = function() {
   // Dashboard Inteligente — adapta según rol del usuario
@@ -5266,8 +5316,9 @@ renders.gerencial = function() {
   }, 50);
 };
 
-function _renderGerencial(K) {
-  var pg = document.getElementById('pg-gerencial');
+function _renderGerencial(K, targetId) {
+  var pg = document.getElementById(targetId || 'pg-gerencial');
+  if (!pg) pg = document.getElementById('pg-gerencial');
   if (!pg) return;
 
   function fmt(n)  { return Number(n||0).toLocaleString('es-CO'); }
