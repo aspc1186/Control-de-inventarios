@@ -535,7 +535,7 @@ mark{background:rgba(255,184,0,.3);color:var(--amber);border-radius:3px;padding:
   position:fixed;top:0;left:0;width:100vw;height:100vh;
   display:flex;z-index:9000;background:#070E1C;
 }
-.login-shell.hidden{display:none!important;}
+.login-shell.hidden{display:none!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important;}
 .login-left{
   width:45%;
   background:linear-gradient(135deg,#070E1C 0%,#0B1F3A 50%,#081628 100%);
@@ -2573,9 +2573,16 @@ function _completarLogin(user) {
     lv.style.display = 'none';
     lv.style.visibility = 'hidden';
     lv.style.pointerEvents = 'none';
+    lv.style.zIndex = '-1';
+    lv.style.opacity = '0';
     lv.classList.add('hidden');
   }
-  if (av) { av.style.display = 'flex'; av.style.flexDirection = 'column'; }
+  if (av) {
+    av.style.display = 'flex';
+    av.style.flexDirection = 'column';
+    av.style.zIndex = '1';
+    av.style.position = 'relative';
+  }
 
   var ni = document.getElementById('nav-user-info');
   if (ni) ni.textContent = user.nombre + ' · ' + user.rol;
@@ -2592,14 +2599,16 @@ function _completarLogin(user) {
     if (cached && cached.length > 0) { _invItems = cached; }
   }
 
-  // ── Navigate to dashboard ─────────────────────────────────────────
+  // ── Navigate to dashboard (after DOM flush) ───────────────────────
   var destino = 'dashboard';
   if (SESSION.user && SESSION.user.rol === 'CONSULTA DE PRODUCTOS') {
     destino = 'consulta-productos';
   }
-  try {
-    goto(destino);
-  } catch(e) {
+  // Use setTimeout(0) to allow browser to process display:none before goto
+  setTimeout(function() {
+    try {
+      goto(destino);
+    } catch(e) {
     console.error('[SF] goto error:', e);
     // Fallback: mostrar dashboard manualmente
     document.querySelectorAll('.page-inner > div').forEach(function(d){ d.style.display='none'; });
@@ -2610,7 +2619,8 @@ function _completarLogin(user) {
       console.error('[SF] renders.dashboard error:', e2);
       if (pg) pg.innerHTML = '<div style="padding:30px;color:white"><h2>✅ Sesión iniciada</h2><p>Bienvenido, ' + user.nombre + '</p></div>';
     }
-  }
+    }
+  }, 0);
 
   // Background sync desde Neon
   try { _syncAllFromNeon(null); } catch(e) {}
