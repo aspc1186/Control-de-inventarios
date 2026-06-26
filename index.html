@@ -2730,8 +2730,12 @@ function goto(page, param) {
   closeSidebar();
   var pgEl = document.getElementById('pg-'+page);
   if (pgEl) pgEl.style.display = '';
-  refreshAlertBadge();
-  if (renders[page]) renders[page](param);
+  try { refreshAlertBadge(); } catch(e) {}
+  try {
+    if (renders[page]) renders[page](param);
+  } catch(e) {
+    console.error('[SF] render error for', page, ':', e);
+  }
 }
 
 
@@ -2913,25 +2917,30 @@ function _renderDashboardEjecutivo() {
 }
 
 renders.dashboard = function() {
-  console.log('[SF] renders.dashboard called, rol:', SESSION.user && SESSION.user.rol);
-  // Dashboard Inteligente — adapta según rol del usuario
-  var rol = SESSION.user && SESSION.user.rol || '';
-  var isSA  = rol === 'SUPER ADMINISTRADOR';
-  var isGer = rol === 'SUPER ADMINISTRADOR' || rol === 'ADMINISTRADOR' || rol === 'JEFE INVENTARIOS';
-  var isAlm = rol === 'ALMACENISTA';
-  var isCom = rol === 'COMPRAS';
+  console.log('[SF] renders.dashboard, rol:', SESSION.user && SESSION.user.rol);
+  var pg = document.getElementById('pg-dashboard');
+  if (!pg) { console.error('[SF] pg-dashboard NOT FOUND'); return; }
 
-  if (isGer) {
-    // Vista ejecutiva completa con KPI Engine
-    _renderDashboardEjecutivo();
-    return;
+  var rol = (SESSION.user && SESSION.user.rol) || '';
+  var isGer = rol==='SUPER ADMINISTRADOR'||rol==='ADMINISTRADOR'||rol==='JEFE INVENTARIOS';
+
+  try {
+    if (isGer) { _renderDashboardEjecutivo(); }
+    else if (rol==='ALMACENISTA') { _renderDashboardAlmacenista(); }
+    else { _renderDashboardOperativo(); }
+  } catch(e) {
+    console.error('[SF] dashboard render error:', e);
+    // Fallback mínimo garantizado
+    var user = SESSION.user || {};
+    pg.innerHTML = '<div style="padding:30px">'
+      + '<h2 style="color:#f1f5f9;margin-bottom:16px">👋 Bienvenido, ' + (user.nombre||'Usuario') + '</h2>'
+      + '<p style="color:#94a3b8;margin-bottom:20px">Rol: ' + (user.rol||'—') + '</p>'
+      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">'
+      + '<div onclick="goto(\'inventario\')" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:12px;padding:20px;cursor:pointer;text-align:center"><div style="font-size:28px">📦</div><div style="color:#f1f5f9;margin-top:8px;font-weight:600">Inventario</div></div>'
+      + '<div onclick="goto(\'proveedores\')" style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);border-radius:12px;padding:20px;cursor:pointer;text-align:center"><div style="font-size:28px">🏭</div><div style="color:#f1f5f9;margin-top:8px;font-weight:600">Proveedores</div></div>'
+      + '<div onclick="goto(\'gerencial\')" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3);border-radius:12px;padding:20px;cursor:pointer;text-align:center"><div style="font-size:28px">📊</div><div style="color:#f1f5f9;margin-top:8px;font-weight:600">Analítica</div></div>'
+      + '</div></div>';
   }
-  if (isAlm) {
-    _renderDashboardAlmacenista();
-    return;
-  }
-  // Default operativo
-  _renderDashboardOperativo();
 };
 
 function _renderDashboardAlmacenista() {
