@@ -1740,7 +1740,12 @@ document.addEventListener('DOMContentLoaded', function() {
       var allU = DB.get('usuarios') || [];
       var freshUser = allU.find(function(u){ return u.id === saved.user.id; });
       if (freshUser && freshUser.estado === 'ACTIVO') {
-        // Usar datos frescos del localStorage (con hash actualizado por seed)
+        // Ocultar login PRIMERO, luego completar login
+        var lvInit = document.getElementById('login-view');
+        if (lvInit) {
+          lvInit.style.cssText = 'display:none!important;visibility:hidden!important;opacity:0!important;z-index:-1!important;pointer-events:none!important';
+          lvInit.classList.add('hidden');
+        }
         SESSION.user = freshUser;
         _completarLogin(freshUser);
       } else {
@@ -2601,6 +2606,8 @@ function showErr(msg) {
 }
 
 function doLogin() {
+  if (window._loginInProgress) return;
+  window._loginInProgress = true;
   var login  = (document.getElementById('l-login').value||'').trim().toLowerCase();
   var pwd    = (document.getElementById('l-pwd').value||'');
   var errEl  = document.getElementById('l-error');
@@ -2613,6 +2620,7 @@ function doLogin() {
   if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
 
   function restoreBtn() {
+    window._loginInProgress = false;
     if (btn) { btn.disabled = false; btn.textContent = 'Ingresar al sistema'; }
   }
 
@@ -2684,6 +2692,7 @@ function doLogin() {
 }
 
 function _completarLogin(user) {
+  window._loginInProgress = false; // liberar guard
   SESSION.user = user;
   try { DB.set('session', { user: user }); } catch(e) {}
   // Auditoría completa de acceso
@@ -2886,10 +2895,18 @@ function goto(page, param) {
   var pgEl = document.getElementById('pg-'+page);
   if (pgEl) pgEl.style.display = '';
   try { refreshAlertBadge(); } catch(e) {}
+  // Anti-repetición: si el render de dashboard está activo, no volver a llamarlo
   try {
-    if (renders[page]) renders[page](param);
+    if (renders[page]) {
+      if (page === 'dashboard' && window._dashboardRendering) {
+        // Ya está renderizando, no volver a llamar
+      } else {
+        renders[page](param);
+      }
+    }
   } catch(e) {
     console.error('[SF] render error for', page, ':', e);
+    window._dashboardRendering = false;
   }
 }
 
@@ -3056,6 +3073,7 @@ function _renderDashboardEjecutivo() {
     var K = (typeof _KPI_get === 'function') ? _KPI_get({}) : null;
     if (K) {
       _renderGerencial(K, 'pg-dashboard'); // render en dashboard
+      window._dashboardRendering = false;
       // Si _renderGerencial escribe en pg-gerencial, copiar a pg-dashboard
       var pgG = document.getElementById('pg-gerencial');
       if (pgG && pgG.innerHTML && !pg.innerHTML) {
@@ -3072,9 +3090,12 @@ function _renderDashboardEjecutivo() {
 }
 
 renders.dashboard = function() {
+  // Anti-loop guard
+  if (window._dashboardRendering) { return; }
+  window._dashboardRendering = true;
   console.log('[SF] renders.dashboard, rol:', SESSION.user && SESSION.user.rol);
   var pg = document.getElementById('pg-dashboard');
-  if (!pg) { console.error('[SF] pg-dashboard NOT FOUND'); return; }
+  if (!pg) { window._dashboardRendering = false; console.error('[SF] pg-dashboard NOT FOUND'); return; }
 
   var rol = (SESSION.user && SESSION.user.rol) || '';
   var isGer = rol==='SUPER ADMINISTRADOR'||rol==='ADMINISTRADOR'||rol==='JEFE INVENTARIOS';
@@ -3083,10 +3104,12 @@ renders.dashboard = function() {
     if (isGer) { _renderDashboardEjecutivo(); }
     else if (rol==='ALMACENISTA') { _renderDashboardAlmacenista(); }
     else { _renderDashboardOperativo(); }
+    window._dashboardRendering = false;
   } catch(e) {
     console.error('[SF] dashboard render error:', e);
     // Fallback mínimo garantizado
     var user = SESSION.user || {};
+    window._dashboardRendering = false;
     pg.innerHTML = '<div style="padding:30px">'
       + '<h2 style="color:#f1f5f9;margin-bottom:16px">👋 Bienvenido, ' + (user.nombre||'Usuario') + '</h2>'
       + '<p style="color:#94a3b8;margin-bottom:20px">Rol: ' + (user.rol||'—') + '</p>'
