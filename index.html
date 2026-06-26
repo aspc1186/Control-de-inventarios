@@ -2893,7 +2893,12 @@ function goto(page, param) {
   currentPage = page;
   closeSidebar();
   var pgEl = document.getElementById('pg-'+page);
-  if (pgEl) pgEl.style.display = '';
+  if (pgEl) {
+    pgEl.style.display = '';
+    console.log('[SF] goto: mostrando pg-'+page);
+  } else {
+    console.error('[SF] goto: NO ENCONTRADO pg-'+page);
+  }
   try { refreshAlertBadge(); } catch(e) {}
   // Anti-repetición: si el render de dashboard está activo, no volver a llamarlo
   try {
@@ -3071,6 +3076,7 @@ function _renderDashboardEjecutivo() {
   if (!pg) return;
   try {
     var K = (typeof _KPI_get === 'function') ? _KPI_get({}) : null;
+    console.log('[SF] KPI calculado: items=', K && K.totalItems, 'error=', !K);
     if (K) {
       _renderGerencial(K, 'pg-dashboard'); // render en dashboard
       window._dashboardRendering = false;
@@ -5561,7 +5567,81 @@ renders.gerencial = function() {
 function _renderGerencial(K, targetId) {
   var pg = document.getElementById(targetId || 'pg-gerencial');
   if (!pg) pg = document.getElementById('pg-gerencial');
-  if (!pg) return;
+  if (!pg) { console.error('[SF] _renderGerencial: pg no encontrado, targetId=', targetId); return; }
+
+  console.log('[SF] _renderGerencial: items=', K && K.totalItems, 'target=', targetId || 'pg-gerencial');
+
+  try {
+    _renderGerencialInterno(K, pg);
+  } catch(e) {
+    console.error('[SF] _renderGerencial ERROR:', e);
+    // Fallback garantizado
+    _renderDashboardBasico(pg, K);
+  }
+  window._dashboardRendering = false;
+}
+
+function _renderDashboardBasico(pg, K) {
+  console.log('[SF] _renderDashboardBasico: mostrando dashboard básico');
+  K = K || {};
+  var user = SESSION.user || {};
+  var h = [];
+  h.push('<div style="padding:20px">');
+  h.push('<div style="display:flex;align-items:center;gap:14px;margin-bottom:24px;padding:16px;background:var(--card2);border-radius:12px;border:1px solid var(--border2)">');
+  h.push('<div style="width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--navy),var(--electric));display:flex;align-items:center;justify-content:center;font-size:22px">📊</div>');
+  h.push('<div>');
+  h.push('<h2 style="margin:0;font-size:18px;font-weight:800;color:var(--white)">Bienvenido, '+(user.nombre||'Usuario')+'</h2>');
+  h.push('<p style="margin:2px 0 0;font-size:12px;color:var(--muted)">'+( user.rol||'')+'</p>');
+  h.push('</div></div>');
+  // KPI cards básicos
+  var kpis = [
+    {ico:'📦', label:'Total Referencias', val: K.totalItems||0, clr:'#60a5fa'},
+    {ico:'⚫', label:'Agotados',          val: K.nAgot||0,      clr:'#ef4444'},
+    {ico:'🔴', label:'Críticos',          val: K.nCrit||0,      clr:'#f97316'},
+    {ico:'💰', label:'Valor Inventario',  val: '$'+Math.round(K.valorTotal||0).toLocaleString('es-CO'), clr:'#4ade80'},
+    {ico:'🔄', label:'Para Reordenar',    val: K.nReord||0,     clr:'#f59e0b'},
+    {ico:'🟢', label:'Normal',            val: K.nNorm||0,      clr:'#34d399'},
+  ];
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">');
+  kpis.forEach(function(k) {
+    h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:14px;text-align:center">');
+    h.push('<div style="font-size:22px;margin-bottom:6px">'+k.ico+'</div>');
+    h.push('<div style="font-size:20px;font-weight:800;color:'+k.clr+'">'+k.val+'</div>');
+    h.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+k.label+'</div>');
+    h.push('</div>');
+  });
+  h.push('</div>');
+  // Acciones rápidas
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">');
+  var actions = [
+    {ico:'📦', label:'Inventario',       page:'inventario'},
+    {ico:'🏭', label:'Proveedores',      page:'proveedores'},
+    {ico:'📜', label:'Kardex',           page:'historial'},
+    {ico:'📥', label:'Importar Excel',   page:'importar'},
+    {ico:'🏠', label:'Bodegas',          page:'ubicaciones'},
+    {ico:'📊', label:'Dashboard Gerencial', page:'gerencial'},
+  ];
+  actions.forEach(function(a) {
+    h.push('<div onclick="goto(\''+a.page+'\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:18px;cursor:pointer;text-align:center;transition:border-color .2s" onmouseenter="this.style.borderColor=\'rgba(59,130,246,.5)\'" onmouseleave="this.style.borderColor=\'var(--border2)\'">');
+    h.push('<div style="font-size:26px;margin-bottom:8px">'+a.ico+'</div>');
+    h.push('<div style="font-size:13px;font-weight:600;color:var(--white)">'+a.label+'</div>');
+    h.push('</div>');
+  });
+  h.push('</div></div>');
+  pg.innerHTML = h.join('');
+}
+
+function _renderGerencialInterno(K, pg) {
+  /* versión original de _renderGerencial, con K ya validado */
+  if (!K || !K.items || !Array.isArray(K.items)) {
+    _renderDashboardBasico(pg, K);
+    return;
+  }
+  // Con 0 items también mostrar dashboard básico primero
+  if (K.items.length === 0) {
+    _renderDashboardBasico(pg, K);
+    return;
+  }
 
   function fmt(n)  { return Number(n||0).toLocaleString('es-CO'); }
   function cur(n)  { return '$'+fmt(Math.round(n||0)); }
@@ -5855,7 +5935,9 @@ function _renderGerencial(K, targetId) {
   h.push('</div>');
 
   pg.innerHTML = h.join('');
+  window._dashboardRendering = false;
 }
+
 
 
 renders.integraciones = function() {
@@ -6388,9 +6470,13 @@ function applyPlanUI() {
   var rolMods  = PERMISOS[rol] || [];
 
   // Módulos permitidos = plan ∩ rol (SA = todo)
-  var disponibles = isSA
-    ? PERMISOS['SUPER ADMINISTRADOR']  // SA: todos los módulos
-    : planDef.modulos.filter(function(m){ return rolMods.indexOf(m) >= 0; });
+  var isFullAdmin3 = isSA || (user.rol === 'ROOT');
+    var disponibles = isFullAdmin3
+      ? allNavIds.slice()
+      : (planDef && planDef.modulos ? planDef.modulos.filter(function(m){
+          var rm = Array.isArray(rolMods) ? rolMods : [];
+          return rm.indexOf(m) >= 0;
+        }) : []);
 
   // Plan badge
   var badge = document.getElementById('plan-badge');
