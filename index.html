@@ -2573,15 +2573,52 @@ function _completarLogin(user) {
     if (cached && cached.length > 0) { _invItems = cached; }
   }
 
-  // ── Sync ALL data from Neon on login, then render dashboard ─────────
-  _syncAllFromNeon(function() {
-    // After sync, _invItems is populated — go to dashboard
-    var destino = 'dashboard';
-    if (SESSION.user && SESSION.user.rol === 'CONSULTA DE PRODUCTOS') {
-      destino = 'consulta-productos';
-    }
-    goto(destino);
-  });
+  // ── Navigate to dashboard (sync Neon in background) ───────────────
+  var destino = 'dashboard';
+  if (SESSION.user && SESSION.user.rol === 'CONSULTA DE PRODUCTOS') {
+    destino = 'consulta-productos';
+  }
+  goto(destino);
+
+  // Background sync from Neon (no bloquea el login)
+  _syncAllFromNeon(null);
+}
+
+/* ── _syncAllFromNeon — carga datos desde Neon en background ─────────── */
+function _syncAllFromNeon(callback) {
+  // Sync artículos
+  var eid  = typeof _getEmpresaId==='function' ? _getEmpresaId() : null;
+  var url  = '/api/articulos?limit=5000' + (eid && eid!=='__SA__' ? '&empresa_id='+eid : '');
+  fetch(url)
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && res.data && res.data.length > 0) {
+        // Merge preservando campos manuales (ubicacion, stock_reservado, notas)
+        var local = loadItems() || [];
+        var manualMap = {};
+        local.forEach(function(i){
+          manualMap[i.sku||i.codigo] = {
+            ubicacion:       i.ubicacion,
+            stock_reservado: i.stock_reservado,
+            notas:           i.notas,
+          };
+        });
+        var merged = res.data.map(function(item){
+          var m = manualMap[item.sku||item.codigo] || {};
+          Object.keys(m).forEach(function(k){ if(m[k]!=null) item[k]=m[k]; });
+          return item;
+        });
+        saveItems(merged);
+        _invItems = merged;
+        if (typeof _KPI_invalidar==='function') _KPI_invalidar();
+      }
+      if (typeof callback==='function') callback();
+    })
+    .catch(function(){
+      // Sin conexión — usar datos locales
+      if (!_invItems || !_invItems.length) _invItems = loadItems();
+      if (typeof callback==='function') callback();
+    });
 }
 
 
