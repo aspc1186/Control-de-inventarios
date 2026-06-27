@@ -663,7 +663,6 @@ to{opacity:1;transform:translateY(0)}}
   width:100%;
 }
 
-/* ═══ LAYOUT OVERRIDE — position:fixed para garantizar altura correcta ═══ */
 body.app-mode #app-view {
   position: fixed !important;
   top: 0; left: 0; right: 0; bottom: 0;
@@ -692,6 +691,68 @@ body.app-mode .page-inner {
   overflow-y: auto !important;
   min-height: 0 !important;
 }
+
+/* ═══ LAYOUT DEFINITIVO ═══════════════════════════════════════════════════ */
+/* login-view: full screen cuando no está en app-mode */
+#login-view { min-height:0; }
+body.app-mode #login-view {
+  display: none !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  visibility: hidden !important;
+}
+
+/* app-view: full viewport siempre con grid */
+body.app-mode #app-view {
+  display: grid !important;
+  grid-template-rows: 1fr !important;
+  position: fixed !important;
+  inset: 0 !important;
+  overflow: hidden;
+  z-index: 10;
+}
+
+/* shell: llena todo el espacio del grid */
+body.app-mode .shell {
+  display: flex !important;
+  overflow: hidden !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+}
+
+/* sidebar: columna izquierda fija */
+body.app-mode .sidebar {
+  flex-shrink: 0 !important;
+  overflow-y: auto !important;
+  height: 100% !important;
+}
+
+/* page: columna derecha que ocupa el resto */
+body.app-mode .page {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+}
+
+/* topbar: fijo en la parte superior de .page */
+body.app-mode .topbar {
+  flex-shrink: 0 !important;
+  width: 100% !important;
+}
+
+/* page-inner: ocupa el resto del espacio de .page */
+body.app-mode .page-inner {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  min-height: 0 !important;
+  width: 100% !important;
+}
+/* ═══════════════════════════════════════════════════════════════════════════ */
 </style><style></style>
 </head>
 <body>
@@ -758,7 +819,7 @@ body.app-mode .page-inner {
   </div>
 </div>
 <!-- ══════ APP SHELL ══════ -->
-<div id="app-view" style="height:100dvh;overflow:hidden">
+<div id="app-view">
 <div class="shell">
   <div class="overlay-bg" id="sidebar-overlay" onclick="closeSidebar()"></div>
   <aside class="sidebar" id="sidebar">
