@@ -262,8 +262,10 @@ nav a svg{width:15px;height:15px;flex-shrink:0;stroke:currentColor;fill:none;str
 .topbar h1{font-size:15px;font-weight:700;color:var(--white);flex:1}
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:5px;color:var(--text2)}
 .hamburger svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
-.page{flex:1;overflow-y:auto;padding:14px 16px 20px;min-height:0}
-.page-inner{width:100%;max-width:none}
+.page{flex:1;overflow-y:auto;padding:0;min-height:0;display:flex;flex-direction:column}
+.page-inner{width:100%;max-width:none;flex:1;overflow-y:auto;padding:14px 16px 20px}
+.page-inner > div { min-height:0; }
+.page-inner > div:not([style*="display:none"]) { display:block; }
 .overlay-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:20}
 .overlay-bg.show{display:block}
 
@@ -9609,12 +9611,12 @@ function exportAuditoriaExcel() {
 
 
 renders.proveedores = function() {
-  var pg    = document.getElementById('pg-proveedores');
+  var pg   = document.getElementById('pg-proveedores');
   if (!pg) return;
-  var provs = loadProveedores();
-  var canW  = canDo('crear_articulo');
+  var provs = loadProveedores() || [];
+  var canW  = (typeof canDo === 'function') ? canDo('crear_articulo') : true;
 
-  // ── Mostrar datos locales INMEDIATAMENTE ──────────────────────────────
+  // Mostrar datos locales inmediatamente
   _buildProveedoresUI(provs, canW, pg);
 
   // ── Sincronizar con API en background ────────────────────────────────
@@ -12975,6 +12977,7 @@ function filterInventarioTable() {
 function _buildInventarioUI(allItems) {
   var pg = document.getElementById('pg-inventario');
   if (!pg || currentPage !== 'inventario') return;
+  console.log('[SF] _buildInventarioUI: items=', allItems && allItems.length);
   try {
     if (!allItems || !Array.isArray(allItems)) allItems = [];
     var ql = (invSearch||'').toLowerCase().trim();
