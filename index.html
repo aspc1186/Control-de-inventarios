@@ -203,7 +203,7 @@ body{
 ::-webkit-scrollbar-thumb:hover{background:var(--electric)}
 
 /* ── LAYOUT ──────────────────────────────────────────── */
-.shell{display:flex;height:100dvh;overflow:hidden}
+.shell{display:flex;height:100%;overflow:hidden;flex:1;min-height:0;}
 
 /* ── SIDEBAR ─────────────────────────────────────────── */
 .sidebar{
@@ -262,10 +262,11 @@ nav a svg{width:15px;height:15px;flex-shrink:0;stroke:currentColor;fill:none;str
 .topbar h1{font-size:15px;font-weight:700;color:var(--white);flex:1}
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:5px;color:var(--text2)}
 .hamburger svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
-.page{flex:1;overflow-y:auto;padding:0;min-height:0;display:flex;flex-direction:column}
-.page-inner{width:100%;max-width:none;flex:1;overflow-y:auto;padding:14px 16px 20px}
-.page-inner > div { min-height:0; }
-.page-inner > div:not([style*="display:none"]) { display:block; }
+
+
+
+
+
 .overlay-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:20}
 .overlay-bg.show{display:block}
 
@@ -535,7 +536,14 @@ mark{background:rgba(255,184,0,.3);color:var(--amber);border-radius:3px;padding:
 /* ── LOGIN ───────────────────────────────────────────── */
 /* ── Login / App visibility via body class ── */
 body.app-mode #login-view { display:none !important; }
-body.app-mode #app-view   { display:flex !important; flex-direction:column; }
+body.app-mode #app-view {
+  display:flex !important;
+  flex-direction:column;
+  height:100dvh;
+  overflow:hidden;
+  position:relative;
+  z-index:1;
+}
 body:not(.app-mode) #login-view { display:flex !important; }
 body:not(.app-mode) #app-view   { display:none !important; }
 .login-shell { min-height:100vh; display:flex; background:#070E1C; }
@@ -585,7 +593,7 @@ body:not(.app-mode) #app-view   { display:none !important; }
   .hide-m{display:none}
   .login-left{display:none}
   .login-right{width:100%}
-  .page{padding:10px}
+  
 }
 @media(max-width:480px){
   .kpi-row{grid-template-columns:1fr 1fr}
@@ -629,11 +637,7 @@ body:not(.app-mode) #app-view   { display:none !important; }
   flex-shrink: 0 !important;
   width: 100%;
 }
-.page {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
+
 
 /* ── Z-INDEX FIXES ─────────────────────────────── */
 .topbar { z-index: 40 !important; position: relative !important; }
@@ -804,8 +808,7 @@ nav a svg{width:15px;height:15px;flex-shrink:0;stroke:currentColor;fill:none;str
 .topbar h1{font-size:15px;font-weight:700;color:var(--white);flex:1}
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:5px;color:var(--text2)}
 .hamburger svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
-.page{flex:1;overflow-y:auto;padding:14px 16px 20px;min-height:0}
-.page-inner{width:100%;max-width:none}
+
 .overlay-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:20}
 .overlay-bg.show{display:block}
 
@@ -1119,7 +1122,7 @@ mark{background:rgba(255,184,0,.3);color:var(--amber);border-radius:3px;padding:
   .hide-m{display:none}
   .login-left{display:none}
   .login-right{width:100%}
-  .page{padding:10px}
+  
 }
 @media(max-width:480px){
   .kpi-row{grid-template-columns:1fr 1fr}
@@ -1157,11 +1160,7 @@ mark{background:rgba(255,184,0,.3);color:var(--amber);border-radius:3px;padding:
   flex-shrink: 0 !important;
   width: 100%;
 }
-.page {
-  flex: 1;
-  overflow-y: auto;
-  min-height: 0;
-}
+
 
 /* ── Z-INDEX FIXES ─────────────────────────────── */
 .topbar { z-index: 40 !important; position: relative !important; }
@@ -1191,7 +1190,18 @@ mark{background:rgba(255,184,0,.3);color:var(--amber);border-radius:3px;padding:
 .sensitive-col, .sensitive-cell { transition: opacity .15s; }
 .sensitive-hidden .sensitive-col,
 .sensitive-hidden .sensitive-cell { display: none !important; }
-</style>
+
+/* ── LAYOUT CANONICAL — single source of truth ── */
+.page{
+  flex:1;display:flex;flex-direction:column;
+  overflow:hidden;min-height:0;
+}
+.page-inner{
+  flex:1;overflow-y:auto;
+  padding:14px 16px 20px;
+  width:100%;
+}
+</style><style></style>
 </head>
 <body>
 
@@ -2580,7 +2590,7 @@ function goto(page, param) {
   closeSidebar();
   var pgEl = document.getElementById('pg-'+page);
   if (pgEl) {
-    pgEl.style.display = '';
+    pgEl.style.display = 'block';
     console.log('[SF] goto: mostrando pg-'+page);
   } else {
     console.error('[SF] goto: NO ENCONTRADO pg-'+page);
