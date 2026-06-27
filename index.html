@@ -6975,7 +6975,7 @@ function ejecutarPruebasAutomaticas() {
   });
 
   _runTest('API-02: Endpoint inventario', function() {
-    return fetch('/api/items?limit=1').then(function(r){ return 'API items HTTP ' + r.status; }).catch(function(e){ return 'Error: ' + e.message; });
+    return fetch('/api/articulos?limit=1').then(function(r){ return 'API items HTTP ' + r.status; }).catch(function(e){ return 'Error: ' + e.message; });
   });
 
   // Render results after all sync tests
@@ -11666,7 +11666,7 @@ function exportAuditoria() {
 ══════════════════════════════════════════════ */
 renders.usuarios = function() {
   var rol = SESSION.user && SESSION.user.rol || '';
-  var isAdmin = (rol === 'ADMINISTRADOR' || rol === 'SUPER ADMINISTRADOR');
+  var isAdmin = (rol === 'ROOT' || rol === 'ADMINISTRADOR' || rol === 'SUPER ADMINISTRADOR');
   if (!isAdmin) { document.getElementById('pg-usuarios').innerHTML = '<div class="empty-state"><p>Acceso restringido a administradores.</p></div>'; return; }
 
   // ── Mostrar usuarios locales INMEDIATAMENTE ───────────────────────────
@@ -14803,6 +14803,122 @@ window.editarProveedorById = function(btn) {
 if (typeof exportarProveedores === 'undefined') {
   window.exportarProveedores = function() { showToast('Exportar proveedores próximamente', 'amber'); };
 }
+
+
+/* ══ CONSTANTES GLOBALES FALTANTES ═══════════════════════════════════════ */
+
+var ERP_CONNECTORS = [
+  { id: 'sap',         nombre: 'SAP Business One',     logo: '🏢', desc: 'ERP empresarial' },
+  { id: 'oracle',      nombre: 'Oracle NetSuite',       logo: '☁️', desc: 'Cloud ERP' },
+  { id: 'dynamics',    nombre: 'Microsoft Dynamics 365',logo: '🪟', desc: 'Business apps' },
+  { id: 'odoo',        nombre: 'Odoo',                  logo: '🟣', desc: 'Open source ERP' },
+  { id: 'siigo',       nombre: 'Siigo',                 logo: '🇨🇴', desc: 'Contabilidad Colombia' },
+  { id: 'world_office',nombre: 'World Office',          logo: '📊', desc: 'ERP local' },
+  { id: 'helisa',      nombre: 'Helisa',                logo: '📋', desc: 'Contabilidad' },
+  { id: 'alegra',      nombre: 'Alegra',                logo: '💡', desc: 'Facturación electrónica' },
+];
+
+/* ══ _buildUsuariosUI ════════════════════════════════════════════════════ */
+function _buildUsuariosUI(users) {
+  var pg = document.getElementById('pg-usuarios');
+  if (!pg) return;
+  users = users || [];
+  var myRol  = SESSION.user && SESSION.user.rol || '';
+  var isSA   = myRol === 'ROOT' || myRol === 'SUPER ADMINISTRADOR';
+  var isAdm  = isSA || myRol === 'ADMINISTRADOR';
+
+  var h = [];
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">');
+  h.push('<h3 style="margin:0;font-size:16px;font-weight:700">👥 Usuarios</h3>');
+  if (isAdm) {
+    h.push('<button onclick="nuevoUsuario&&nuevoUsuario()" class="btn btn-navy btn-sm">+ Nuevo Usuario</button>');
+  }
+  h.push('</div>');
+
+  if (!users.length) {
+    h.push('<div class="empty-state"><div style="font-size:40px;margin-bottom:12px">👥</div><p style="color:var(--muted)">No hay usuarios registrados</p></div>');
+  } else {
+    h.push('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">');
+    h.push('<thead><tr style="background:rgba(255,255,255,.04);border-bottom:2px solid rgba(255,255,255,.08)">');
+    ['Usuario','Nombre','Rol','Estado','Último Acceso','Acciones'].forEach(function(col) {
+      h.push('<th style="padding:8px;font-size:10px;font-weight:700;color:var(--muted);text-align:left;white-space:nowrap">'+col+'</th>');
+    });
+    h.push('</tr></thead><tbody>');
+
+    var myId = SESSION.user && SESSION.user.id;
+    users.forEach(function(u) {
+      if (u.es_sistema && !isSA) return; // ocultar usuarios del sistema a no-SA
+      var activo = u.estado === 'ACTIVO';
+      var isMe = u.id === myId;
+      var isSys = u.es_sistema === true;
+      var clrRol = {'ROOT':'#ef4444','SUPER ADMINISTRADOR':'#f97316','ADMINISTRADOR':'#60a5fa','ALMACENISTA':'#4ade80','JEFE INVENTARIOS':'#a78bfa','CONSULTA DE PRODUCTOS':'#94a3b8'}[u.rol] || '#94a3b8';
+      
+      h.push('<tr style="border-bottom:1px solid rgba(255,255,255,.04)">');
+      h.push('<td style="padding:8px;font-family:monospace;font-size:12px;color:var(--electric)">'+(u.username||'—')+(isMe?' <span style="font-size:9px;color:#4ade80">(tú)</span>':'')+'</td>');
+      h.push('<td style="padding:8px;font-size:12px">'+(u.nombre||'—')+'</td>');
+      h.push('<td style="padding:8px"><span style="font-size:10px;font-weight:700;color:'+clrRol+';background:'+clrRol+'18;padding:2px 8px;border-radius:12px;white-space:nowrap">'+(u.rol||'—')+'</span></td>');
+      h.push('<td style="padding:8px"><span style="font-size:10px;font-weight:700;color:'+(activo?'#4ade80':'#94a3b8')+'">'+(activo?'ACTIVO':'INACTIVO')+'</span></td>');
+      h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+(u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString('es-CO') : '—')+'</td>');
+      h.push('<td style="padding:8px;display:flex;gap:4px">');
+      if (isAdm && !isSys && !isMe) {
+        h.push('<button onclick="editarUsuario&&editarUsuario(\''+u.id+'\')" class="btn btn-ghost btn-sm" style="font-size:10px" title="Editar">✏️</button>');
+        if (activo) {
+          h.push('<button onclick="desactivarUsuario&&desactivarUsuario(\''+u.id+'\')" class="btn btn-ghost btn-sm" style="font-size:10px;color:#f59e0b" title="Desactivar">⏸</button>');
+        } else {
+          h.push('<button onclick="activarUsuario&&activarUsuario(\''+u.id+'\')" class="btn btn-ghost btn-sm" style="font-size:10px;color:#4ade80" title="Activar">▶</button>');
+        }
+        if (u.eliminable !== false) {
+          h.push('<button onclick="eliminarUsuario&&eliminarUsuario(\''+u.id+'\')" class="btn btn-ghost btn-sm" style="font-size:10px;color:#f87171" title="Eliminar">🗑</button>');
+        }
+      }
+      if (isSA) {
+        h.push('<button onclick="resetPasswordUsuario&&resetPasswordUsuario(\''+u.id+'\')" class="btn btn-ghost btn-sm" style="font-size:10px;color:#a78bfa" title="Reset password">🔑</button>');
+      }
+      h.push('</td></tr>');
+    });
+    h.push('</tbody></table></div>');
+  }
+  pg.innerHTML = h.join('');
+}
+
+/* ══ _buildEmpresasUI ════════════════════════════════════════════════════ */
+function _buildEmpresasUI(empresas, pg) {
+  if (!pg) pg = document.getElementById('pg-empresas');
+  if (!pg) return;
+  empresas = empresas || [];
+  var h = [];
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">');
+  h.push('<h3 style="margin:0;font-size:16px;font-weight:700">🏢 Empresas</h3>');
+  h.push('<button onclick="nuevaEmpresa&&nuevaEmpresa()" class="btn btn-navy btn-sm">+ Nueva Empresa</button>');
+  h.push('</div>');
+  if (!empresas.length) {
+    h.push('<div class="empty-state"><div style="font-size:40px;margin-bottom:12px">🏢</div>');
+    h.push('<p style="color:var(--muted);margin-bottom:16px">No hay empresas registradas</p>');
+    h.push('<button onclick="nuevaEmpresa&&nuevaEmpresa()" class="btn btn-navy">+ Crear Primera Empresa</button></div>');
+  } else {
+    h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">');
+    empresas.forEach(function(e) {
+      var activo = e.estado !== 'INACTIVO';
+      h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:18px">');
+      h.push('<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">');
+      h.push('<div style="width:40px;height:40px;background:rgba(59,130,246,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px">🏢</div>');
+      h.push('<div><div style="font-weight:700">'+(e.nombre||'—')+'</div>');
+      h.push('<div style="font-size:11px;color:var(--muted)">'+(e.nit||'')+'</div></div></div>');
+      h.push('<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Plan: <span style="color:var(--electric)">'+(e.plan||'FREE')+'</span></div>');
+      h.push('<span style="font-size:10px;font-weight:700;color:'+(activo?'#4ade80':'#94a3b8')+'">'+(activo?'ACTIVA':'INACTIVA')+'</span>');
+      h.push('</div>');
+    });
+    h.push('</div>');
+  }
+  pg.innerHTML = h.join('');
+}
+
+/* ══ Stubs de acciones de usuarios ═══════════════════════════════════════ */
+if (typeof editarUsuario==='undefined')     window.editarUsuario     = function(id){ openModal('<div style="padding:20px"><h3>Editar Usuario</h3><p style="color:var(--muted)">ID: '+id+'</p></div>'); };
+if (typeof desactivarUsuario==='undefined') window.desactivarUsuario = function(id){ if(confirm('¿Desactivar este usuario?')){ var us=loadUsers();var i=us.findIndex(function(u){return u.id===id;});if(i>=0){us[i].estado='INACTIVO';saveUsers(us);renders.usuarios();}  }};
+if (typeof activarUsuario==='undefined')    window.activarUsuario    = function(id){ var us=loadUsers();var i=us.findIndex(function(u){return u.id===id;});if(i>=0){us[i].estado='ACTIVO';saveUsers(us);renders.usuarios();} };
+if (typeof nuevaEmpresa==='undefined')      window.nuevaEmpresa      = function(){ showToast('Crear empresa próximamente','amber'); };
+
 
 </script>
 </body>
