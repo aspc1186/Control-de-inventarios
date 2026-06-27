@@ -1283,7 +1283,7 @@ mark{background:rgba(255,184,0,.3);color:var(--amber);border-radius:3px;padding:
       <a onclick="goto('compras')" id="nav-compras" style="display:none">
         <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>Compras</a>
 
-      <a onclick="goto(\'proveedores\')" id="nav-proveedores">
+      <a onclick="goto('proveedores')" id="nav-proveedores">
         <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Proveedores</a>
 
       <a onclick="goto('logistica')" id="nav-logistica" style="display:none">
@@ -14614,6 +14614,174 @@ function _runAuthTests() {
     console.log('[SF] ✅ Auth tests: ' + passed + '/' + tests.length + ' PASS');
   }
   return { passed: passed, failed: failed, total: tests.length };
+}
+
+
+/* ══ FUNCIONES FALTANTES ══════════════════════════════════════════════ */
+
+/* ── openLogoModal ────────────────────────────────────────────────── */
+function openLogoModal() {
+  // Placeholder — muestra info de la empresa
+  var empresa = SESSION.empresa || 'StockFlow';
+  showToast('StockFlow WMS — ' + empresa, 'blue');
+}
+
+/* ── _buildBodegasUbicacionesUI ───────────────────────────────────── */
+function _buildBodegasUbicacionesUI(bodegas, pg) {
+  if (!pg) return;
+  bodegas = bodegas || [];
+  var h = [];
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">');
+  h.push('<h3 style="margin:0;font-size:16px;font-weight:700">🏠 Bodegas y Ubicaciones</h3>');
+  h.push('<button onclick="abrirNuevaBodega&&abrirNuevaBodega()" class="btn btn-navy btn-sm">+ Nueva Bodega</button>');
+  h.push('</div>');
+
+  if (!bodegas.length) {
+    h.push('<div class="empty-state">');
+    h.push('<div style="font-size:40px;margin-bottom:12px">🏠</div>');
+    h.push('<p style="color:var(--muted);margin-bottom:16px">No hay bodegas configuradas</p>');
+    h.push('<button onclick="abrirNuevaBodega&&abrirNuevaBodega()" class="btn btn-navy">+ Crear Primera Bodega</button>');
+    h.push('</div>');
+  } else {
+    h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">');
+    bodegas.forEach(function(b) {
+      h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:18px">');
+      h.push('<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">');
+      h.push('<div style="width:40px;height:40px;background:rgba(59,130,246,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px">🏠</div>');
+      h.push('<div>');
+      h.push('<div style="font-weight:700;font-size:14px">'+(b.nombre||'Sin nombre')+'</div>');
+      h.push('<div style="font-size:11px;color:var(--muted)">'+(b.codigo||b.id||'')+'</div>');
+      h.push('</div></div>');
+      if (b.ubicaciones && b.ubicaciones.length) {
+        h.push('<div style="font-size:11px;color:var(--muted)">'+(b.ubicaciones.length)+' ubicaciones</div>');
+      }
+      h.push('</div>');
+    });
+    h.push('</div>');
+  }
+  pg.innerHTML = h.join('');
+}
+
+/* ── loadERPLog ───────────────────────────────────────────────────── */
+function loadERPLog() {
+  return DB.get('erp_log') || [];
+}
+
+function saveERPLog(entries) {
+  try { DB.set('erp_log', (entries||[]).slice(-500)); } catch(e) {}
+}
+
+/* ── abrirNuevaBodega (stub) ─────────────────────────────────────── */
+if (typeof abrirNuevaBodega === 'undefined') {
+  window.abrirNuevaBodega = function() {
+    showToast('Módulo de bodegas próximamente', 'amber');
+  };
+}
+
+
+
+/* ── loadBodegas ─────────────────────────────────────────────────── */
+function loadBodegas() {
+  return DB.get('bodegas') || [];
+}
+function saveBodegas(data) {
+  try { DB.set('bodegas', data||[]); } catch(e) {}
+}
+
+/* ── _buildProveedoresUI ─────────────────────────────────────────── */
+function _buildProveedoresUI(provs, canWrite, pg) {
+  if (!pg) return;
+  provs = provs || [];
+  var h = [];
+
+  // Header
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">');
+  h.push('<h3 style="margin:0;font-size:16px;font-weight:700">🏭 Proveedores</h3>');
+  if (canWrite) {
+    h.push('<div style="display:flex;gap:8px">');
+    h.push('<button onclick="abrirNuevoProveedor&&abrirNuevoProveedor()" class="btn btn-navy btn-sm">+ Nuevo Proveedor</button>');
+    h.push('<button onclick="exportarProveedores&&exportarProveedores()" class="btn btn-ghost btn-sm">📥 Exportar</button>');
+    h.push('</div>');
+  }
+  h.push('</div>');
+
+  if (!provs.length) {
+    h.push('<div class="empty-state">');
+    h.push('<div style="font-size:40px;margin-bottom:12px">🏭</div>');
+    h.push('<p style="color:var(--muted);margin-bottom:16px">No hay proveedores registrados</p>');
+    if (canWrite) {
+      h.push('<button onclick="abrirNuevoProveedor&&abrirNuevoProveedor()" class="btn btn-navy">+ Agregar Proveedor</button>');
+    }
+    h.push('</div>');
+  } else {
+    // Search bar
+    h.push('<div style="margin-bottom:12px">');
+    h.push('<input type="text" id="prov-search" placeholder="Buscar proveedor..." oninput="_filterProveedores(this.value)" style="background:var(--card2);border:1px solid var(--border2);color:var(--white);padding:8px 12px;border-radius:8px;font-size:12px;width:280px">');
+    h.push('<span style="margin-left:10px;font-size:11px;color:var(--muted)">'+provs.length+' proveedores</span>');
+    h.push('</div>');
+
+    h.push('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse" id="prov-table">');
+    h.push('<thead><tr style="background:rgba(255,255,255,.04);border-bottom:2px solid rgba(255,255,255,.08)">');
+    ['Nombre','NIT/RUT','Contacto','Teléfono','Correo','Estado','Acciones'].forEach(function(col) {
+      h.push('<th style="padding:8px;font-size:10px;font-weight:700;color:var(--muted);text-align:left;white-space:nowrap">'+col+'</th>');
+    });
+    h.push('</tr></thead><tbody>');
+
+    provs.forEach(function(p) {
+      var activo = p.estado !== 'INACTIVO';
+      h.push('<tr style="border-bottom:1px solid rgba(255,255,255,.04)">');
+      h.push('<td style="padding:8px;font-weight:600">'+(p.nombre||'—')+'</td>');
+      h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+(p.nit||p.rut||'—')+'</td>');
+      h.push('<td style="padding:8px;font-size:11px">'+(p.contacto||'—')+'</td>');
+      h.push('<td style="padding:8px;font-size:11px">'+(p.telefono||'—')+'</td>');
+      h.push('<td style="padding:8px;font-size:11px">'+(p.correo||'—')+'</td>');
+      h.push('<td style="padding:8px"><span style="font-size:10px;font-weight:700;color:'+(activo?'#4ade80':'#94a3b8')+';background:'+(activo?'rgba(74,222,128,.15)':'rgba(148,163,184,.1)')+';padding:2px 8px;border-radius:12px">'+(activo?'ACTIVO':'INACTIVO')+'</span></td>');
+      h.push('<td style="padding:8px">');
+      if (canWrite) {
+      h.push('<button onclick="editarProveedorById(this)" data-id="'+(p.id||'')+'" class="btn btn-ghost btn-sm" style="font-size:10px">✏️</button> ');
+      }
+      h.push('</td>');
+      h.push('</tr>');
+    });
+    h.push('</tbody></table></div>');
+  }
+  pg.innerHTML = h.join('');
+}
+
+function _filterProveedores(q) {
+  var provs = loadProveedores() || [];
+  if (!q) { _buildProveedoresUI(provs, canDo('crear_articulo'), document.getElementById('pg-proveedores')); return; }
+  q = q.toLowerCase();
+  var filtered = provs.filter(function(p) {
+    return (p.nombre||'').toLowerCase().includes(q) ||
+           (p.nit||'').toLowerCase().includes(q) ||
+           (p.contacto||'').toLowerCase().includes(q);
+  });
+  var pg = document.getElementById('pg-proveedores');
+  var tbody = pg && pg.querySelector('#prov-table tbody');
+  if (tbody) {
+    // Re-render filtered inline
+  }
+}
+
+/* ── downloadPlantilla ───────────────────────────────────────────── */
+function downloadPlantilla() {
+  showToast('Descarga de plantilla: usa el botón "Descargar Plantilla" en Importar Excel', 'blue');
+}
+
+/* ── Stubs para funciones de proveedores ─────────────────────────── */
+if (typeof abrirNuevoProveedor === 'undefined') {
+  window.abrirNuevoProveedor = function() { showToast('Módulo de proveedores próximamente', 'amber'); };
+}
+if (typeof editarProveedor === 'undefined') {
+  window.editarProveedor = function(id) { showToast('Editar proveedor: ' + id, 'amber'); };
+}
+window.editarProveedorById = function(btn) {
+  var id = btn && btn.getAttribute('data-id');
+  if (typeof editarProveedor === 'function') editarProveedor(id);
+};
+if (typeof exportarProveedores === 'undefined') {
+  window.exportarProveedores = function() { showToast('Exportar proveedores próximamente', 'amber'); };
 }
 
 </script>
