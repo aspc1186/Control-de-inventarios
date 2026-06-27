@@ -1330,46 +1330,61 @@ mark{background:rgba(255,184,0,.3);color:var(--amber);border-radius:3px;padding:
       <a onclick="goto('salud-sistema')" id="nav-salud-sistema" style="display:none">
         <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Salud del Sistema</a>
     </nav>
-  </div>
-</div>
-<div class="page">
-      <div class="page-inner">
-        <div id="pg-dashboard"></div>
-        <div id="pg-inventario"  style="display:none"></div>
-        <div id="pg-generar-qr"  style="display:none"></div>
-        <div id="pg-escaner"     style="display:none"></div>
-        <div id="pg-compras"     style="display:none"></div>
-        <div id="pg-logistica"   style="display:none"></div>
-        <div id="pg-movimientos" style="display:none"></div>
-        <div id="pg-proveedores"  style="display:none"></div>
-        <div id="pg-importar"    style="display:none"></div>
-        <div id="pg-reportes"    style="display:none"></div>
-        <div id="pg-historial"     style="display:none"></div>
-        <div id="pg-mis-inventarios" style="display:none"></div>
-        <div id="pg-respaldos" style="display:none"></div>
-        <div id="pg-gerencial" style="display:none"></div>
-        <div id="pg-integraciones" style="display:none"></div>
-        <div id="pg-consulta-productos" style="display:none"></div>
-        <div id="pg-traslados" style="display:none"></div>
-        <div id="pg-centro-pruebas" style="display:none"></div>
-        <div id="pg-auditoria"     style="display:none"></div>
-        <div id="pg-conciliacion"  style="display:none"></div>
-        <div id="pg-ciclicos"      style="display:none"></div>
-        <div id="pg-salud-sistema" style="display:none"></div>
-        <div id="pg-empresas"      style="display:none"></div>
-        <div id="pg-usuarios"      style="display:none"></div>
-        <div id="pg-ubicaciones"    style="display:none"></div>
-        <div id="pg-detalle"       style="display:none"></div>
+  </div><!-- /sidebar -->
+  <div class="page">
+    <div class="topbar" id="topbar">
+      <button class="hamburger" id="hamburger-btn" onclick="openSidebar()">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <span id="page-title" style="font-weight:700;font-size:14px">Dashboard</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <button class="btn btn-ghost btn-sm" id="global-search-btn" onclick="openGlobalSearch()" style="font-size:11px">🔍 Buscar</button>
+        <span id="plan-badge" style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;background:rgba(59,130,246,.2);color:var(--electric)">WMS</span>
+        <span id="nav-user-info" style="font-size:11px;color:var(--muted)"></span>
+        <button onclick="doLogout()" class="btn btn-ghost btn-sm" style="font-size:11px;color:#f87171">⏻ Salir</button>
       </div>
     </div>
-  </div>
-</div>
-</div>
+    <div class="page-inner">
+      <div id="pg-dashboard"></div>
+      <div id="pg-inventario"         style="display:none"></div>
+      <div id="pg-generar-qr"         style="display:none"></div>
+      <div id="pg-escaner"            style="display:none"></div>
+      <div id="pg-compras"            style="display:none"></div>
+      <div id="pg-logistica"          style="display:none"></div>
+      <div id="pg-movimientos"        style="display:none"></div>
+      <div id="pg-proveedores"        style="display:none"></div>
+      <div id="pg-importar"           style="display:none"></div>
+      <div id="pg-reportes"           style="display:none"></div>
+      <div id="pg-historial"          style="display:none"></div>
+      <div id="pg-mis-inventarios"    style="display:none"></div>
+      <div id="pg-respaldos"          style="display:none"></div>
+      <div id="pg-gerencial"          style="display:none"></div>
+      <div id="pg-integraciones"      style="display:none"></div>
+      <div id="pg-consulta-productos" style="display:none"></div>
+      <div id="pg-traslados"          style="display:none"></div>
+      <div id="pg-centro-pruebas"     style="display:none"></div>
+      <div id="pg-auditoria"          style="display:none"></div>
+      <div id="pg-conciliacion"       style="display:none"></div>
+      <div id="pg-ciclicos"           style="display:none"></div>
+      <div id="pg-salud-sistema"      style="display:none"></div>
+      <div id="pg-empresas"           style="display:none"></div>
+      <div id="pg-usuarios"           style="display:none"></div>
+      <div id="pg-ubicaciones"        style="display:none"></div>
+      <div id="pg-picking"            style="display:none"></div>
+      <div id="pg-packing"            style="display:none"></div>
+      <div id="pg-detalle"            style="display:none"></div>
+    </div><!-- /page-inner -->
+  </div><!-- /page -->
+</div><!-- /shell -->
+</div><!-- /app-view -->
 
 <!-- Modal -->
 <div class="modal-wrap" id="modal-wrap" onclick="if(event.target===this)closeModal()">
   <div class="modal" id="modal-box"></div>
 </div>
+
 
 <script>
 /* ══════════════════════════════════════════════
@@ -2536,18 +2551,20 @@ var _invFetching = false;  // prevent concurrent fetches
 
 function goto(page, param) {
   // Role access check
-  var rol = SESSION.user && SESSION.user.rol || 'CONSULTA';
+  var rol = (SESSION.user && SESSION.user.rol) || 'CONSULTA';
   var isRoot      = (rol === 'ROOT');
-  var isFullAdmin = isRoot || rol==='SUPER ADMINISTRADOR' || rol==='ADMINISTRADOR';
-  // ROOT y SA: acceso total sin verificar plan/empresa
-  if (isFullAdmin) {
-    // saltar toda verificación de permisos
-  }
+  var isFullAdmin = isRoot || rol === 'SUPER ADMINISTRADOR' || rol === 'ADMINISTRADOR';
   var isConsultaP = (rol === 'CONSULTA DE PRODUCTOS');
-  // Consulta de Productos: redirect to consulta-productos instead of dashboard
-  if (!isFullAdmin && page !== 'dashboard' && page !== 'detalle' && !perms.includes(page)) {
-    showToast('Acceso restringido: tu rol (' + rol + ') no tiene permiso para esta sección', 'red');
-    page = isConsultaP ? 'consulta-productos' : 'dashboard';
+
+  // Para roles no-admin: verificar permisos del rol
+  if (!isFullAdmin) {
+    var rp2    = (typeof PERMISOS !== 'undefined' && PERMISOS[rol]) || {};
+    var perms  = Array.isArray(rp2.modulos) ? rp2.modulos : (Array.isArray(rp2) ? rp2 : []);
+    var always = ['dashboard', 'detalle', 'consulta-productos'];
+    if (always.indexOf(page) < 0 && perms.indexOf(page) < 0) {
+      showToast('Acceso restringido para tu rol', 'red');
+      page = isConsultaP ? 'consulta-productos' : 'dashboard';
+    }
   }
 
   if (scannerInst) { try { scannerInst.stop(); } catch(e){} scannerInst = null; }
