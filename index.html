@@ -125,17 +125,18 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>/* Visibility */
 body.app-mode #login-view{display:none!important}
-body.app-mode #app-view{display:flex!important;flex-direction:column;height:100dvh;overflow:hidden}
+body.app-mode #app-view{display:flex!important;flex-direction:column;height:100dvh;overflow:hidden;width:100%}
 body:not(.app-mode) #login-view{display:flex!important}
 body:not(.app-mode) #app-view{display:none!important}
+#app-view{box-sizing:border-box}
 /* ══ VISIBILITY SYSTEM — 
 
 
 
 
 /* ══ LAYOUT ════════════════════════════════════════════════════════════ */
-.shell      { display:flex; height:100%; overflow:hidden; min-height:0; }
-.page       { flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
+.shell      { display:flex; height:100%; overflow:hidden; min-height:0; flex:1; }
+.page       { flex:1; height:100%; display:flex; flex-direction:column; overflow:hidden; min-height:0; }
 .topbar     { flex-shrink:0; width:100%; display:flex; align-items:center; gap:10px;
               padding:9px 16px; background:rgba(11,18,32,.95);
               border-bottom:1px solid var(--border2); position:relative; z-index:40; }
@@ -819,7 +820,7 @@ to{opacity:1;transform:translateY(0)}}
       </div>
     </div>
     <div class="page-inner">
-      <div id="pg-dashboard"></div>
+      <div id="pg-dashboard" style="display:none"></div>
       <div id="pg-inventario"         style="display:none"></div>
       <div id="pg-generar-qr"         style="display:none"></div>
       <div id="pg-escaner"            style="display:none"></div>
@@ -2064,6 +2065,8 @@ function goto(page, param) {
   }
   try { refreshAlertBadge(); } catch(e) {}
   // Anti-repetición: si el render de dashboard está activo, no volver a llamarlo
+  // Force display after render
+  if (pgEl) pgEl.style.display = 'block';
   try {
     if (renders[page]) {
       if (page === 'dashboard' && window._dashboardRendering) {
@@ -2133,8 +2136,18 @@ var renders = {};
    RENDER: INVENTARIO
 ══════════════════════════════════════════════════════════════════════════ */
 renders.inventario = function(q, tab) {
+  var pg = document.getElementById('pg-inventario');
+  if (!pg) { console.error('[SF] pg-inventario NOT FOUND'); return; }
+  console.log('[SF] renders.inventario: tab=', tab, 'pg visible=', pg.style.display);
   window._invTab = tab || window._invTab || 'productos';
-  _renderInventarioTab(q);
+  // Force current page for the check inside _renderInventarioTab
+  currentPage = 'inventario';
+  try {
+    _renderInventarioTab(q);
+  } catch(e) {
+    console.error('[SF] _renderInventarioTab error:', e);
+    pg.innerHTML = '<div style="padding:20px;color:#f87171">Error: ' + e.message + '</div>';
+  }
 };
 
 function _renderInventarioTab(q) {
@@ -14413,6 +14426,35 @@ if (typeof desactivarUsuario==='undefined') window.desactivarUsuario = function(
 if (typeof activarUsuario==='undefined')    window.activarUsuario    = function(id){ var us=loadUsers();var i=us.findIndex(function(u){return u.id===id;});if(i>=0){us[i].estado='ACTIVO';saveUsers(us);renders.usuarios();} };
 if (typeof nuevaEmpresa==='undefined')      window.nuevaEmpresa      = function(){ showToast('Crear empresa próximamente','amber'); };
 
+
+
+/* ═══ DIAGNÓSTICO RÁPIDO ═══════════════════════════════════════════════ */
+window._diag = function(page) {
+  page = page || 'inventario';
+  var results = [];
+  var body = document.body;
+  var appView = document.getElementById('app-view');
+  var pgEl = document.getElementById('pg-' + page);
+  var pageInner = document.querySelector('.page-inner');
+  var pageDiv = document.querySelector('.page');
+  
+  results.push('body.className: ' + body.className);
+  results.push('app-view computed display: ' + (appView ? getComputedStyle(appView).display : 'NO EXISTE'));
+  results.push('app-view offsetHeight: ' + (appView ? appView.offsetHeight : 'N/A'));
+  results.push('.page computed display: ' + (pageDiv ? getComputedStyle(pageDiv).display : 'N/A'));
+  results.push('.page offsetHeight: ' + (pageDiv ? pageDiv.offsetHeight : 'N/A'));
+  results.push('.page-inner computed display: ' + (pageInner ? getComputedStyle(pageInner).display : 'N/A'));
+  results.push('.page-inner offsetHeight: ' + (pageInner ? pageInner.offsetHeight : 'N/A'));
+  results.push('pg-' + page + ' computed display: ' + (pgEl ? getComputedStyle(pgEl).display : 'N/A'));
+  results.push('pg-' + page + ' offsetHeight: ' + (pgEl ? pgEl.offsetHeight : 'N/A'));
+  results.push('pg-' + page + ' innerHTML length: ' + (pgEl ? pgEl.innerHTML.length : 'N/A'));
+  results.push('currentPage: ' + (typeof currentPage !== 'undefined' ? currentPage : 'UNDEFINED'));
+  
+  console.log('\n=== DIAGNÓSTICO: ' + page + ' ===');
+  results.forEach(function(r) { console.log('  ' + r); });
+  return results;
+};
+console.log('[SF] Diagnóstico disponible: llama _diag() o _diag(\'inventario\') en consola');
 
 </script>
 </body>
