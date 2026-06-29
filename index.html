@@ -123,125 +123,80 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<style>/* ═══════════════════════════════════════════════════════════
-   STOCKFLOW WMS — SISTEMA DE LAYOUT
-   Estructura: body > [#login-view | #app-view > .shell > [.sidebar + .page]]
-   ═══════════════════════════════════════════════════════════ */
+<style>/* ═══ STOCKFLOW WMS — LAYOUT v3 (CSS Grid) ════════════════════════
+   Solución definitiva: CSS Grid con grid-template-areas
+   Elimina completamente el problema de altura 50%
+═════════════════════════════════════════════════════════════════ */
 
-/* Reset base */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { overflow: hidden; height: 100%; }
-body { overflow: hidden; height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; }
+/* Reset */
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0;height:100%;overflow:hidden}
 
-/* ── CAPA 1: Visibilidad Login vs App ─────────────────────── */
-#login-view {
-  display: flex;
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: var(--bg-deep, #070E1C);
+/* Login */
+#login-view{position:fixed;inset:0;z-index:1000;display:flex}
+body.app-mode #login-view{display:none !important}
+
+/* App: Grid con 4 zonas */
+#app-view{
+  display:none;
+  position:fixed;inset:0;z-index:10;
+  grid-template-columns:var(--sidebar-w,220px) 1fr;
+  grid-template-rows:auto 1fr;
+  grid-template-areas:"sidebar topbar" "sidebar content";
 }
-#app-view {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  flex-direction: column;
-  overflow: hidden;
-}
-body.app-mode #login-view { display: none !important; }
-body.app-mode #app-view   { display: flex !important; }
+body.app-mode #app-view{display:grid !important}
 
-/* ── CAPA 2: Shell = Sidebar | Page ────────────────────────── */
-.shell {
-  display: flex;
-  flex-direction: row;   /* sidebar izquierda, page derecha */
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
+/* Sidebar */
+.sidebar{
+  grid-area:sidebar;
+  display:flex;flex-direction:column;
+  overflow:hidden;overflow-y:auto;
+  background:linear-gradient(180deg,#0A1628 0%,#0B1F3A 100%);
+  border-right:1px solid var(--border2);
+  z-index:30;
 }
 
-/* ── CAPA 3: Sidebar ─────────────────────────────────────────
-   En desktop: dentro del flujo de .shell (NO position:fixed)
-   En mobile:  position:fixed como drawer (ver @media) */
-.sidebar {
-  width: var(--sidebar-w, 220px);
-  flex-shrink: 0;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  z-index: 30;
+/* Topbar */
+.topbar{
+  grid-area:topbar;
+  display:flex;align-items:center;gap:10px;
+  padding:9px 16px;height:48px;flex-shrink:0;
+  background:rgba(11,18,32,.95);
+  border-bottom:1px solid var(--border2);
+  backdrop-filter:blur(10px);z-index:40;
 }
+.topbar h1{font-size:15px;font-weight:700;color:var(--white);flex:1;margin:0}
 
-/* ── CAPA 4: Page = Topbar / Page-inner ─────────────────────── */
-.page {
-  flex: 1;              /* ocupa TODO el espacio restante */
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/* Page-inner: contenido */
+.page-inner{
+  grid-area:content;
+  overflow-y:auto;overflow-x:hidden;
+  padding:14px 16px 20px;
+  min-height:0;
 }
+.page-inner > div{display:none}
 
-/* ── CAPA 5: Topbar ─────────────────────────────────────────── */
-.topbar {
-  flex-shrink: 0;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 16px;
-  background: rgba(11,18,32,.95);
-  border-bottom: 1px solid var(--border2);
-  backdrop-filter: blur(10px);
-  z-index: 40;
-  position: relative;
-}
-.topbar h1 { font-size:15px; font-weight:700; color:var(--white); flex:1; margin:0; }
+/* Shell/Page: sin efecto (wrappers vacíos) */
+.shell,.page{display:contents}
 
-/* ── CAPA 6: Page-inner ─────────────────────────────────────── */
-.page-inner {
-  flex: 1;              /* ocupa TODO el alto restante */
-  overflow-y: auto;
-  overflow-x: hidden;
-  min-height: 0;
-  padding: 14px 16px 20px;
-}
-
-/* ── Módulos: solo el activo visible ─────────────────────────── */
-.page-inner > div { display: none; }
-
-/* ── Mobile: sidebar como drawer ─────────────────────────────── */
-@media (max-width: 768px) {
-  .sidebar {
-    position: fixed;
-    top: 0; left: 0;
-    height: 100%;
-    z-index: 200;
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
+/* Mobile */
+@media(max-width:768px){
+  #app-view{
+    grid-template-columns:1fr;
+    grid-template-areas:"topbar" "content";
+    grid-template-rows:auto 1fr;
   }
-  .sidebar.open { transform: translateX(0); }
-  
-  #hamburger-btn { display: flex !important; }
-  .hamburger     { display: flex !important; }
+  .sidebar{
+    position:fixed;top:0;left:0;
+    width:var(--sidebar-w,220px);height:100%;
+    z-index:200;transform:translateX(-100%);
+    transition:transform .25s ease;
+  }
+  .sidebar.open{transform:translateX(0)}
+  #hamburger-btn,.hamburger{display:flex !important}
 }
 
-body{
-  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
-  background:var(--bg-deep);
-  color:var(--text);
-  font-size:13px;
-  line-height:1.5;
-  -webkit-font-smoothing:antialiased;
-}
-/* ── SCROLLBAR ────────────────────────────────────────── */
-::-webkit-scrollbar{width:5px;height:5px}
-::-webkit-scrollbar-track{background:var(--bg-deep)}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
-::-webkit-scrollbar-thumb:hover{background:var(--electric)}
-
-/* ── SIDEBAR ─────────────────────────────────────────── */
+/* ═════════════════════════════════════════════════════════════ */
 
 .brand{
   display:flex;align-items:center;gap:10px;
@@ -646,7 +601,7 @@ to{opacity:1;transform:translateY(0)}}
   
   .sidebar.open { transform: translateX(0); }
   .overlay-bg.show { display: block; }
-  .page { width: 100%; }
+  
 }</style>
 </head>
 <body>
