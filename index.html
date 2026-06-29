@@ -123,7 +123,86 @@
 </script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<style>/* ═══ STOCKFLOW WMS — LAYOUT v3 (CSS Grid) ════════════════════════
+<style>/* ── Variables CSS (Tema Default: Dark) ─────────────────────── */
+:root {
+  /* Colores base */
+  --bg-deep:   #070E1C;
+  --bg-card:   #0D1B2E;
+  --bg-panel:  #0A1628;
+  --card2:     #0F1E30;
+  --border:    rgba(255,255,255,.08);
+  --border2:   rgba(255,255,255,.06);
+  --white:     #f1f5f9;
+  --text:      #cbd5e1;
+  --text2:     #94a3b8;
+  --muted:     #64748b;
+
+  /* Colores de acento */
+  --electric:  #00A8FF;
+  --electric2: #0070CC;
+  --neon:      #00FF87;
+  --neon2:     #00CC6A;
+  --amber:     #F59E0B;
+  --amber-d:   #D97706;
+  --red:       #EF4444;
+  --cyan:      #06B6D4;
+  --purple:    #8B5CF6;
+  --navy:      #1e3a5f;
+
+  /* Glow shadows */
+  --glow-blue:  0 0 20px rgba(0,168,255,.3);
+  --glow-green: 0 0 20px rgba(0,255,135,.3);
+  --glow-red:   0 0 20px rgba(239,68,68,.3);
+
+  /* Layout */
+  --sidebar-w: 220px;
+  --topbar-h:  48px;
+  --r:         8px;
+  --r-lg:      12px;
+  --r-xl:      16px;
+  --tr:        .25s;
+}
+
+/* ── Tema Claro ─────────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg-deep:   #f0f4f8;
+  --bg-card:   #ffffff;
+  --bg-panel:  #e8edf3;
+  --card2:     #f8fafc;
+  --border:    rgba(0,0,0,.08);
+  --border2:   rgba(0,0,0,.06);
+  --white:     #0f172a;
+  --text:      #1e293b;
+  --text2:     #475569;
+  --muted:     #94a3b8;
+  --navy:      #dbeafe;
+}
+
+/* ── Tema Azul Marino ───────────────────────────────────────── */
+[data-theme="navy"] {
+  --bg-deep:   #0a192f;
+  --bg-card:   #112240;
+  --bg-panel:  #0d1f3c;
+  --card2:     #172a45;
+  --border:    rgba(100,255,218,.1);
+  --border2:   rgba(100,255,218,.06);
+  --electric:  #64FFDA;
+  --electric2: #00B4D8;
+  --neon:      #64FFDA;
+}
+
+/* ── Tema Verde WMS ─────────────────────────────────────────── */
+[data-theme="green"] {
+  --bg-deep:   #0a1a0f;
+  --bg-card:   #0f2d18;
+  --bg-panel:  #0c2214;
+  --card2:     #142e1c;
+  --electric:  #22C55E;
+  --electric2: #16A34A;
+  --neon:      #86EFAC;
+}
+
+/* ═══ STOCKFLOW WMS — LAYOUT v3 (CSS Grid) ════════════════════════
    Solución definitiva: CSS Grid con grid-template-areas
    Elimina completamente el problema de altura 50%
 ═════════════════════════════════════════════════════════════════ */
@@ -756,6 +835,7 @@ to{opacity:1;transform:translateY(0)}}
         <button class="btn btn-ghost btn-sm" id="global-search-btn" onclick="openGlobalSearch()" style="font-size:11px">🔍 Buscar</button>
         <span id="plan-badge" style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:8px;background:rgba(59,130,246,.2);color:var(--electric)">WMS</span>
         <span id="nav-user-info" style="font-size:11px;color:var(--muted)"></span>
+        <button onclick="_abrirSelectorTema()" class="btn btn-ghost btn-sm" style="font-size:11px" title="Cambiar tema">🎨</button>
         <button onclick="doLogout()" class="btn btn-ghost btn-sm" style="font-size:11px;color:#f87171">⏻ Salir</button>
       </div>
     </div>
@@ -2226,33 +2306,175 @@ function _renderDashboardEjecutivo() {
 }
 
 renders.dashboard = function() {
-  // Single render check
-  if (window._lastDashRender && (Date.now()-window._lastDashRender < 500)) { return; }
+  if (window._lastDashRender && (Date.now()-window._lastDashRender<500)) return;
   window._lastDashRender = Date.now();
-  console.log('[SF] renders.dashboard, rol:', SESSION.user && SESSION.user.rol);
   var pg = document.getElementById('pg-dashboard');
-  if (!pg) { window._dashboardRendering = false; console.error('[SF] pg-dashboard NOT FOUND'); return; }
+  if (!pg) return;
+  var K = _KPI_get({}, true) || {};
+  var user = SESSION.user || {};
+  var rol = user.rol || '';
+  var items = K.items || 0;
+  var valor = K.valorTotal || 0;
+  var agotados = K.agotados || 0;
+  var criticos = K.criticos || 0;
+  var bajos = K.bajos || 0;
+  var normal = K.normal || 0;
+  var sobrestock = K.sobrestock || 0;
+  var exactitud = K.exactitudInventario || 100;
+  var rotacion  = K.rotacionAnual || 0;
+  var categorias = K.porCategoria || [];
+  var abcA = K.claseA || 0; var abcB = K.claseB || 0; var abcC = K.claseC || 0;
 
-  var rol = (SESSION.user && SESSION.user.rol) || '';
-  var isGer = rol==='ROOT'||rol==='SUPER ADMINISTRADOR'||rol==='ADMINISTRADOR'||rol==='JEFE INVENTARIOS';
+  var fmt = function(n){ return (n||0).toLocaleString('es-CO'); };
+  var fmtM = function(n){ return '$'+((n||0)/1e6).toFixed(1)+'M'; };
 
-  try {
-    if (isGer) { _renderDashboardEjecutivo(); }
-    else if (rol==='ALMACENISTA') { _renderDashboardAlmacenista(); }
-    else { _renderDashboardOperativo(); }
-  } catch(e) {
-    console.error('[SF] dashboard render error:', e);
-    // Fallback mínimo garantizado
-    var user = SESSION.user || {};
-    pg.innerHTML = '<div style="padding:30px">'
-      + '<h2 style="color:#f1f5f9;margin-bottom:16px">👋 Bienvenido, ' + (user.nombre||'Usuario') + '</h2>'
-      + '<p style="color:#94a3b8;margin-bottom:20px">Rol: ' + (user.rol||'—') + '</p>'
-      + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">'
-      + '<div onclick="goto(\'inventario\')" style="background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);border-radius:12px;padding:20px;cursor:pointer;text-align:center"><div style="font-size:28px">📦</div><div style="color:#f1f5f9;margin-top:8px;font-weight:600">Inventario</div></div>'
-      + '<div onclick="goto(\'proveedores\')" style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);border-radius:12px;padding:20px;cursor:pointer;text-align:center"><div style="font-size:28px">🏭</div><div style="color:#f1f5f9;margin-top:8px;font-weight:600">Proveedores</div></div>'
-      + '<div onclick="goto(\'gerencial\')" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3);border-radius:12px;padding:20px;cursor:pointer;text-align:center"><div style="font-size:28px">📊</div><div style="color:#f1f5f9;margin-top:8px;font-weight:600">Analítica</div></div>'
-      + '</div></div>';
+  var h = [];
+  h.push('<div style="padding:16px">');
+
+  // Header bienvenida
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">');
+  h.push('<div style="display:flex;align-items:center;gap:12px">');
+  h.push('<div style="width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--electric),var(--electric2));display:flex;align-items:center;justify-content:center;font-size:20px">📊</div>');
+  h.push('<div><div style="font-size:18px;font-weight:800;color:var(--white)">Dashboard Ejecutivo</div>');
+  h.push('<div style="font-size:12px;color:var(--muted)">'+(user.nombre||rol)+' · '+new Date().toLocaleDateString('es-CO',{weekday:'long',year:'numeric',month:'long',day:'numeric'})+'</div></div></div>');
+  h.push('<button onclick="renders.dashboard()" style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:12px">↻ Actualizar</button>');
+  h.push('</div>');
+
+  // KPI Cards Row 1
+  var kpis = [
+    {label:'Total Artículos',  val:fmt(items),       icon:'📦', color:'#00A8FF', sub:'en inventario'},
+    {label:'Valor Inventario', val:fmtM(valor),      icon:'💰', color:'#22C55E', sub:'valor total'},
+    {label:'Agotados',         val:fmt(agotados),    icon:'🔴', color:'#EF4444', sub:'stock = 0'},
+    {label:'Críticos',         val:fmt(criticos),    icon:'⚠️', color:'#F59E0B', sub:'bajo mínimo'},
+    {label:'Para Reordenar',   val:fmt(bajos),       icon:'🔁', color:'#8B5CF6', sub:'punto reorden'},
+    {label:'Exactitud',        val:exactitud.toFixed(1)+'%', icon:'🎯', color:'#06B6D4', sub:'inventario'},
+  ];
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px">');
+  kpis.forEach(function(k){
+    h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:16px;position:relative;overflow:hidden">');
+    h.push('<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+k.color+';border-radius:12px 12px 0 0"></div>');
+    h.push('<div style="font-size:22px;margin-bottom:6px">'+k.icon+'</div>');
+    h.push('<div style="font-size:22px;font-weight:900;color:'+k.color+'">'+k.val+'</div>');
+    h.push('<div style="font-size:12px;font-weight:600;color:var(--white);margin-top:2px">'+k.label+'</div>');
+    h.push('<div style="font-size:10px;color:var(--muted)">'+k.sub+'</div>');
+    h.push('</div>');
+  });
+  h.push('</div>');
+
+  // Gráficos Row
+  h.push('<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px">');
+
+  // Gráfico 1: Estado del inventario (barras inline CSS)
+  h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:16px">');
+  h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:14px">📊 Estado del Inventario</div>');
+  var estados = [
+    {label:'Normal',      val:normal,     color:'#22C55E'},
+    {label:'Reordenar',   val:bajos,      color:'#8B5CF6'},
+    {label:'Crítico',     val:criticos,   color:'#F59E0B'},
+    {label:'Agotado',     val:agotados,   color:'#EF4444'},
+    {label:'Sobrestock',  val:sobrestock, color:'#06B6D4'},
+  ];
+  var totalE = items || 1;
+  estados.forEach(function(e){
+    var pct = Math.round((e.val/totalE)*100);
+    h.push('<div style="margin-bottom:10px">');
+    h.push('<div style="display:flex;justify-content:space-between;margin-bottom:3px">');
+    h.push('<span style="font-size:11px;color:var(--text2)">'+e.label+'</span>');
+    h.push('<span style="font-size:11px;font-weight:700;color:'+e.color+'">'+fmt(e.val)+' ('+pct+'%)</span>');
+    h.push('</div>');
+    h.push('<div style="height:6px;background:var(--border);border-radius:99px;overflow:hidden">');
+    h.push('<div style="height:100%;width:'+pct+'%;background:'+e.color+';border-radius:99px;transition:width .6s ease"></div>');
+    h.push('</div></div>');
+  });
+  h.push('</div>');
+
+  // Gráfico 2: Clasificación ABC (donut inline)
+  var total_abc = (abcA+abcB+abcC)||1;
+  var pA = Math.round(abcA/total_abc*100);
+  var pB = Math.round(abcB/total_abc*100);
+  var pC = 100-pA-pB;
+  var circum = 2*Math.PI*45;
+  var dA = circum*(pA/100); var dB = circum*(pB/100); var dC = circum*(pC/100);
+  var offA=0; var offB=circum-dA; var offC=circum-dA-dB;
+  h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:16px">');
+  h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:14px">🔤 Clasificación ABC</div>');
+  h.push('<div style="display:flex;align-items:center;gap:16px">');
+  h.push('<svg viewBox="0 0 100 100" width="90" height="90" style="flex-shrink:0">');
+  h.push('<circle cx="50" cy="50" r="45" fill="none" stroke="var(--border)" stroke-width="12"/>');
+  if(pA>0) h.push('<circle cx="50" cy="50" r="45" fill="none" stroke="#22C55E" stroke-width="12" stroke-dasharray="'+dA+' '+circum+'" stroke-dashoffset="'+(-offA+circum/4)+'" transform="rotate(-90 50 50)"/>');
+  if(pB>0) h.push('<circle cx="50" cy="50" r="45" fill="none" stroke="#F59E0B" stroke-width="12" stroke-dasharray="'+dB+' '+circum+'" stroke-dashoffset="'+(-(offA+dA)+circum/4)+'" transform="rotate(-90 50 50)"/>');
+  if(pC>0) h.push('<circle cx="50" cy="50" r="45" fill="none" stroke="#EF4444" stroke-width="12" stroke-dasharray="'+dC+' '+circum+'" stroke-dashoffset="'+(-(offA+dA+dB)+circum/4)+'" transform="rotate(-90 50 50)"/>');
+  h.push('<text x="50" y="50" text-anchor="middle" dy=".3em" fill="var(--white)" font-size="12" font-weight="bold">ABC</text>');
+  h.push('</svg>');
+  h.push('<div style="flex:1">');
+  [['A','#22C55E','80% valor',abcA],['B','#F59E0B','15% valor',abcB],['C','#EF4444','5% valor',abcC]].forEach(function(row){
+    h.push('<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">');
+    h.push('<div style="width:10px;height:10px;border-radius:2px;background:'+row[1]+';flex-shrink:0"></div>');
+    h.push('<div><div style="font-size:11px;font-weight:700;color:'+row[1]+'">Clase '+row[0]+'</div>');
+    h.push('<div style="font-size:10px;color:var(--muted)">'+fmt(row[3])+' art · '+row[2]+'</div></div></div>');
+  });
+  h.push('</div></div></div>');
+
+  // Gráfico 3: Top categorías
+  h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:16px">');
+  h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:14px">📂 Top Categorías</div>');
+  if (!categorias.length) {
+    h.push('<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px 0">Sin datos aún</div>');
+  } else {
+    var maxCat = Math.max.apply(null, categorias.slice(0,6).map(function(x){return x.count||0;})) || 1;
+    categorias.slice(0,6).forEach(function(cat, idx){
+      var colors=['#00A8FF','#22C55E','#F59E0B','#8B5CF6','#06B6D4','#EF4444'];
+      var pct = Math.round(((cat.count||0)/maxCat)*100);
+      h.push('<div style="margin-bottom:8px">');
+      h.push('<div style="display:flex;justify-content:space-between;margin-bottom:2px">');
+      h.push('<span style="font-size:10px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">'+(cat.nombre||'Sin cat')+'</span>');
+      h.push('<span style="font-size:10px;font-weight:700;color:'+colors[idx%6]+'">'+fmt(cat.count||0)+'</span>');
+      h.push('</div><div style="height:5px;background:var(--border);border-radius:99px;overflow:hidden">');
+      h.push('<div style="height:100%;width:'+pct+'%;background:'+colors[idx%6]+';border-radius:99px"></div>');
+      h.push('</div></div>');
+    });
   }
+  h.push('</div>');
+  h.push('</div>'); // end gráficos grid
+
+  // Alertas
+  var alertas = [];
+  if (agotados>0) alertas.push({icon:'🔴',text:agotados+' artículos agotados',color:'#EF4444',action:"goto('inventario')"});
+  if (criticos>0) alertas.push({icon:'⚠️',text:criticos+' artículos en estado crítico',color:'#F59E0B',action:"goto('inventario')"});
+  if (bajos>0)    alertas.push({icon:'🔁',text:bajos+' artículos en punto de reorden',color:'#8B5CF6',action:"goto('inventario')"});
+  if (alertas.length) {
+    h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:16px;margin-bottom:16px">');
+    h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:12px">🔔 Alertas Activas ('+alertas.length+')</div>');
+    alertas.forEach(function(a){
+      h.push('<div onclick="'+a.action+'" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:'+a.color+'18;border:1px solid '+a.color+'33;border-radius:8px;margin-bottom:8px;cursor:pointer">');
+      h.push('<span style="font-size:16px">'+a.icon+'</span>');
+      h.push('<span style="font-size:12px;color:var(--white)">'+a.text+'</span>');
+      h.push('<span style="margin-left:auto;font-size:11px;color:'+a.color+'">Ver →</span>');
+      h.push('</div>');
+    });
+    h.push('</div>');
+  }
+
+  // Accesos rápidos
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px">');
+  var accesos=[
+    {icon:'📦',label:'Inventario',page:'inventario',color:'#00A8FF'},
+    {icon:'🛒',label:'Compras',page:'compras',color:'#22C55E'},
+    {icon:'🏭',label:'Proveedores',page:'proveedores',color:'#F59E0B'},
+    {icon:'📜',label:'Kardex',page:'inventario',color:'#8B5CF6'},
+    {icon:'📊',label:'Gerencial',page:'gerencial',color:'#06B6D4'},
+    {icon:'📱',label:'Generar QR',page:'generar-qr',color:'#EF4444'},
+  ];
+  accesos.forEach(function(a){
+    h.push('<div onclick="goto(\''+a.page+'\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center;cursor:pointer;transition:.2s" onmouseenter="this.style.borderColor=\''+a.color+'\'" onmouseleave="this.style.borderColor=\'var(--border2)\'">');
+    h.push('<div style="font-size:28px;margin-bottom:6px">'+a.icon+'</div>');
+    h.push('<div style="font-size:11px;font-weight:600;color:var(--text2)">'+a.label+'</div>');
+    h.push('</div>');
+  });
+  h.push('</div>');
+
+  h.push('</div>'); // end padding
+  pg.innerHTML = h.join('');
 };
 
 function _renderDashboardAlmacenista() {
@@ -12552,8 +12774,157 @@ function _toggleAllInvChk(chk) {
 
 /* ── Stubs para módulos en desarrollo ───────────────────────────────── */
 renders['mis-inventarios'] = function(){ var pg=document.getElementById('pg-mis-inventarios'); if(pg) pg.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><p style="font-size:20px;margin-bottom:10px">🗂️</p><p style="font-size:14px"> Mis Inventarios — próximamente</p></div>'; };
-renders['respaldos'] = function(){ var pg=document.getElementById('pg-respaldos'); if(pg) pg.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><p style="font-size:20px;margin-bottom:10px">💾 </p><p style="font-size:14px">Respaldos — próximamente</p></div>'; };
-renders['generar-qr'] = function(){ var pg=document.getElementById('pg-generar-qr'); if(pg) pg.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted)"><p style="font-size:20px;margin-bottom:10px">📱 </p><p style="font-size:14px">Generar QR — próximamente</p></div>'; };
+renders['respaldos'] = function() {
+  var pg = document.getElementById('pg-respaldos');
+  if (!pg) return;
+  var respaldos = _loadRespaldos();
+  var h = [];
+  h.push('<div style="max-width:900px;margin:0 auto;padding:16px">');
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">');
+  h.push('<h2 style="font-size:18px;font-weight:700;color:var(--white);margin:0">💾 Respaldos del Sistema</h2>');
+  h.push('<div style="display:flex;gap:8px;flex-wrap:wrap">');
+  h.push('<button onclick="_crearRespaldo()" style="background:var(--electric);color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700">⬆ Crear Respaldo</button>');
+  h.push('<button onclick="_importarRespaldo()" style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#22C55E;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:12px">⬇ Restaurar</button>');
+  h.push('</div></div>');
+
+  // Stats
+  var totalSize = respaldos.reduce(function(a,r){return a+(r.size||0);},0);
+  h.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">');
+  [
+    {icon:'💾',label:'Total Respaldos',val:respaldos.length,color:'#00A8FF'},
+    {icon:'📁',label:'Tamaño Total',val:_fmtSize(totalSize),color:'#22C55E'},
+    {icon:'🕐',label:'Último Respaldo',val:respaldos.length?_timeAgo(respaldos[0].fecha):'Nunca',color:'#F59E0B'},
+  ].forEach(function(k){
+    h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px;text-align:center">');
+    h.push('<div style="font-size:24px;margin-bottom:6px">'+k.icon+'</div>');
+    h.push('<div style="font-size:20px;font-weight:800;color:'+k.color+'">'+k.val+'</div>');
+    h.push('<div style="font-size:11px;color:var(--muted)">'+k.label+'</div>');
+    h.push('</div>');
+  });
+  h.push('</div>');
+
+  // Qué incluye el respaldo
+  h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:16px;margin-bottom:16px">');
+  h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:12px">📦 Contenido del Respaldo</div>');
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">');
+  var modulos=['Inventario','Movimientos','Proveedores','Bodegas','Usuarios','Configuración','Alertas','Reservas','KPIs'];
+  modulos.forEach(function(m){
+    h.push('<div style="display:flex;align-items:center;gap:6px;padding:8px;background:rgba(34,197,94,.05);border:1px solid rgba(34,197,94,.15);border-radius:8px">');
+    h.push('<span style="color:#22C55E">✓</span><span style="font-size:11px;color:var(--text2)">'+m+'</span>');
+    h.push('</div>');
+  });
+  h.push('</div></div>');
+
+  // Lista de respaldos
+  h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:16px">');
+  h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:12px">📋 Historial de Respaldos</div>');
+  if (!respaldos.length) {
+    h.push('<div style="text-align:center;padding:30px;color:var(--muted)">');
+    h.push('<div style="font-size:40px;margin-bottom:10px">💾</div>');
+    h.push('<p>No hay respaldos creados</p>');
+    h.push('<button onclick="_crearRespaldo()" style="background:var(--electric);color:#000;border:none;padding:8px 20px;border-radius:8px;cursor:pointer;font-weight:700;margin-top:10px">Crear Primer Respaldo</button>');
+    h.push('</div>');
+  } else {
+    h.push('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">');
+    h.push('<thead><tr style="border-bottom:2px solid var(--border2)">');
+    ['Nombre','Fecha','Tamaño','Módulos','Acciones'].forEach(function(col){
+      h.push('<th style="padding:8px;font-size:10px;font-weight:700;color:var(--muted);text-align:left">'+col+'</th>');
+    });
+    h.push('</tr></thead><tbody>');
+    respaldos.forEach(function(r, i){
+      h.push('<tr style="border-bottom:1px solid var(--border)">');
+      h.push('<td style="padding:8px;font-size:12px;color:var(--white)">'+r.nombre+'</td>');
+      h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+new Date(r.fecha).toLocaleString('es-CO')+'</td>');
+      h.push('<td style="padding:8px;font-size:11px;color:var(--cyan)">'+_fmtSize(r.size||0)+'</td>');
+      h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+(r.modulos||[]).join(', ')+'</td>');
+      h.push('<td style="padding:8px"><div style="display:flex;gap:4px">');
+      h.push('<button onclick="_descargarRespaldo('+i+')" style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">⬇ JSON</button>');
+      h.push('<button onclick="_restaurarRespaldo('+i+')" style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#22C55E;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">♻ Restaurar</button>');
+      h.push('<button onclick="_eliminarRespaldo('+i+')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#EF4444;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">🗑</button>');
+      h.push('</div></td></tr>');
+    });
+    h.push('</tbody></table></div>');
+  }
+  h.push('</div></div>');
+  pg.innerHTML = h.join('');
+};;
+renders['generar-qr'] = function() {
+  var pg = document.getElementById('pg-generar-qr');
+  if (!pg) return;
+  var items = (_invItems && _invItems.length) ? _invItems : (loadItems()||[]);
+  var h = [];
+  h.push('<div style="max-width:900px;margin:0 auto;padding:16px">');
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">');
+  h.push('<h2 style="font-size:18px;font-weight:700;color:var(--white);margin:0">📱 Generador de Códigos QR</h2>');
+  h.push('<div style="display:flex;gap:8px">');
+  h.push('<button onclick="_qrBulkPrint()" style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px">🖨 Imprimir Todos</button>');
+  h.push('</div></div>');
+
+  // Panel de generación individual
+  h.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">');
+  // Left: configuración
+  h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:20px">');
+  h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:14px">⚙️ Configurar QR</div>');
+  h.push('<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Tipo de contenido</label>');
+  h.push('<select id="qr-tipo" onchange="_qrPreview()" style="width:100%;background:var(--bg-panel);border:1px solid var(--border2);color:var(--white);padding:8px;border-radius:8px;font-size:12px">');
+  h.push('<option value="codigo">Código de Producto</option>');
+  h.push('<option value="url">URL de Producto</option>');
+  h.push('<option value="custom">Texto Personalizado</option>');
+  h.push('<option value="ubicacion">Ubicación Bodega</option>');
+  h.push('</select></div>');
+  h.push('<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Buscar artículo</label>');
+  h.push('<select id="qr-item" onchange="_qrPreview()" style="width:100%;background:var(--bg-panel);border:1px solid var(--border2);color:var(--white);padding:8px;border-radius:8px;font-size:12px">');
+  h.push('<option value="">-- Seleccionar artículo --</option>');
+  items.slice(0,200).forEach(function(it){
+    h.push('<option value="'+it.codigo+'">['+it.codigo+'] '+(it.nombre||'').substring(0,40)+'</option>');
+  });
+  h.push('</select></div>');
+  h.push('<div style="margin-bottom:12px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Tamaño (px)</label>');
+  h.push('<input type="range" id="qr-size" min="100" max="400" value="200" oninput="_qrPreview();document.getElementById(&quot;qr-size-val&quot;).textContent=this.value+&quot;px&quot;" style="width:100%">');
+  h.push('<span id="qr-size-val" style="font-size:11px;color:var(--muted)">200px</span></div>');
+  h.push('<div style="margin-bottom:16px"><label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Texto personalizado</label>');
+  h.push('<textarea id="qr-custom" placeholder="Ingresa texto o URL..." oninput="_qrPreview()" style="width:100%;background:var(--bg-panel);border:1px solid var(--border2);color:var(--white);padding:8px;border-radius:8px;font-size:12px;resize:vertical;min-height:60px;box-sizing:border-box"></textarea></div>');
+  h.push('<button onclick="_qrDownload()" style="width:100%;background:var(--electric);color:#000;border:none;padding:10px;border-radius:8px;cursor:pointer;font-weight:700;font-size:13px">⬇ Descargar QR</button>');
+  h.push('</div>');
+  // Right: preview
+  h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center">');
+  h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:14px;align-self:flex-start">👁 Vista Previa</div>');
+  h.push('<div id="qr-preview-wrap" style="background:#fff;padding:16px;border-radius:8px;display:flex;flex-direction:column;align-items:center;gap:8px">');
+  h.push('<canvas id="qr-canvas" width="200" height="200"></canvas>');
+  h.push('<div id="qr-label" style="font-size:11px;color:#333;text-align:center;max-width:200px;word-break:break-all"></div>');
+  h.push('</div>');
+  h.push('<div style="display:flex;gap:8px;margin-top:12px">');
+  h.push('<button onclick="_qrDownload()" style="background:var(--neon);color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700">⬇ PNG</button>');
+  h.push('<button onclick="_qrPrint()" style="background:var(--electric);color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700">🖨 Imprimir</button>');
+  h.push('</div></div></div>');
+
+  // Tabla de artículos con QR
+  h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:16px">');
+  h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:12px">📋 Artículos ('+(items.length)+')</div>');
+  h.push('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">');
+  h.push('<thead><tr style="border-bottom:2px solid var(--border2)">');
+  ['Código','Nombre','Categoría','Ubicación','Acción'].forEach(function(col){
+    h.push('<th style="padding:8px;font-size:10px;font-weight:700;color:var(--muted);text-align:left">'+col+'</th>');
+  });
+  h.push('</tr></thead><tbody>');
+  items.slice(0,50).forEach(function(it){
+    h.push('<tr style="border-bottom:1px solid var(--border)">');
+    h.push('<td style="padding:7px 8px;font-family:monospace;font-size:11px;color:var(--electric)">'+it.codigo+'</td>');
+    h.push('<td style="padding:7px 8px;font-size:11px;color:var(--white)">'+((it.nombre||'').substring(0,35))+'</td>');
+    h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+(it.categoria||'—')+'</td>');
+    h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+(it.ubicacion||'—')+'</td>');
+    h.push('<td style="padding:7px 8px">');
+    h.push('<button onclick="document.getElementById(&quot;qr-item&quot;)&&(document.getElementById(&quot;qr-item&quot;).value=&quot;'+it.codigo+'&quot;,_qrPreview())" style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">📱 QR</button>');
+    h.push('</td></tr>');
+  });
+  h.push('</tbody></table></div>');
+  if (items.length > 50) h.push('<p style="font-size:11px;color:var(--muted);padding:8px">Mostrando 50 de '+items.length+' artículos.</p>');
+  h.push('</div></div>');
+  pg.innerHTML = h.join('');
+
+  // Init QR library and generate first QR
+  _qrInit();
+};;
 
 
 function toggleThemeMenu() {
@@ -14417,6 +14788,297 @@ renders.escaner = function() {
     '</div></div>'
   ].join('');
 };
+
+
+/* ══════════════════════════════════════════════════════════════
+   SISTEMA DE TEMAS, QR Y RESPALDOS — StockFlow WMS
+══════════════════════════════════════════════════════════════ */
+
+/* ── SISTEMA DE TEMAS ──────────────────────────────────────── */
+var TEMAS = {
+  dark:  { label: '🌙 Oscuro',     desc: 'Tema oscuro por defecto' },
+  light: { label: '☀️ Claro',      desc: 'Tema claro para ambientes iluminados' },
+  navy:  { label: '🌊 Marino',     desc: 'Azul marino estilo terminal' },
+  green: { label: '🌿 Verde WMS',  desc: 'Verde para operaciones de almacén' },
+};
+
+function _aplicarTema(tema) {
+  document.documentElement.setAttribute('data-theme', tema || 'dark');
+  try { DB.set('sf_tema', tema); } catch(e) {}
+}
+
+function _getTema() {
+  try { return DB.get('sf_tema') || 'dark'; } catch(e) { return 'dark'; }
+}
+
+function _initTema() {
+  _aplicarTema(_getTema());
+}
+
+function _buildTemaSelector() {
+  var h = [];
+  var current = _getTema();
+  h.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px">');
+  Object.keys(TEMAS).forEach(function(key) {
+    var t = TEMAS[key];
+    var active = current === key;
+    h.push('<div onclick="_aplicarTema(\''+key+'\')" style="');
+    h.push('background:var(--card2);border:2px solid '+(active?'var(--electric)':'var(--border2)')+';');
+    h.push('border-radius:12px;padding:14px;cursor:pointer;transition:.2s" ');
+    h.push('onmouseenter="this.style.borderColor=\'var(--electric)\'" onmouseleave="this.style.borderColor=\''+(active?'var(--electric)':'var(--border2)')+'\'"');
+    h.push('>');
+    h.push('<div style="font-size:20px;margin-bottom:6px">'+t.label.split(' ')[0]+'</div>');
+    h.push('<div style="font-size:12px;font-weight:700;color:var(--white)">'+t.label.substring(2)+'</div>');
+    h.push('<div style="font-size:10px;color:var(--muted);margin-top:3px">'+t.desc+'</div>');
+    if (active) h.push('<div style="font-size:10px;color:var(--electric);margin-top:6px;font-weight:700">✓ Activo</div>');
+    h.push('</div>');
+  });
+  h.push('</div>');
+  return h.join('');
+}
+
+/* ── TOPBAR SELECTOR DE TEMA ──────────────────────────────── */
+function _abrirSelectorTema() {
+  openModal('<div><div style="padding:16px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px"><span style="font-size:18px">🎨</span><span style="font-size:15px;font-weight:700;color:var(--white)">Seleccionar Tema</span></div>'
+    + _buildTemaSelector() + '</div>');
+}
+
+/* ── QR FUNCTIONS ──────────────────────────────────────────── */
+var _qrLibLoaded = false;
+
+function _qrInit() {
+  // Use QRious library (loaded in head)
+  setTimeout(function() {
+    _qrPreview();
+  }, 100);
+}
+
+function _qrGetText() {
+  var tipo = (document.getElementById('qr-tipo')||{}).value || 'codigo';
+  var item = (document.getElementById('qr-item')||{}).value || '';
+  var custom = (document.getElementById('qr-custom')||{}).value || '';
+  if (tipo === 'custom' || !item) return custom || 'StockFlow';
+  if (tipo === 'url') return window.location.origin + '?item=' + item;
+  if (tipo === 'ubicacion') {
+    var items = (_invItems||[]);
+    var found = items.find(function(i){return i.codigo===item;});
+    return found ? 'UB:' + (found.ubicacion||'') + ':' + item : item;
+  }
+  return item; // codigo
+}
+
+function _qrPreview() {
+  var canvas = document.getElementById('qr-canvas');
+  var label  = document.getElementById('qr-label');
+  if (!canvas) return;
+  var text = _qrGetText();
+  var size = parseInt((document.getElementById('qr-size')||{}).value||200);
+  canvas.width = size; canvas.height = size;
+  if (label) label.textContent = text;
+  try {
+    if (typeof QRious !== 'undefined') {
+      new QRious({ element: canvas, value: text, size: size, backgroundAlpha: 1, foreground: '#000', background: '#fff', level: 'M' });
+    } else {
+      // Fallback: draw placeholder
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,size,size);
+      ctx.fillStyle = '#333'; ctx.font = '12px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('QR: ' + text.substring(0,20), size/2, size/2);
+    }
+  } catch(e) { console.warn('QR error:', e); }
+}
+
+function _qrDownload() {
+  var canvas = document.getElementById('qr-canvas');
+  if (!canvas) return;
+  _qrPreview();
+  var text = _qrGetText();
+  var a = document.createElement('a');
+  a.download = 'QR_' + text.replace(/[^a-zA-Z0-9]/g,'_').substring(0,30) + '.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
+
+function _qrPrint() {
+  var canvas = document.getElementById('qr-canvas');
+  if (!canvas) return;
+  _qrPreview();
+  var text = _qrGetText();
+  var dataUrl = canvas.toDataURL('image/png');
+  var w = window.open('','_blank');
+  w.document.write('<html><head><title>QR StockFlow</title></head><body style="text-align:center;padding:20px;font-family:sans-serif">');
+  w.document.write('<img src="'+dataUrl+'" style="max-width:300px"><br>');
+  w.document.write('<p style="font-family:monospace;font-size:12px">'+text+'</p>');
+  w.document.write('<script>window.onload=function(){window.print();window.close();}<\/script>');
+  w.document.write('</body></html>');
+  w.document.close();
+}
+
+function _qrFromItem(codigo) {
+  var sel = document.getElementById('qr-item');
+  if (sel) { sel.value = codigo; _qrPreview(); }
+  var wrap = document.getElementById('qr-preview-wrap');
+  if (wrap) wrap.scrollIntoView({behavior:'smooth'});
+}
+
+function _qrBulkPrint() {
+  var items = (_invItems && _invItems.length) ? _invItems : (loadItems()||[]);
+  if (!items.length) { showToast('No hay artículos para imprimir QR', 'red'); return; }
+  if (items.length > 100) { items = items.slice(0, 100); }
+  showToast('Generando ' + items.length + ' QR... espera', 'blue');
+  setTimeout(function() {
+    var w = window.open('','_blank');
+    w.document.write('<html><head><title>QR Masivo StockFlow</title><style>');
+    w.document.write('.qr-item{display:inline-block;margin:8px;text-align:center;border:1px solid #ddd;padding:8px;border-radius:4px;page-break-inside:avoid}');
+    w.document.write('@media print{body{margin:0}}</style></head><body>');
+    items.forEach(function(it) {
+      w.document.write('<div class="qr-item"><div id="qr_'+it.codigo+'"></div>');
+      w.document.write('<div style="font-size:9px;font-family:monospace;margin-top:4px">'+it.codigo+'</div>');
+      w.document.write('<div style="font-size:8px;color:#666;max-width:80px;overflow:hidden">'+((it.nombre||'').substring(0,20))+'</div></div>');
+    });
+    w.document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"><\/script>');
+    w.document.write('<script>window.onload=function(){');
+    items.forEach(function(it) {
+      w.document.write('new QRious({element:document.createElement("canvas"),value:"'+it.codigo+'",size:80,foreground:"#000",background:"#fff"}).canvas.toDataURL&&(document.getElementById("qr_'+it.codigo+'").innerHTML=\'<canvas id="c'+it.codigo+'"></canvas>\',new QRious({element:document.getElementById("c'+it.codigo+'"),value:"'+it.codigo+'",size:80}));');
+    });
+    w.document.write('setTimeout(function(){window.print();},1000)};');
+    w.document.write('<\/script></body></html>');
+    w.document.close();
+  }, 300);
+}
+
+/* ── RESPALDOS FUNCTIONS ────────────────────────────────────── */
+function _loadRespaldos() {
+  try { return DB.get('sf_respaldos') || []; } catch(e) { return []; }
+}
+
+function _saveRespaldos(data) {
+  try { DB.set('sf_respaldos', data); } catch(e) {}
+}
+
+function _fmtSize(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1048576).toFixed(2) + ' MB';
+}
+
+function _timeAgo(fecha) {
+  if (!fecha) return '—';
+  var diff = Date.now() - new Date(fecha).getTime();
+  var mins = Math.floor(diff/60000);
+  if (mins < 1) return 'Ahora';
+  if (mins < 60) return mins + ' min';
+  var hrs = Math.floor(mins/60);
+  if (hrs < 24) return hrs + ' h';
+  return Math.floor(hrs/24) + ' d';
+}
+
+function _crearRespaldo() {
+  try {
+    var datos = {
+      inventario:   loadItems ? loadItems() : [],
+      movimientos:  (typeof loadMovs==='function') ? loadMovs() : [],
+      proveedores:  (typeof loadProveedores==='function') ? loadProveedores() : [],
+      bodegas:      (typeof loadBodegas==='function') ? loadBodegas() : [],
+      usuarios:     (typeof loadUsers==='function') ? loadUsers() : [],
+      config:       (typeof loadConfig==='function') ? loadConfig() : {},
+    };
+    var json = JSON.stringify(datos);
+    var respaldo = {
+      nombre:  'Respaldo_' + new Date().toISOString().slice(0,19).replace(/[T:]/g,'_'),
+      fecha:   new Date().toISOString(),
+      size:    json.length,
+      modulos: Object.keys(datos).filter(function(k){return (datos[k]&&datos[k].length)||typeof datos[k]==='object';}),
+      data:    json,
+    };
+    var lista = _loadRespaldos();
+    lista.unshift(respaldo);
+    if (lista.length > 20) lista = lista.slice(0, 20); // max 20 backups
+    _saveRespaldos(lista);
+    showToast('✅ Respaldo creado: ' + respaldo.nombre, 'blue');
+    renders['respaldos']();
+  } catch(e) {
+    showToast('Error al crear respaldo: ' + e.message, 'red');
+  }
+}
+
+function _descargarRespaldo(idx) {
+  var lista = _loadRespaldos();
+  var r = lista[idx];
+  if (!r) return;
+  var blob = new Blob([r.data], {type:'application/json'});
+  var a = document.createElement('a');
+  a.download = r.nombre + '.json';
+  a.href = URL.createObjectURL(blob);
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function _restaurarRespaldo(idx) {
+  var lista = _loadRespaldos();
+  var r = lista[idx];
+  if (!r) return;
+  if (!confirm('⚠️ ¿Restaurar este respaldo? Los datos actuales serán reemplazados.\n\nRespaldo: ' + r.nombre)) return;
+  try {
+    var datos = JSON.parse(r.data);
+    if (datos.inventario && typeof saveItems==='function') saveItems(datos.inventario);
+    if (datos.movimientos && typeof saveMovs==='function') saveMovs(datos.movimientos);
+    if (datos.proveedores && typeof saveProveedores==='function') saveProveedores(datos.proveedores);
+    if (datos.usuarios && typeof saveUsers==='function') saveUsers(datos.usuarios);
+    _invItems = null; // clear cache
+    showToast('✅ Respaldo restaurado correctamente', 'blue');
+    setTimeout(function(){ goto('dashboard'); }, 1000);
+  } catch(e) {
+    showToast('Error al restaurar: ' + e.message, 'red');
+  }
+}
+
+function _eliminarRespaldo(idx) {
+  var lista = _loadRespaldos();
+  if (!confirm('¿Eliminar este respaldo?')) return;
+  lista.splice(idx, 1);
+  _saveRespaldos(lista);
+  renders['respaldos']();
+  showToast('Respaldo eliminado', 'amber');
+}
+
+function _importarRespaldo() {
+  var input = document.createElement('input');
+  input.type = 'file'; input.accept = '.json';
+  input.onchange = function(e) {
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        var datos = JSON.parse(ev.target.result);
+        var respaldo = {
+          nombre:  'Importado_' + file.name.replace('.json',''),
+          fecha:   new Date().toISOString(),
+          size:    ev.target.result.length,
+          modulos: Object.keys(datos),
+          data:    ev.target.result,
+        };
+        var lista = _loadRespaldos();
+        lista.unshift(respaldo);
+        _saveRespaldos(lista);
+        showToast('✅ Respaldo importado: ' + respaldo.nombre, 'blue');
+        renders['respaldos']();
+      } catch(e) {
+        showToast('Error: archivo JSON inválido', 'red');
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+/* ── INIT TEMA AL CARGAR ─────────────────────────────────────── */
+(function() {
+  try { _initTema(); } catch(e) {}
+})();
 
 </script>
 </body>
