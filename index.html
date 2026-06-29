@@ -271,8 +271,8 @@ body.app-mode #app-view{display:grid !important}
     z-index:200;transform:translateX(-100%);
     transition:transform .25s ease;
   }
-  .sidebar.open{transform:translateX(0)}
-  #hamburger-btn,.hamburger{display:flex !important}
+  
+  #hamburger-btn,
 }
 
 /* ═════════════════════════════════════════════════════════════ */
@@ -318,7 +318,7 @@ nav a svg{width:15px;height:15px;flex-shrink:0;stroke:currentColor;fill:none;str
 .hamburger{display:none;background:none;border:none;cursor:pointer;padding:5px;color:var(--text2)}
 .hamburger svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2}
 .overlay-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:20}
-.overlay-bg.show{display:block}
+
 /* ── MODAL ───────────────────────────────────────────── */
 .modal-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:50;align-items:center;justify-content:center;padding:14px;backdrop-filter:blur(4px)}
 .modal-wrap.show{display:flex}
@@ -401,7 +401,7 @@ label{
   color:var(--muted);margin-bottom:4px;
 }
 .form-row{margin-bottom:12px}
-.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+
 /* ── BUTTONS ─────────────────────────────────────────── */
 .btn{
   display:inline-flex;align-items:center;gap:5px;
@@ -593,10 +593,7 @@ mark{background:rgba(255,184,0,.3);color:var(--amber);border-radius:3px;padding:
   background:radial-gradient(circle,rgba(124,255,0,.06) 0%,transparent 70%);
   pointer-events:none;
 }
-.login-right{
-  flex:1;display:flex;align-items:center;justify-content:center;padding:32px;
-  background:linear-gradient(135deg,#0B1220 0%,#0D1828 100%);
-}
+
 .login-right .card{
   width:100%;max-width:380px;
   background:rgba(15,32,64,.8);
@@ -2197,7 +2194,7 @@ function _renderInventarioTab(q) {
   h.push('<div style="display:flex;gap:2px;margin-bottom:16px;border-bottom:2px solid rgba(255,255,255,.07);overflow-x:auto;scrollbar-width:none">');
   tabs.forEach(function(t){
     var active = tab === t.id;
-    h.push('<button onclick="window._invTab=\''+t.id+'\';_renderInventarioTab()" style="padding:8px 14px;font-size:11px;font-weight:'+(active?'700':'500')+';white-space:nowrap;background:none;border:none;border-bottom:2px solid '+(active?'var(--electric)':'transparent')+';color:'+(active?'var(--electric)':'var(--muted)')+';cursor:pointer;margin-bottom:-2px;transition:all .15s">'+t.label+'</button>');
+    h.push('<button style="padding:8px 14px;font-size:11px;font-weight:'+(active?'700':'500')+';white-space:nowrap;background:none;border:none;border-bottom:2px solid '+(active?'var(--electric)':'transparent')+';color:'+(active?'var(--electric)':'var(--muted)')+';cursor:pointer;margin-bottom:-2px;transition:all .15s">'+t.label+'</button>');
   });
   h.push('</div>');
   pg.innerHTML = h.join('');
@@ -2382,7 +2379,7 @@ function _dashRender(pg) {
   h.push('<div style="display:flex;gap:8px;flex-wrap:wrap">');
   h.push('<button onclick="goto(\'inventario\')" style="background:var(--electric);color:#000;border:none;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">+ Nuevo Artículo</button>');
   h.push('<button onclick="goto(\'importar\')" style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:7px 14px;border-radius:8px;font-size:12px;cursor:pointer">📥 Importar Excel</button>');
-  h.push('<button onclick="_dashRender(document.getElementById(\'pg-dashboard\'))" style="background:var(--card2);border:1px solid var(--border2);color:var(--muted);padding:7px 10px;border-radius:8px;font-size:12px;cursor:pointer" title="Actualizar">↻</button>');
+  h.push('<button style="background:var(--card2);border:1px solid var(--border2);color:var(--muted);padding:7px 10px;border-radius:8px;font-size:12px;cursor:pointer" title="Actualizar">↻</button>');
   h.push('</div></div>');
 
   // ── KPI CARDS (6 tarjetas) ─────────────────────────────────
@@ -2417,7 +2414,7 @@ function _dashRender(pg) {
   var tabs = ['Estado','ABC','Categorías','Tendencia','Edad'];
   h.push('<div style="display:flex;border-bottom:1px solid var(--border2);overflow-x:auto">');
   tabs.forEach(function(tab, i) {
-    h.push('<button onclick="_dashTab('+i+')" id="dtab-'+i+'" style="padding:10px 16px;border:none;background:'+(i===0?'var(--electric)':'transparent')+';color:'+(i===0?'#000':'var(--muted)')+';font-size:12px;font-weight:'+(i===0?'700':'500')+';cursor:pointer;white-space:nowrap;transition:.2s">'+tab+'</button>');
+    h.push('<button id="dtab-'+i+'" style="padding:10px 16px;border:none;background:'+(i===0?'var(--electric)':'transparent')+';color:'+(i===0?'#000':'var(--muted)')+';font-size:12px;font-weight:'+(i===0?'700':'500')+';cursor:pointer;white-space:nowrap;transition:.2s">'+tab+'</button>');
   });
   h.push('</div>');
   h.push('<div id="dash-tab-content" style="padding:16px">');
@@ -2694,7 +2691,7 @@ function _dashRender(pg) {
     {icon:'📥',l:'Importar',      p:'importar',   c:'#F97316'},
   ];
   accesos.forEach(function(a) {
-    h.push('<div onclick="goto(\''+a.p+'\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:.15s" onmouseenter="this.style.borderColor=\''+a.c+'\';this.style.background=\''+a.c+'11\'" onmouseleave="this.style.borderColor=\'var(--border2)\';this.style.background=\'var(--card2)\'">');
+    h.push('<div onclick="goto(\'\'+a.p+\'\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:.15s" onmouseenter="this.style.borderColor=\''+a.c+'\';this.style.background=\''+a.c+'11\'" onmouseleave="this.style.borderColor=\'var(--border2)\';this.style.background=\'var(--card2)\'">');
     h.push('<div style="font-size:22px;margin-bottom:4px">'+a.icon+'</div>');
     h.push('<div style="font-size:10px;font-weight:600;color:var(--text2)">'+a.l+'</div>');
     h.push('</div>');
@@ -2740,7 +2737,7 @@ function _renderDashboardAlmacenista() {
   h.push('<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">');
   h.push('<button onclick="goto(\'inventario\')" class="btn btn-navy">📦 Ver Inventario</button>');
   h.push('<button onclick="abrirGestionReservas()" class="btn btn-ghost" style="color:#a78bfa">📋 Ver Reservas</button>');
-  h.push('<button onclick="openMovModal(\'\1\')" class="btn btn-ghost" style="color:#4ade80">⬆️ Nueva Entrada</button>');
+  h.push('<button class="btn btn-ghost" style="color:#4ade80">⬆️ Nueva Entrada</button>');
   h.push('</div>');
   pg.innerHTML = h.join('');
 }
@@ -3019,7 +3016,7 @@ function _buildDashboardKPIs() {
   h.push('</div>');
   alertas.forEach(function(a) {
     var alertOnclick = 'invFiltro=\''+a.filtro+'\';goto(\''+a.href+'\')';
-    h.push('<div onclick="'+alertOnclick+'" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:'+a.bg+';margin-bottom:6px;cursor:pointer" onmouseenter="this.style.opacity=\'0.8\'" onmouseleave="this.style.opacity=\'1\'">');
+    h.push('<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:'+a.bg+';margin-bottom:6px;cursor:pointer" onmouseenter="this.style.opacity=\'0.8\'" onmouseleave="this.style.opacity=\'1\'">');
     h.push('<span style="font-size:16px">'+a.ico+'</span>');
     h.push('<span style="font-size:12px;color:'+a.clr+';font-weight:600">'+a.txt+'</span>');
     h.push('<svg viewBox="0 0 24 24" width="12" height="12" style="margin-left:auto;color:var(--muted)" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>');
@@ -3801,7 +3798,7 @@ function _renderPackTab() {
   h.push('<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border2);padding-bottom:0">');
   tabs.forEach(function(t){
     var active = _packTab===t.id;
-    h.push('<button onclick="_switchPackTab(\''+t.id+'\')" style="padding:8px 16px;border:none;cursor:pointer;font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'var(--electric)':'var(--muted)')+';background:none;border-bottom:2px solid '+(active?'var(--electric)':'transparent')+';margin-bottom:-1px;transition:all .2s">'+t.label+'</button>');
+    h.push('<button style="padding:8px 16px;border:none;cursor:pointer;font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'var(--electric)':'var(--muted)')+';background:none;border-bottom:2px solid '+(active?'var(--electric)':'transparent')+';margin-bottom:-1px;transition:all .2s">'+t.label+'</button>');
   });
   h.push('</div>');
   h.push('<div id="pack-tab-content"></div>');
@@ -3958,7 +3955,7 @@ function _ejecutarPacking(idx) {
     h.push('<p style="font-size:10px;color:var(--muted);font-family:monospace">'+l.sku+'</p></div>');
     h.push('<div style="display:flex;align-items:center;gap:8px">');
     h.push('<span style="font-size:14px;font-weight:700">'+(l.empacado||0)+'/'+l.cantidad+'</span>');
-    if (!done) h.push('<button class="btn btn-navy btn-xs" onclick="_empacarLinea('+idx+','+li+')">✓ Empacar</button>');
+    if (!done) h.push('<button class="btn btn-navy btn-xs">✓ Empacar</button>');
     h.push('</div></div>');
   });
   h.push('</div>');
@@ -3975,7 +3972,7 @@ function _ejecutarPacking(idx) {
       h.push('<img src="'+foto+'" style="width:100%;height:70px;object-fit:cover;border-radius:8px;border:2px solid var(--neon)">');
       h.push('<p style="font-size:9px;color:var(--neon);margin-top:3px">✓ '+lbl+'</p>');
     } else {
-      h.push('<div onclick="_capturarFotoPacking('+idx+','+fi+')" style="width:100%;height:70px;border:2px dashed var(--border2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,.02)">');
+      h.push('<div style="width:100%;height:70px;border:2px dashed var(--border2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,.02)">');
       h.push('<span style="font-size:20px">📷</span></div>');
       h.push('<p style="font-size:9px;color:var(--muted);margin-top:3px">'+lbl+'</p>');
     }
@@ -4009,15 +4006,15 @@ function _ejecutarPacking(idx) {
 
   // ── Acciones — NO bloqueadas por peso/dimensiones/guia ────────────────
   h.push('<div style="display:flex;gap:8px">');
-  h.push('<button class="btn btn-ghost" onclick="_guardarPacking('+idx+');closeModal()">💾 Guardar borrador</button>');
+  h.push('<button class="btn btn-ghost">💾 Guardar borrador</button>');
 
   if (fotos.length === 0) {
     h.push('<button class="btn btn-ghost" style="flex:1;opacity:.6;cursor:not-allowed" title="Agrega al menos 1 foto" disabled>📷 Necesitas al menos 1 foto</button>');
   } else if (!allDone) {
-    h.push('<button class="btn btn-ghost" onclick="_guardarPacking('+idx+');_finalizarPacking('+idx+');closeModal()" style="flex:1;color:var(--amber)">⚠ Finalizar igualmente (faltan unidades)</button>');
-    h.push('<button class="btn btn-navy" onclick="_guardarPacking('+idx+');closeModal()" style="flex:1">✅ Finalizar Packing</button>'.replace('Finalizar Packing', allDone?'✅ Finalizar Packing':'📦 Cerrar Packing ahora'));
+    h.push('<button class="btn btn-ghost" style="flex:1;color:var(--amber)">⚠ Finalizar igualmente (faltan unidades)</button>');
+    h.push('<button class="btn btn-navy" style="flex:1">✅ Finalizar Packing</button>'.replace('Finalizar Packing', allDone?'✅ Finalizar Packing':'📦 Cerrar Packing ahora'));
   } else {
-    h.push('<button class="btn btn-navy" style="flex:1" onclick="_guardarPacking('+idx+');_finalizarPacking('+idx+');closeModal()">✅ Finalizar Packing</button>');
+    h.push('<button class="btn btn-navy" style="flex:1">✅ Finalizar Packing</button>');
   }
   h.push('</div>');
 
@@ -4125,7 +4122,7 @@ function _verDetallePacking(idx) {
   if (p.observaciones) h.push('<p style="font-size:12px;color:var(--muted);padding:8px;background:rgba(255,255,255,.03);border-radius:8px;margin-bottom:12px">📝 '+p.observaciones+'</p>');
   // Pasar a despacho
   if (p.estado==='PACKING_COMPLETADO') {
-    h.push('<button class="btn btn-navy" onclick="closeModal();_packTab=\'despacho\';_renderPackTabContent()" style="width:100%">🚚 Ir a Despacho</button>');
+    h.push('<button class="btn btn-navy" style="width:100%">🚚 Ir a Despacho</button>');
   }
   h.push('<div style="margin-top:8px"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>');
   openModal(h.join(''), 'modal-lg');
@@ -4166,7 +4163,7 @@ function _buildTabGuias() {
     if (g.foto_guia) h.push(' 📷');
     if (!tieneUrl && !tienePdf && !g.foto_guia) h.push('<span style="color:var(--muted)">—</span>');
     h.push('</td>');
-    h.push('<td><button class="btn-icon" onclick="_editarGuia('+i+')">✏️</button></td>');
+    h.push('<td><button class="btn-icon">✏️</button></td>');
     h.push('</tr>');
   });
   h.push('</tbody></table></div></div>');
@@ -4210,7 +4207,7 @@ function _abrirNuevaGuia(packingId) {
   h.push('<div class="form-row"><label>Observaciones</label><textarea id="g-obs" rows="2" placeholder="Notas adicionales sobre el envío..."></textarea></div>');
   h.push('<div class="form-row"><label>Foto de guía</label>');
   h.push('<div style="display:flex;gap:8px;align-items:center">');
-  h.push('<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'g-foto-inp\').click()">📷 Capturar foto</button>');
+  h.push('<button type="button" class="btn btn-ghost btn-sm">📷 Capturar foto</button>');
   h.push('<span id="g-foto-label" style="font-size:11px;color:var(--muted)">Sin foto</span>');
   h.push('</div>');
   h.push('<input type="file" id="g-foto-inp" accept="image/*" capture="environment" style="display:none" onchange="_onFotoGuia(event)">');
@@ -4299,7 +4296,7 @@ function _editarGuia(idx) {
   h.push('<div class="form-row"><label>Observaciones</label><textarea id="eg-obs" rows="2">'+(g.observaciones||'')+'</textarea></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="_actualizarGuia('+idx+')">Guardar</button>');
+  h.push('<button class="btn btn-navy">Guardar</button>');
   h.push('</div>');
   openModal(h.join(''), 'modal-lg');
 }
@@ -4348,7 +4345,7 @@ function _buildTabDespacho() {
       h.push('<p style="font-size:11px;color:var(--muted)">'+(p.lineas||[]).length+' productos · '+(p.fotos||[]).length+' fotos</p></div>');
       h.push('<span class="badge cic-prog">'+p.estado.replace(/_/g,' ')+'</span>');
       h.push('</div>');
-      h.push('<button class="btn btn-navy btn-sm" onclick="_abrirDespacho(\''+p.id+'\')">🚚 Despachar</button>');
+      h.push('<button class="btn btn-navy btn-sm">🚚 Despachar</button>');
       h.push('</div>');
     });
     h.push('</div>');
@@ -4416,7 +4413,7 @@ function _abrirDespacho(packingId) {
   h.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">');
   var evLabels = ['Foto de la guía','Paquete cargado','Entrega a transportadora'];
   evLabels.forEach(function(lbl, ei){
-    h.push('<div><div id="d-ev-'+ei+'-preview" onclick="_capturarEvidencia('+ei+')" style="width:100%;height:70px;border:2px dashed var(--border2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,.02)">');
+    h.push('<div><div id="d-ev-'+ei+'-preview" style="width:100%;height:70px;border:2px dashed var(--border2);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:rgba(255,255,255,.02)">');
     h.push('<span style="font-size:20px">📷</span></div>');
     h.push('<p style="font-size:9px;color:var(--muted);text-align:center;margin-top:3px">'+lbl+'</p></div>');
   });
@@ -4436,7 +4433,7 @@ function _abrirDespacho(packingId) {
   h.push('<div class="form-row"><label>URL de seguimiento</label><input id="d-url" type="url" placeholder="https://..."></div>');
   h.push('<div class="form-row"><label>PDF de guía</label>');
   h.push('<div style="display:flex;gap:8px;align-items:center">');
-  h.push('<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(\'d-pdf-inp\').click()">📄 Adjuntar PDF</button>');
+  h.push('<button type="button" class="btn btn-ghost btn-sm">📄 Adjuntar PDF</button>');
   h.push('<span id="d-pdf-label" style="font-size:11px;color:var(--muted)">Sin PDF</span>');
   h.push('</div>');
   h.push('<input type="file" id="d-pdf-inp" accept=".pdf" style="display:none" onchange="_onPdfDespacho(event)">');
@@ -4619,7 +4616,7 @@ function _buildTabPackConfig() {
     h.push('<p style="font-size:13px;font-weight:600">'+o.label+'</p>');
     h.push('<p style="font-size:11px;color:var(--muted)">'+o.desc+'</p>');
     h.push('</div>');
-    h.push('<div onclick="_togglePackCfg(\''+o.key+'\')" id="pkcfg-'+o.key+'" style="cursor:pointer;width:44px;height:24px;border-radius:12px;background:'+(on?'var(--neon)':'rgba(255,255,255,.15)')+';position:relative;transition:background .2s;flex-shrink:0">');
+    h.push('<div id="pkcfg-'+o.key+'" style="cursor:pointer;width:44px;height:24px;border-radius:12px;background:'+(on?'var(--neon)':'rgba(255,255,255,.15)')+';position:relative;transition:background .2s;flex-shrink:0">');
     h.push('<div style="position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:2px;left:'+(on?'22px':'2px')+';transition:left .2s"></div>');
     h.push('</div>');
     h.push('</div>');
@@ -5210,7 +5207,7 @@ function _renderDashboardBasico(pg, K) {
     {ico:'📊', label:'Dashboard Gerencial', page:'gerencial'},
   ];
   actions.forEach(function(a) {
-    h.push('<div onclick="goto(\''+a.page+'\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:18px;cursor:pointer;text-align:center;transition:border-color .2s" onmouseenter="this.style.borderColor=\'rgba(59,130,246,.5)\'" onmouseleave="this.style.borderColor=\'var(--border2)\'">');
+    h.push('<div onclick="goto(\'\'+a.page+\'\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:18px;cursor:pointer;text-align:center;transition:border-color .2s" onmouseenter="this.style.borderColor=\'rgba(59,130,246,.5)\'" onmouseleave="this.style.borderColor=\'var(--border2)\'">');
     h.push('<div style="font-size:26px;margin-bottom:8px">'+a.ico+'</div>');
     h.push('<div style="font-size:13px;font-weight:600;color:var(--white)">'+a.label+'</div>');
     h.push('</div>');
@@ -5509,7 +5506,7 @@ function _renderGerencialInterno(K, pg) {
       h.push('<span style="font-size:11px;font-weight:700;color:#fb923c;background:rgba(251,146,60,.12);padding:2px 8px;border-radius:12px;flex-shrink:0">+'+item.compra_sug+'</span>');
       h.push('</div>');
     });
-    h.push('<button onclick="goto(\'inventario\');setTimeout(function(){ invFiltro=\'BAJO\';filterInventarioTable(); },300)" class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;font-size:10px">Ver todos en inventario →</button>');
+    h.push('<button onclick="_dashGoToInv()" class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;font-size:10px">Ver todos en inventario →</button>');
   }
   h.push('</div>');
   h.push('</div>');
@@ -5589,10 +5586,10 @@ function _buildIntegracionesUI(pg) {
       h.push('</div>');
     }
     h.push('<div style="display:flex;gap:6px">');
-    h.push('<button class="btn btn-navy btn-xs" onclick="_erpConfigModal(\''+erp.id+'\')">⚙️ '+(active?'Configurar':'Conectar')+'</button>');
+    h.push('<button class="btn btn-navy btn-xs">⚙️ '+(active?'Configurar':'Conectar')+'</button>');
     if (active) {
-      h.push('<button class="btn btn-ghost btn-xs" onclick="_erpSync(\''+erp.id+'\')">↺ Sync</button>');
-      h.push('<button class="btn btn-ghost btn-xs" style="color:var(--red)" onclick="_erpDesconectar(\''+erp.id+'\')">✕</button>');
+      h.push('<button class="btn btn-ghost btn-xs">↺ Sync</button>');
+      h.push('<button class="btn btn-ghost btn-xs" style="color:var(--red)">✕</button>');
     }
     h.push('</div></div>');
   });
@@ -5616,7 +5613,7 @@ function _buildIntegracionesUI(pg) {
     h.push('<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--border2)">');
     h.push('<div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px">'+opt.icon+'</span>');
     h.push('<span style="font-size:12px;color:var(--text2)">'+opt.label+'</span></div>');
-    h.push('<button onclick="_erpToggleSchedule(\''+opt.id+'\')" style="padding:3px 10px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(enabled?'var(--neon)':'rgba(255,255,255,.08)')+';color:'+(enabled?'#000':'var(--muted)')+'">'+( enabled?'ON':'OFF')+'</button>');
+    h.push('<button style="padding:3px 10px;border-radius:6px;border:none;cursor:pointer;font-size:11px;font-weight:700;background:'+(enabled?'var(--neon)':'rgba(255,255,255,.08)')+';color:'+(enabled?'#000':'var(--muted)')+'">'+( enabled?'ON':'OFF')+'</button>');
     h.push('</div>');
   });
   h.push('</div></div>');
@@ -5716,8 +5713,8 @@ function _erpConfigModal(erpId) {
 
   h.push('<div style="display:flex;gap:8px;margin-top:4px">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-ghost btn-sm" onclick="_erpTestConn(\''+erpId+'\')">🧪 Probar conexión</button>');
-  h.push('<button class="btn btn-navy" style="flex:1" onclick="_erpGuardarConfig(\''+erpId+'\')">💾 Guardar y Conectar</button>');
+  h.push('<button class="btn btn-ghost btn-sm">🧪 Probar conexión</button>');
+  h.push('<button class="btn btn-navy" style="flex:1">💾 Guardar y Conectar</button>');
   h.push('</div>');
 
   openModal(h.join(''), 'modal-lg');
@@ -6233,7 +6230,7 @@ function abrirConfigEmpresa() {
   ];
   plans.forEach(function(p) {
     var selected = (cfg.plan||'WMS') === p.id;
-    h.push('<div onclick="_selectPlan(\''+p.id+'\')" id="plan-card-'+p.id+'" style="padding:14px;border:2px solid '+(selected?p.color:'var(--border2)')+';border-radius:12px;cursor:pointer;background:'+(selected?p.bg:'rgba(255,255,255,.02)')+';transition:all .2s">');
+    h.push('<div id="plan-card-'+p.id+'" style="padding:14px;border:2px solid '+(selected?p.color:'var(--border2)')+';border-radius:12px;cursor:pointer;background:'+(selected?p.bg:'rgba(255,255,255,.02)')+';transition:all .2s">');
     h.push('<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px"><span style="font-size:20px">'+p.icon+'</span>');
     h.push('<strong style="font-size:14px;color:'+(selected?p.color:'var(--text2)')+'">'+p.id+'</strong></div>');
     h.push('<p style="font-size:10px;color:var(--muted);margin-bottom:8px">'+p.desc+'</p>');
@@ -6442,7 +6439,7 @@ function _mostrarModalTrialVencido() {
     {id:'WMS',   icon:'🏭', color:'var(--electric)', precio:'Desde $Z/mes', desc:'Suite completa WMS con traslados e integraciones'},
   ];
   planes.forEach(function(p) {
-    h.push('<div onclick="_seleccionarPlanDesdeModal(\''+p.id+'\')" style="padding:14px;border:2px solid '+p.color+';border-radius:12px;cursor:pointer;transition:all .2s;background:rgba(255,255,255,.03)">');
+    h.push('<div style="padding:14px;border:2px solid '+p.color+';border-radius:12px;cursor:pointer;transition:all .2s;background:rgba(255,255,255,.03)">');
     h.push('<div style="font-size:24px;margin-bottom:6px">'+p.icon+'</div>');
     h.push('<strong style="color:'+p.color+';font-size:14px">'+p.id+'</strong>');
     h.push('<p style="font-size:10px;color:var(--muted);margin-top:4px">'+p.desc+'</p>');
@@ -6736,7 +6733,7 @@ function abrirSaludSistema() {
   h.push('<div style="display:flex;gap:8px;margin-top:14px">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>');
   h.push('<button class="btn btn-navy btn-sm" onclick="closeModal();abrirSaludSistema()">↺ Actualizar</button>');
-  h.push('<button class="btn btn-ghost btn-sm" onclick="closeModal();goto(\'centro-pruebas\')">🧪 Centro de Pruebas</button>');
+  h.push('<button class="btn btn-ghost btn-sm" onclick="closeModal();goto(&quot;centro-pruebas&quot;)">🧪 Centro de Pruebas</button>');
   h.push('<button class="btn btn-ghost btn-sm" onclick="closeModal();abrirDiagnostico()">🔬 Diagnóstico</button>');
   h.push('</div>');
 
@@ -7040,9 +7037,7 @@ function _checkFreeLimits() {
 document.addEventListener('DOMContentLoaded', function() {
   // Make sure centro-pruebas renders when navigated to
   if (typeof renders !== 'undefined' && !renders['centro-pruebas']) {
-    renders['centro-pruebas'] = function() {
-      _renderResultadosPruebas();
-    };
+    ;
   }
 });
 
@@ -7404,14 +7399,14 @@ function _mostrarCambioContraseñaObligatorio(user) {
   h.push('<p style="font-size:12px;color:var(--amber);margin-bottom:14px">⚠ Por seguridad debes establecer una nueva contraseña antes de continuar.</p>');
   h.push('<div class="form-row"><label>Nueva contraseña *</label>');
   h.push('<div style="position:relative"><input id="cp-new" type="password" placeholder="Mínimo 12 caracteres" oninput="_renderPwdRules(\'cp-new\',\'cp-rules\')">');
-  h.push('<button type="button" onclick="togglePwd(\'cp-new\')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)">👁</button></div>');
+  h.push('<button type="button" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)">👁</button></div>');
   h.push('<div id="cp-rules" style="margin-top:6px;padding:8px;background:rgba(255,255,255,.04);border-radius:6px"></div>');
   h.push('</div>');
   h.push('<div class="form-row"><label>Confirmar contraseña *</label>');
   h.push('<input id="cp-confirm" type="password" placeholder="Repite la contraseña">');
   h.push('</div>');
   h.push('<div class="modal-actions">');
-  h.push('<button class="btn btn-navy" onclick="_guardarCambioObligatorio(\''+user.id+'\',\''+user.username+'\')">Cambiar contraseña y continuar</button>');
+  h.push('<button class="btn btn-navy">Cambiar contraseña y continuar</button>');
   h.push('</div>');
   openModal(h.join(''), 'modal-md');
   setTimeout(function(){ _renderPwdRules('cp-new','cp-rules'); }, 100);
@@ -7493,8 +7488,8 @@ function _mostrarSetup2FA(user) {
   h.push('</div>');
 
   h.push('<div class="modal-actions">');
-  h.push('<button class="btn btn-ghost" onclick="_saltarSetup2FA(\''+user.username+'\')" style="color:var(--muted)">Configurar después</button>');
-  h.push('<button class="btn btn-navy" onclick="_confirmarSetup2FA(\''+user.id+'\',\''+user.username+'\')">✓ Activar 2FA</button>');
+  h.push('<button class="btn btn-ghost" style="color:var(--muted)">Configurar después</button>');
+  h.push('<button class="btn btn-navy">✓ Activar 2FA</button>');
   h.push('</div>');
 
   openModal(h.join(''), 'modal-lg');
@@ -7611,7 +7606,7 @@ function _abrirConfigSeguridad() {
     var on = !!cfg[t.key];
     h.push('<div style="display:flex;justify-content:space-between;align-items:center;padding:12px;border-bottom:1px solid var(--border2)">');
     h.push('<div><p style="font-size:13px;font-weight:600">'+t.label+'</p><p style="font-size:11px;color:var(--muted)">'+t.desc+'</p></div>');
-    h.push('<div onclick="_toggleSecCfg(\''+t.key+'\')" id="seccfg-'+t.key+'" style="cursor:pointer;width:44px;height:24px;border-radius:12px;background:'+(on?'var(--neon)':'rgba(255,255,255,.15)')+';position:relative;transition:background .2s;flex-shrink:0">');
+    h.push('<div id="seccfg-'+t.key+'" style="cursor:pointer;width:44px;height:24px;border-radius:12px;background:'+(on?'var(--neon)':'rgba(255,255,255,.15)')+';position:relative;transition:background .2s;flex-shrink:0">');
     h.push('<div style="position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:2px;left:'+(on?'22px':'2px')+';transition:left .2s"></div>');
     h.push('</div></div>');
   });
@@ -7674,7 +7669,7 @@ function _abrir2FAUsuario(username) {
     h.push('</div>');
     h.push('<div class="modal-actions">');
     h.push('<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>');
-    h.push('<button class="btn btn-ghost" style="color:var(--red)" onclick="_desactivar2FAConfirm(\''+username+'\')">⚠ Desactivar 2FA</button>');
+    h.push('<button class="btn btn-ghost" style="color:var(--red)">⚠ Desactivar 2FA</button>');
     h.push('</div>');
   } else {
     var users = loadUsers();
@@ -7691,7 +7686,7 @@ function _abrir2FAUsuario(username) {
       h.push('</div>');
       h.push('<div class="modal-actions">');
       h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-      h.push('<button class="btn btn-navy" onclick="_activar2FADesdePanel(\''+username+'\')">✓ Activar 2FA</button>');
+      h.push('<button class="btn btn-navy">✓ Activar 2FA</button>');
       h.push('</div>');
       setTimeout(function(){
         try {
@@ -7930,7 +7925,7 @@ function abrirNuevaEmpresa() {
   ];
   plans.forEach(function(p){
     var sel = p.id === 'FREE';
-    h.push('<div onclick="_selPlanNuevaEmpresa(\''+p.id+'\')" id="ne-plan-'+p.id+'" style="padding:10px 6px;border:2px solid '+(sel?p.color:'var(--border2)')+';border-radius:10px;cursor:pointer;background:'+(sel?p.bg:'rgba(255,255,255,.02)')+';text-align:center;transition:all .2s">');
+    h.push('<div id="ne-plan-'+p.id+'" style="padding:10px 6px;border:2px solid '+(sel?p.color:'var(--border2)')+';border-radius:10px;cursor:pointer;background:'+(sel?p.bg:'rgba(255,255,255,.02)')+';text-align:center;transition:all .2s">');
     h.push('<div style="font-size:18px">'+p.icon+'</div>');
     h.push('<div style="font-size:11px;font-weight:700;color:'+(sel?p.color:'var(--text2)')+'">'+p.id+'</div>');
     h.push('</div>');
@@ -8066,11 +8061,11 @@ function _mostrarCredencialesEmpresa(empresa, creds) {
 
   h.push('<div style="background:rgba(255,255,255,.05);border-radius:8px;padding:10px;display:flex;justify-content:space-between;align-items:center">');
   h.push('<div><span style="font-size:10px;color:var(--muted)">Usuario</span><p style="font-size:14px;font-family:monospace;color:var(--electric)">'+creds.username+'</p></div>');
-  h.push('<button onclick="navigator.clipboard.writeText(\''+creds.username+'\')" style="background:rgba(0,168,255,.15);border:none;cursor:pointer;color:var(--electric);padding:4px 10px;border-radius:6px;font-size:11px">📋 Copiar</button></div>');
+  h.push('<button style="background:rgba(0,168,255,.15);border:none;cursor:pointer;color:var(--electric);padding:4px 10px;border-radius:6px;font-size:11px">📋 Copiar</button></div>');
 
   h.push('<div style="background:rgba(255,255,255,.05);border-radius:8px;padding:10px;display:flex;justify-content:space-between;align-items:center">');
   h.push('<div><span style="font-size:10px;color:var(--muted)">Contraseña temporal</span><p style="font-size:14px;font-family:monospace;color:var(--amber)">'+creds.password+'</p></div>');
-  h.push('<button onclick="navigator.clipboard.writeText(\''+creds.password+'\')" style="background:rgba(245,158,11,.15);border:none;cursor:pointer;color:var(--amber);padding:4px 10px;border-radius:6px;font-size:11px">📋 Copiar</button></div>');
+  h.push('<button style="background:rgba(245,158,11,.15);border:none;cursor:pointer;color:var(--amber);padding:4px 10px;border-radius:6px;font-size:11px">📋 Copiar</button></div>');
 
   h.push('<div style="background:rgba(255,255,255,.05);border-radius:8px;padding:10px">');
   h.push('<span style="font-size:10px;color:var(--muted)">Plan</span><p style="font-size:13px;font-weight:700;color:var(--electric)">'+empresa.plan+'</p></div>');
@@ -8079,7 +8074,7 @@ function _mostrarCredencialesEmpresa(empresa, creds) {
   // Botón imprimir
   h.push('<div style="display:flex;gap:8px;flex-wrap:wrap">');
   h.push('<button class="btn btn-ghost" onclick="window.print()" style="flex:1">🖨️ Imprimir</button>');
-  h.push('<button class="btn btn-ghost" onclick="_copiarTodoCredenciales(\''+empresa.nombre+'\',\''+creds.username+'\',\''+creds.password+'\',\''+empresa.plan+'\')" style="flex:1">📋 Copiar todo</button>');
+  h.push('<button class="btn btn-ghost" style="flex:1">📋 Copiar todo</button>');
   h.push('<button class="btn btn-navy" onclick="closeModal();renders.empresas&&renders.empresas()" style="flex:1">✓ Listo</button>');
   h.push('</div>');
   openModal(h.join(''), 'modal-lg');
@@ -8154,14 +8149,14 @@ renders.empresas = function() {
       h.push('<p style="font-size:11px;font-weight:700;color:'+estadoClr+';margin-bottom:10px">'+estadoTxt+'</p>');
 
       h.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px">');
-      h.push('<button class="btn btn-ghost btn-sm" onclick="_editarEmpresa(\''+emp.id+'\')" style="font-size:11px">✏️ Editar</button>');
-      h.push('<button class="btn btn-ghost btn-sm" onclick="_cambiarPwdEmpresa(\''+emp.id+'\')" style="font-size:11px;color:var(--electric)">🔑 Cambiar contraseña</button>');
-      h.push('<button class="btn btn-ghost btn-sm" onclick="_desbloquearAdminEmpresa(\''+emp.id+'\')" style="font-size:11px;color:var(--neon)">🔓 Desbloquear</button>');
-      h.push('<button class="btn btn-ghost btn-sm" onclick="_gestionarPlan(\''+emp.id+'\')" style="font-size:11px;color:'+planClr+'">📋 Gestionar plan</button>');
+      h.push('<button class="btn btn-ghost btn-sm" style="font-size:11px">✏️ Editar</button>');
+      h.push('<button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--electric)">🔑 Cambiar contraseña</button>');
+      h.push('<button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--neon)">🔓 Desbloquear</button>');
+      h.push('<button class="btn btn-ghost btn-sm" style="font-size:11px;color:'+planClr+'">📋 Gestionar plan</button>');
       h.push('</div>');
       h.push('<div style="margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:6px">');
-      h.push('<button class="btn btn-ghost btn-sm" onclick="prepararEmpresaParaEntrega(\''+emp.id+'\')" style="font-size:11px;color:var(--amber);border-color:rgba(245,158,11,.35)">🧹 Preparar para entrega</button>');
-      h.push('<button class="btn btn-ghost btn-sm" onclick="_eliminarEmpresa(\''+emp.id+'\')" style="font-size:11px;color:var(--red)">🗑️ Eliminar</button>');
+      h.push('<button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--amber);border-color:rgba(245,158,11,.35)">🧹 Preparar para entrega</button>');
+      h.push('<button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--red)">🗑️ Eliminar</button>');
       h.push('</div></div>');
     });
     h.push('</div>');
@@ -8262,7 +8257,7 @@ function _editarEmpresa(empId) {
   h.push('</select></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="_guardarEdicionEmpresa(\''+empId+'\')">💾 Guardar</button>');
+  h.push('<button class="btn btn-navy">💾 Guardar</button>');
   h.push('</div>');
   openModal(h.join(''), 'modal-lg');
 }
@@ -8374,7 +8369,7 @@ function _cambiarPwdEmpresa(empId) {
   h.push('<div class="form-row"><label>Nueva contraseña *</label>');
   h.push('<div style="position:relative">');
   h.push('<input id="cpw-new" type="password" placeholder="Mínimo 8 caracteres" oninput="_renderPwdRules(\'cpw-new\',\'cpw-rules\')">');
-  h.push('<button type="button" onclick="togglePwd(\'cpw-new\')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)">👁</button>');
+  h.push('<button type="button" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted)">👁</button>');
   h.push('</div><div id="cpw-rules" style="margin-top:4px"></div></div>');
   h.push('<div class="form-row"><label>Confirmar contraseña *</label>');
   h.push('<input id="cpw-confirm" type="password" placeholder="Repite la contraseña">');
@@ -8384,7 +8379,7 @@ function _cambiarPwdEmpresa(empId) {
   h.push('</div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="_guardarPwdEmpresa(\''+empId+'\')">💾 Guardar contraseña</button>');
+  h.push('<button class="btn btn-navy">💾 Guardar contraseña</button>');
   h.push('</div>');
   openModal(h.join(''), 'modal-lg');
   setTimeout(function(){ _renderPwdRules('cpw-new','cpw-rules'); }, 100);
@@ -8477,15 +8472,15 @@ function _gestionarPlan(empId) {
     ['+ 30 días', 30], ['+ 60 días', 60], ['+ 90 días', 90], ['+ 1 año', 365]
   ];
   shortcuts.forEach(function(s){
-    h.push('<button class="btn btn-ghost btn-sm" onclick="(function(){ var d=new Date(); d.setDate(d.getDate()+'+s[1]+'); document.getElementById(\'gp-vence\').value=d.toISOString().slice(0,10); })()" style="font-size:10px">'+s[0]+'</button>');
+    h.push('<button class="btn btn-ghost btn-sm" style="font-size:10px">'+s[0]+'</button>');
   });
   h.push('</div></div></div>');
 
   // Estado del plan
   h.push('<div class="form-row"><label>Estado del plan</label>');
   h.push('<div style="display:flex;gap:8px">');
-  h.push('<button id="gp-btn-activo" class="btn '+(activo?'btn-navy':'btn-ghost')+'" onclick="_setPlanEstado(\''+empId+'\',\'ACTIVO\')" style="flex:1">✅ Activo</button>');
-  h.push('<button id="gp-btn-susp" class="btn '+(!activo?'btn-navy':'btn-ghost')+' " onclick="_setPlanEstado(\''+empId+'\',\'SUSPENDIDO\')" style="flex:1;color:var(--red)">🔒 Suspender</button>');
+  h.push('<button id="gp-btn-activo" class="btn '+(activo?'btn-navy':'btn-ghost')+'" style="flex:1">✅ Activo</button>');
+  h.push('<button id="gp-btn-susp" class="btn '+(!activo?'btn-navy':'btn-ghost')+' " style="flex:1;color:var(--red)">🔒 Suspender</button>');
   h.push('</div></div>');
 
   // Nota de pago
@@ -8496,7 +8491,7 @@ function _gestionarPlan(empId) {
 
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="_guardarGestionPlan(\''+empId+'\')">💾 Guardar cambios</button>');
+  h.push('<button class="btn btn-navy">💾 Guardar cambios</button>');
   h.push('</div>');
   openModal(h.join(''), 'modal-lg');
 }
@@ -8652,7 +8647,7 @@ function prepararEmpresaParaEntrega(empId) {
 
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button id="prep-confirm-btn" class="btn" onclick="_ejecutarPrepararEmpresa(\''+empId+'\')" disabled');
+  h.push('<button id="prep-confirm-btn" class="btn" disabled');
   h.push(' style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:var(--red);opacity:.5;cursor:not-allowed">');
   h.push('🗑️ Confirmar y Limpiar Empresa</button>');
   h.push('</div>');
@@ -8879,7 +8874,7 @@ function openNuevoArticulo(editId) {
 
   var h = [];
   h.push('<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">');
-  h.push('<div id="na-img-preview" onclick="document.getElementById(\'na-img-file\').click()" style="width:60px;height:60px;border-radius:10px;background:rgba(255,255,255,.06);border:2px dashed rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;flex-shrink:0">');
+  h.push('<div id="na-img-preview" style="width:60px;height:60px;border-radius:10px;background:rgba(255,255,255,.06);border:2px dashed rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;flex-shrink:0">');
   if (item && item.imagen) {
     h.push('<img src="'+item.imagen+'" style="width:100%;height:100%;object-fit:cover;border-radius:8px">');
   } else {
@@ -8976,7 +8971,7 @@ function openNuevoArticulo(editId) {
   h.push('<div id="na-err" style="display:none;color:var(--red);font-size:12px;margin:8px 0;padding:8px;background:rgba(239,68,68,.1);border-radius:6px"></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="_guardarNuevoArticulo(\''+( editId||'')+'\')">'+(isEdit?'💾 Guardar cambios':'➕ Crear Producto')+'</button>');
+  h.push('<button class="btn btn-navy">'+(isEdit?'💾 Guardar cambios':'➕ Crear Producto')+'</button>');
   h.push('</div>');
   openModal(h.join(''), 'modal-lg');
   window._naImgData = null;
@@ -9166,7 +9161,7 @@ renders.movimientos = function() {
   h.push('<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">');
   tipos.forEach(function(f){
     var active = movFiltro === f;
-    h.push('<button class="btn btn-sm '+(active?'btn-navy':'btn-ghost')+'" onclick="movFiltro=\''+f+'\';renders.movimientos()">'+tipoLabels[f]+'</button>');
+    h.push('<button class="btn btn-sm '+(active?'btn-navy':'btn-ghost')+'">'+tipoLabels[f]+'</button>');
   });
   h.push('<span style="margin-left:auto;font-size:11px;color:var(--muted)">'+filtered.length+' de '+movs.length+' movimientos</span>');
   if (typeof exportHistorialExcel==='function') {
@@ -11518,7 +11513,7 @@ renders.auditoria = function() {
   h.push('<h3 style="margin:0;font-size:16px">🛡️ Auditoría del Sistema</h3>');
   h.push('<div style="display:flex;gap:8px">');
   if (tech.length > 0) {
-    h.push('<button class="btn btn-ghost btn-sm" onclick="limpiarAuditoriaTecnica();closeModal();showToast(\'Auditoría técnica limpiada\',\'green\')" style="color:var(--amber)">🧹 Limpiar errores</button>');
+    h.push('<button class="btn btn-ghost btn-sm" style="color:var(--amber)">🧹 Limpiar errores</button>');
   }
   h.push('<button class="btn btn-ghost btn-sm" onclick="exportarAuditoriaExcel&&exportarAuditoriaExcel()" style="color:var(--electric)">📥 Exportar</button>');
   h.push('</div></div>');
@@ -11758,7 +11753,7 @@ function editarUsuario(id) {
   h.push('</div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="_guardarEdicionUsuario(\'+id+\')">💾 Guardar</button>');
+  h.push('<button class="btn btn-navy">💾 Guardar</button>');
   h.push('</div>');
   openModal(h.join(''));
 }
@@ -11890,7 +11885,7 @@ function doGlobalSearch(q) {
     var cat   = item.categoria||'';
     var stock = Number(item.stock||0);
     var stClr = stock<=0?'#ef4444':stock<(item.stock_minimo||10)?'#f59e0b':'#4ade80';
-    h.push('<div onclick="closeModal();goto(\'inventario\');window._invSearchStr=\''+sku+'\';setTimeout(function(){filterInventarioTable&&filterInventarioTable()},300)"');
+    h.push('<div onclick="closeModal();goto(&quot;inventario&quot;)"');
     h.push(' style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;border-radius:6px;padding:8px"');
     h.push(' onmouseenter="this.style.background=\'rgba(255,255,255,.04)\'" onmouseleave="this.style.background=\'\'">');
     h.push('<div style="width:36px;height:36px;border-radius:8px;background:rgba(59,130,246,.15);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">📦</div>');
@@ -12934,7 +12929,7 @@ function _buildInventarioUI(allItems) {
     var filtros = [['TODOS','Todos ('+nAll+')',true],['BAJO','Bajo ('+nBajo+')',nBajo>0],['AGOTADO','Agotados ('+nAgot+')',nAgot>0]];
     filtros.forEach(function(f){
       var active = invFiltro===f[0];
-      h.push('<button class="btn '+(active?'btn-navy':'btn-ghost')+' btn-sm" onclick="invFiltro=\''+f[0]+'\';filterInventarioTable()" style="font-size:11px;'+(f[2]&&!active?'color:var(--amber)':'')+'">'+(f[2]&&f[0]!=='TODOS'?'⚠️ ':'')+f[1]+'</button>');
+      h.push('<button class="btn '+(active?'btn-navy':'btn-ghost')+' btn-sm" style="font-size:11px;'+(f[2]&&!active?'color:var(--amber)':'')+'">'+(f[2]&&f[0]!=='TODOS'?'⚠️ ':'')+f[1]+'</button>');
     });
     h.push('</div>');
     if (canCreate) h.push('<button class="btn btn-navy btn-sm" onclick="openNuevoArticulo()" style="white-space:nowrap">+ Nuevo</button>');
@@ -13076,9 +13071,9 @@ renders['respaldos'] = function() {
       h.push('<td style="padding:8px;font-size:11px;color:var(--cyan)">'+_fmtSize(r.size||0)+'</td>');
       h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+(r.modulos||[]).join(', ')+'</td>');
       h.push('<td style="padding:8px"><div style="display:flex;gap:4px">');
-      h.push('<button onclick="_descargarRespaldo('+i+')" style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">⬇ JSON</button>');
-      h.push('<button onclick="_restaurarRespaldo('+i+')" style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#22C55E;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">♻ Restaurar</button>');
-      h.push('<button onclick="_eliminarRespaldo('+i+')" style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#EF4444;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">🗑</button>');
+      h.push('<button style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">⬇ JSON</button>');
+      h.push('<button style="background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:#22C55E;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">♻ Restaurar</button>');
+      h.push('<button style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#EF4444;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">🗑</button>');
       h.push('</div></td></tr>');
     });
     h.push('</tbody></table></div>');
@@ -13152,7 +13147,7 @@ renders['generar-qr'] = function() {
     h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+(it.categoria||'—')+'</td>');
     h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+(it.ubicacion||'—')+'</td>');
     h.push('<td style="padding:7px 8px">');
-    h.push('<button onclick="document.getElementById(&quot;qr-item&quot;)&&(document.getElementById(&quot;qr-item&quot;).value=&quot;'+it.codigo+'&quot;,_qrPreview())" style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">📱 QR</button>');
+    h.push('<button style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">📱 QR</button>');
     h.push('</td></tr>');
   });
   h.push('</tbody></table></div>');
@@ -13424,7 +13419,7 @@ function resetPasswordUsuario(userId) {
   h.push('<div id="rp-reqs" class="pwd-req" style="margin-top:6px"></div></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="_confirmarResetPwd(\'+userId+\')">🔑 Resetear</button>');
+  h.push('<button class="btn btn-navy">🔑 Resetear</button>');
   h.push('</div>');
   openModal(h.join(''));
 }
@@ -13457,7 +13452,7 @@ function openEditBodega(idx) {
   h.push('<div class="form-row"><label>Responsable</label><input id="eb-resp" value="'+(b.responsable||'')+'" placeholder="Nombre del responsable"></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="_guardarBodega('+idx+')">💾 Guardar</button>');
+  h.push('<button class="btn btn-navy">💾 Guardar</button>');
   h.push('</div>');
   openModal(h.join(''));
 }
@@ -13547,7 +13542,7 @@ function openInfoModal() {
   h.push('</div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>');
-  h.push('<button class="btn btn-ghost" onclick="closeModal();goto(\'usuarios\')" style="color:var(--electric)">⚙️ Mi Perfil</button>');
+  h.push('<button class="btn btn-ghost" onclick="closeModal();goto(&quot;usuarios&quot;)" style="color:var(--electric)">⚙️ Mi Perfil</button>');
   h.push('<button class="btn btn-ghost" onclick="closeModal();doLogout()" style="color:var(--red)">← Cerrar Sesión</button>');
   h.push('</div>');
   openModal(h.join(''));
@@ -13572,7 +13567,7 @@ function openReorderModal(itemId) {
   h.push('<div class="form-row"><label>Proveedor</label><input id="ro-prov" value="'+(item.proveedor||'')+'"></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy" onclick="closeModal();openMovModal(\'ENTRADA\',\''+item.id+'\')">⬆️ Registrar Entrada</button>');
+  h.push('<button class="btn btn-navy">⬆️ Registrar Entrada</button>');
   h.push('</div>');
   openModal(h.join(''));
 }
@@ -13655,9 +13650,9 @@ function abrirDiagnostico() {
   h.push('<div style="font-size:11px;color:var(--muted);margin-top:4px">'+(totalSize/1024).toFixed(1)+'KB de ~50KB ('+pct+'%)</div>');
   h.push('</div>');
   h.push('<div class="modal-actions">');
-  if (tech.length > 0) h.push('<button class="btn btn-ghost btn-sm" onclick="limpiarAuditoriaTecnica();closeModal();showToast(\'Auditoría técnica limpiada\',\'green\')" style="color:var(--amber)">🧹 Limpiar errores</button>');
+  if (tech.length > 0) h.push('<button class="btn btn-ghost btn-sm" style="color:var(--amber)">🧹 Limpiar errores</button>');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>');
-  h.push('<button class="btn btn-navy" onclick="closeModal();goto(\'centro-pruebas\')">🧪 Pruebas completas</button>');
+  h.push('<button class="btn btn-navy" onclick="closeModal();goto(&quot;centro-pruebas&quot;)">🧪 Pruebas completas</button>');
   h.push('</div>');
   openModal(h.join(''));
 }
@@ -13931,8 +13926,8 @@ function abrirGestionReservas(filterSku) {
       h.push('<td style="padding:8px"><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:'+estBg+';color:'+estClr+'">'+r.estado+'</span></td>');
       h.push('<td style="padding:8px;white-space:nowrap">');
       if (r.estado==='PENDIENTE') {
-        h.push('<button onclick="_entregarReserva(\'+r.id+\')" style="background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;margin-right:4px">✅ Entregar</button>');
-        h.push('<button onclick="_cancelarReserva(\'+r.id+\')" style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#f87171;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px">✕ Cancelar</button>');
+        h.push('<button style="background:rgba(74,222,128,.15);border:1px solid rgba(74,222,128,.3);color:#4ade80;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px;margin-right:4px">✅ Entregar</button>');
+        h.push('<button style="background:rgba(248,113,113,.12);border:1px solid rgba(248,113,113,.3);color:#f87171;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:10px">✕ Cancelar</button>');
       }
       h.push('</td></tr>');
     });
@@ -14434,9 +14429,9 @@ function _renderInvMovimientos() {
   h.push('<div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap">');
   Object.keys(tipos).forEach(function(t){
     var active = ft===t;
-    h.push('<button onclick="window._movFiltroInv=\''+t+'\';_renderInvMovimientos()" class="btn btn-sm '+(active?'btn-navy':'btn-ghost')+'" style="font-size:11px">'+tipos[t]+'</button>');
+    h.push('<button class="btn btn-sm '+(active?'btn-navy':'btn-ghost')+'" style="font-size:11px">'+tipos[t]+'</button>');
   });
-  h.push('<button onclick="openMovModal(\'\1\')" class="btn btn-navy btn-sm" style="margin-left:auto">+ Registrar</button>');
+  h.push('<button class="btn btn-navy btn-sm" style="margin-left:auto">+ Registrar</button>');
   h.push('</div>');
   h.push('<p style="font-size:11px;color:var(--muted);margin-bottom:10px">'+filtered.length+' movimientos</p>');
   if (renders.movimientos) {
@@ -14473,8 +14468,8 @@ function _renderInvAjustes() {
   var tabBar = pg.innerHTML;
   var h = [];
   h.push('<div style="display:flex;gap:10px;margin-bottom:16px">');
-  h.push('<button onclick="openMovModal(\'\1\')" class="btn btn-navy">➕ Ajuste Positivo</button>');
-  h.push('<button onclick="openMovModal(\'\1\')" class="btn btn-ghost" style="color:#f59e0b;border-color:rgba(245,158,11,.3)">➖ Ajuste Negativo</button>');
+  h.push('<button class="btn btn-navy">➕ Ajuste Positivo</button>');
+  h.push('<button class="btn btn-ghost" style="color:#f59e0b;border-color:rgba(245,158,11,.3)">➖ Ajuste Negativo</button>');
   h.push('</div>');
   var movs = (typeof loadMovs==='function' ? loadMovs() : []) || [];
   var ajustes = movs.filter(function(m){ return m.tipo==='AJUSTE_POS'||m.tipo==='AJUSTE_NEG'||m.tipo==='AJUSTE'; });
@@ -14607,30 +14602,194 @@ var _origGotoHistorial = null;
 renders['compras'] = function() {
   var pg = document.getElementById('pg-compras');
   if (!pg) return;
-  pg.innerHTML = '<div style="padding:40px;text-align:center">'
-    +'<div style="font-size:48px;margin-bottom:16px">🛒</div>'
-    +'<h3 style="margin-bottom:8px;color:var(--white)">Módulo de Compras</h3>'
-    +'<p style="color:var(--muted);margin-bottom:20px">Gestión de solicitudes, cotizaciones, órdenes de compra y proveedores</p>'
-    +'<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'
-    +'<button onclick="goto(\'proveedores\')" class="btn btn-navy">🏭 Proveedores</button>'
-    +'<button onclick="goto(\'importar\')" class="btn btn-ghost">📥 Importar</button>'
-    +'</div></div>';
-};
+  var provs = (typeof loadProveedores==='function') ? loadProveedores() : [];
+  var items = (typeof loadItems==='function') ? loadItems() : [];
+  // Artículos que necesitan reposición
+  var needBuy = items.filter(function(it){ return (it.compra_sug||0)>0 || it.estado==='AGOTADO' || it.estado==='CRÍTICO'; });
+  var fmt = function(n){ return (+(n||0)).toLocaleString('es-CO'); };
+  var fmtM = function(n){ var v=+(n||0); return v>=1e6?'$'+(v/1e6).toFixed(1)+'M':'$'+fmt(v); };
+
+  var h = [];
+  h.push('<div style="max-width:1100px;margin:0 auto;padding:16px">');
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">');
+  h.push('<div><h2 style="font-size:18px;font-weight:700;color:var(--white);margin:0">🛒 Gestión de Compras</h2>');
+  h.push('<p style="font-size:11px;color:var(--muted);margin:2px 0 0">Solicitudes · Órdenes · Recepciones · Proveedores</p></div>');
+  h.push('<button onclick="showToast(&quot;Pr&oacute;ximamente: crear orden de compra&quot;,&quot;blue&quot;)" style="background:var(--electric);color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">+ Nueva Orden</button>');
+  h.push('</div>');
+
+  // KPIs compras
+  var totalCost = needBuy.reduce(function(a,it){ return a+(it.compra_sug||0)*(it.costo||0); },0);
+  var kpis = [
+    {icon:'🛒',label:'Artículos a Reponer',val:fmt(needBuy.length),color:'#EF4444',sub:'necesitan compra'},
+    {icon:'💰',label:'Inversión Estimada', val:fmtM(totalCost),    color:'#F59E0B',sub:'costo estimado'},
+    {icon:'🏭',label:'Proveedores Activos', val:fmt(provs.filter(function(p){return p.estado!=='INACTIVO';}).length),color:'#22C55E',sub:'disponibles'},
+    {icon:'📋',label:'Órdenes Abiertas',   val:'0',               color:'#8B5CF6',sub:'en proceso'},
+  ];
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px">');
+  kpis.forEach(function(k){
+    h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px;position:relative;overflow:hidden">');
+    h.push('<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+k.color+'"></div>');
+    h.push('<div style="font-size:20px;margin-bottom:6px">'+k.icon+'</div>');
+    h.push('<div style="font-size:22px;font-weight:900;color:'+k.color+'">'+k.val+'</div>');
+    h.push('<div style="font-size:11px;font-weight:600;color:var(--white)">'+k.label+'</div>');
+    h.push('<div style="font-size:10px;color:var(--muted)">'+k.sub+'</div>');
+    h.push('</div>');
+  });
+  h.push('</div>');
+
+  // Tabs
+  h.push('<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border2)">');
+  [['sugeridas','🔁 Compras Sugeridas'],['proveedores','🏭 Proveedores'],['ordenes','📋 Órdenes']].forEach(function(tab,i){
+  h.push('<button id="ctab-first" class="ctab" style="padding:8px 16px;border:none;background:transparent;color:var(--electric);font-size:12px;font-weight:700;cursor:pointer;border-bottom:2px solid var(--electric)">🔁 Compras Sugeridas</button>');
+  });
+  h.push('</div>');
+
+  // Tab: Sugeridas
+  h.push('<div id="cp-sugeridas" class="cpanel">');
+  if (!needBuy.length) {
+    h.push('<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:36px;margin-bottom:10px">✅</div><p>No hay artículos pendientes de compra</p></div>');
+  } else {
+    h.push('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">');
+    h.push('<thead><tr style="border-bottom:2px solid var(--border2)">');
+    ['Código','Nombre','Proveedor','Stock Actual','Mín','Compra Sug.','Costo Unit.','Total Est.','Estado','Acción'].forEach(function(col){
+      h.push('<th style="padding:8px;font-size:10px;font-weight:700;color:var(--muted);text-align:left;white-space:nowrap">'+col+'</th>');
+    });
+    h.push('</tr></thead><tbody>');
+    var stateColors={'AGOTADO':'#EF4444','CRÍTICO':'#F59E0B','BAJO MÍNIMO':'#F97316','REORDENAR':'#8B5CF6','NORMAL':'#22C55E'};
+    needBuy.slice(0,50).forEach(function(it){
+      var color = stateColors[it.estado]||'#94a3b8';
+      h.push('<tr style="border-bottom:1px solid var(--border)">');
+      h.push('<td style="padding:7px 8px;font-family:monospace;font-size:11px;color:var(--electric)">'+it.sku+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--white);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+((it.nombre||'').substring(0,30))+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+(it.proveedor||'—')+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;text-align:right;color:var(--white)">'+fmt(it.stock||0)+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;text-align:right;color:var(--muted)">'+fmt(it.smin||0)+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;text-align:right;font-weight:700;color:#8B5CF6">'+fmt(it.compra_sug||0)+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;text-align:right;color:var(--muted)">'+fmtM(it.costo||0)+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;text-align:right;font-weight:700;color:#22C55E">'+fmtM((it.compra_sug||0)*(it.costo||0))+'</td>');
+      h.push('<td style="padding:7px 8px"><span style="font-size:10px;font-weight:700;color:'+color+';background:'+color+'18;padding:2px 8px;border-radius:20px;white-space:nowrap">'+(it.estado||'—')+'</span></td>');
+      h.push('<td style="padding:7px 8px"><button style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">+ Orden</button></td>');
+      h.push('</tr>');
+    });
+    h.push('</tbody></table></div>');
+    if (needBuy.length > 50) h.push('<p style="font-size:11px;color:var(--muted);padding:8px">Mostrando 50 de '+needBuy.length+' artículos.</p>');
+  }
+  h.push('</div>');
+
+  // Tab: Proveedores
+  h.push('<div id="cp-proveedores" class="cpanel" style="display:none">');
+  if (!provs.length) {
+    h.push('<div style="text-align:center;padding:40px;color:var(--muted)"><div style="font-size:36px;margin-bottom:10px">🏭</div><p>No hay proveedores registrados</p><button onclick="goto(&quot;proveedores&quot;)" style="background:var(--electric);color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;margin-top:10px">+ Agregar Proveedor</button></div>');
+  } else {
+    h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">');
+    provs.forEach(function(p){
+      var activo = p.estado !== 'INACTIVO';
+      h.push('<div style="background:var(--card2);border:1px solid '+(activo?'var(--border2)':'rgba(239,68,68,.3)')+';border-radius:10px;padding:14px">');
+      h.push('<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">');
+      h.push('<div style="width:36px;height:36px;background:rgba(0,168,255,.15);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">🏭</div>');
+      h.push('<div><div style="font-weight:700;font-size:13px;color:var(--white)">'+(p.nombre||'—')+'</div>');
+      h.push('<div style="font-size:10px;color:var(--muted)">'+(p.nit||p.rut||'Sin NIT')+'</div></div></div>');
+      h.push('<div style="font-size:11px;color:var(--muted)">'+(p.telefono||'')+(p.correo?' · '+p.correo:'')+'</div>');
+      h.push('<div style="margin-top:8px"><span style="font-size:10px;font-weight:700;color:'+(activo?'#4ade80':'#94a3b8')+';background:'+(activo?'rgba(74,222,128,.15)':'rgba(148,163,184,.1)')+';padding:2px 8px;border-radius:20px">'+(activo?'ACTIVO':'INACTIVO')+'</span></div>');
+      h.push('</div>');
+    });
+    h.push('</div>');
+  }
+  h.push('</div>');
+
+  // Tab: Órdenes
+  h.push('<div id="cp-ordenes" class="cpanel" style="display:none">');
+  h.push('<div style="text-align:center;padding:40px;color:var(--muted)">');
+  h.push('<div style="font-size:36px;margin-bottom:10px">📋</div>');
+  h.push('<p style="font-size:14px;font-weight:600;color:var(--white)">Módulo de Órdenes de Compra</p>');
+  h.push('<p style="font-size:12px;margin-top:8px">Próximamente: Crear · Aprobar · Enviar · Recibir órdenes de compra</p>');
+  h.push('</div></div>');
+
+  h.push('</div>');
+  pg.innerHTML = h.join('');
+};;
 
 renders['logistica'] = function() {
   var pg = document.getElementById('pg-logistica');
   if (!pg) return;
+  var items = (typeof loadItems==='function') ? loadItems() : [];
+  var fmt = function(n){ return (+(n||0)).toLocaleString('es-CO'); };
+
   var h = [];
-  h.push('<div style="padding:20px 0">');
-  h.push('<h3 style="margin-bottom:16px;font-size:16px;font-weight:700">🚚 Logística WMS</h3>');
-  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">');
-  h.push('<div onclick="goto(\'picking\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:20px;text-align:center;cursor:pointer"><div style="font-size:28px;margin-bottom:10px">📋</div><div style="font-size:13px;font-weight:700;color:var(--white)">Picking</div><div style="font-size:11px;color:var(--muted)">Recoger productos de bodega</div></div>');
-  h.push('<div onclick="goto(\'packing\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:20px;text-align:center;cursor:pointer"><div style="font-size:28px;margin-bottom:10px">📦</div><div style="font-size:13px;font-weight:700;color:var(--white)">Packing</div><div style="font-size:11px;color:var(--muted)">Empacar pedidos</div></div>');
-  h.push('<div onclick="goto(\'traslados\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:20px;text-align:center;cursor:pointer"><div style="font-size:28px;margin-bottom:10px">↔️</div><div style="font-size:13px;font-weight:700;color:var(--white)">Traslados</div><div style="font-size:11px;color:var(--muted)">Mover entre bodegas</div></div>');
-  h.push('<div onclick="showToast(\'Próximamente\',\'amber\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:20px;text-align:center;cursor:pointer"><div style="font-size:28px;margin-bottom:10px">🚛</div><div style="font-size:13px;font-weight:700;color:var(--white)">Despachos</div><div style="font-size:11px;color:var(--muted)">Gestionar envíos</div></div>');
-  h.push('</div></div>');
+  h.push('<div style="max-width:1100px;margin:0 auto;padding:16px">');
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">');
+  h.push('<div><h2 style="font-size:18px;font-weight:700;color:var(--white);margin:0">📦 WMS — Warehouse Management</h2>');
+  h.push('<p style="font-size:11px;color:var(--muted);margin:2px 0 0">Picking · Packing · Despacho · Traslados · Recepciones</p></div>');
+  h.push('</div>');
+
+  // KPIs WMS
+  var pending  = items.filter(function(i){return (i.reserv||0)>0;}).length;
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:20px">');
+  [
+    {icon:'🔍',label:'Picking Pendiente',val:fmt(pending),color:'#F59E0B',sub:'con reservas'},
+    {icon:'📦',label:'Packing en Proceso',val:'0',color:'#8B5CF6',sub:'empaque'},
+    {icon:'🚚',label:'Despachos Hoy',val:'0',color:'#22C55E',sub:'programados'},
+    {icon:'📥',label:'Recepciones',val:'0',color:'#06B6D4',sub:'esperadas'},
+  ].forEach(function(k){
+    h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px;position:relative;overflow:hidden">');
+    h.push('<div style="position:absolute;top:0;left:0;right:0;height:3px;background:'+k.color+'"></div>');
+    h.push('<div style="font-size:20px;margin-bottom:6px">'+k.icon+'</div>');
+    h.push('<div style="font-size:22px;font-weight:900;color:'+k.color+'">'+k.val+'</div>');
+    h.push('<div style="font-size:11px;font-weight:600;color:var(--white)">'+k.label+'</div>');
+    h.push('<div style="font-size:10px;color:var(--muted)">'+k.sub+'</div>');
+    h.push('</div>');
+  });
+  h.push('</div>');
+
+  // Flujo WMS
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px">');
+  var flujos = [
+    {icon:'🔍',title:'Picking',desc:'Selección de artículos del almacén para cumplir pedidos',btn:'Iniciar Picking',action:"goto('inventario')"},
+    {icon:'📦',title:'Packing',desc:'Empaque y etiquetado de pedidos para despacho',btn:'Ver Packing',action:"showToast('Packing próximamente','blue')"},
+    {icon:'🚚',title:'Despacho',desc:'Programación y registro de salidas de mercancía',btn:'Programar Despacho',action:"showToast('Despacho próximamente','blue')"},
+    {icon:'📥',title:'Recepción',desc:'Recepción e inspección de mercancía entrante',btn:'Nueva Recepción',action:"showToast('Recepción próximamente','blue')"},
+    {icon:'🔄',title:'Traslados',desc:'Movimientos internos entre bodegas y ubicaciones',btn:'Nuevo Traslado',action:"goto('traslados')"},
+    {icon:'📊',title:'Inventarios',desc:'Conteos cíclicos y conciliación de inventario físico',btn:'Iniciar Conteo',action:"goto('ciclicos')"},
+  ];
+  flujos.forEach(function(f){
+    h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:16px;display:flex;flex-direction:column">');
+    h.push('<div style="font-size:28px;margin-bottom:8px">'+f.icon+'</div>');
+    h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:6px">'+f.title+'</div>');
+    h.push('<div style="font-size:11px;color:var(--muted);flex:1;margin-bottom:12px">'+f.desc+'</div>');
+    h.push('<button style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:7px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600">'+f.btn+'</button>');
+    h.push('</div>');
+  });
+  h.push('</div>');
+
+  // Artículos con reservas (picking pendiente)
+  var withReserv = items.filter(function(i){return (i.reserv||0)>0;}).slice(0,20);
+  if (withReserv.length) {
+    h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:16px">');
+    h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:12px">🔍 Artículos con Reservas Pendientes ('+withReserv.length+')</div>');
+    h.push('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">');
+    h.push('<thead><tr style="border-bottom:2px solid var(--border2)">');
+    ['Código','Nombre','Ubicación','Stock','Reservado','Disponible','Acción'].forEach(function(c){
+      h.push('<th style="padding:7px 8px;font-size:10px;font-weight:700;color:var(--muted);text-align:left">'+c+'</th>');
+    });
+    h.push('</tr></thead><tbody>');
+    withReserv.forEach(function(it){
+      var disp = (it.stock||0)-(it.reserv||0);
+      h.push('<tr style="border-bottom:1px solid var(--border)">');
+      h.push('<td style="padding:7px 8px;font-family:monospace;font-size:11px;color:var(--electric)">'+it.sku+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--white)">'+((it.nombre||'').substring(0,30))+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:10px;color:var(--muted);font-family:monospace">'+(it.ubicacion||'—')+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;text-align:right;color:var(--white)">'+fmt(it.stock||0)+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;text-align:right;color:#F59E0B;font-weight:700">'+fmt(it.reserv||0)+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;text-align:right;color:'+(disp>0?'#22C55E':'#EF4444')+';font-weight:700">'+fmt(disp)+'</td>');
+      h.push('<td style="padding:7px 8px"><button style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#F59E0B;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">🔍 Pick</button></td>');
+      h.push('</tr>');
+    });
+    h.push('</tbody></table></div></div>');
+  }
+
+  h.push('</div>');
   pg.innerHTML = h.join('');
-};
+};;
 
 
 
@@ -14923,18 +15082,18 @@ function _buildUsuariosUI(users) {
       h.push('<td style="padding:8px;font-size:11px;color:var(--muted)">'+(u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString('es-CO') : '—')+'</td>');
       h.push('<td style="padding:8px;display:flex;gap:4px">');
       if (isAdm && !isSys && !isMe) {
-        h.push('<button onclick="editarUsuario&&editarUsuario(\''+u.id+'\')" class="btn btn-ghost btn-sm" style="font-size:10px" title="Editar">✏️</button>');
+        h.push('<button class="btn btn-ghost btn-sm" style="font-size:10px" title="Editar">✏️</button>');
         if (activo) {
-          h.push('<button onclick="desactivarUsuario&&desactivarUsuario(\''+u.id+'\')" class="btn btn-ghost btn-sm" style="font-size:10px;color:#f59e0b" title="Desactivar">⏸</button>');
+          h.push('<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#f59e0b" title="Desactivar">⏸</button>');
         } else {
-          h.push('<button onclick="activarUsuario&&activarUsuario(\''+u.id+'\')" class="btn btn-ghost btn-sm" style="font-size:10px;color:#4ade80" title="Activar">▶</button>');
+          h.push('<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#4ade80" title="Activar">▶</button>');
         }
         if (u.eliminable !== false) {
-          h.push('<button onclick="eliminarUsuario&&eliminarUsuario(\''+u.id+'\')" class="btn btn-ghost btn-sm" style="font-size:10px;color:#f87171" title="Eliminar">🗑</button>');
+          h.push('<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#f87171" title="Eliminar">🗑</button>');
         }
       }
       if (isSA) {
-        h.push('<button onclick="resetPasswordUsuario&&resetPasswordUsuario(\''+u.id+'\')" class="btn btn-ghost btn-sm" style="font-size:10px;color:#a78bfa" title="Reset password">🔑</button>');
+        h.push('<button class="btn btn-ghost btn-sm" style="font-size:10px;color:#a78bfa" title="Reset password">🔑</button>');
       }
       h.push('</td></tr>');
     });
@@ -15060,7 +15219,7 @@ function _buildTemaSelector() {
   Object.keys(TEMAS).forEach(function(key) {
     var t = TEMAS[key];
     var active = current === key;
-    h.push('<div onclick="_aplicarTema(\''+key+'\')" style="');
+    h.push('<div style="');
     h.push('background:var(--card2);border:2px solid '+(active?'var(--electric)':'var(--border2)')+';');
     h.push('border-radius:12px;padding:14px;cursor:pointer;transition:.2s" ');
     h.push('onmouseenter="this.style.borderColor=\'var(--electric)\'" onmouseleave="this.style.borderColor=\''+(active?'var(--electric)':'var(--border2)')+'\'"');
@@ -15317,6 +15476,19 @@ function _importarRespaldo() {
 (function() {
   try { _initTema(); } catch(e) {}
 })();
+
+
+window._comprasTab = function(tabName, btn) {
+  document.querySelectorAll('.ctab').forEach(function(t){
+    t.style.borderBottom = 'none'; t.style.color = 'var(--muted)'; t.style.fontWeight = '400';
+  });
+  document.querySelectorAll('.cpanel').forEach(function(p){ p.style.display = 'none'; });
+  var panel = document.getElementById('cp-' + tabName);
+  if (panel) panel.style.display = 'block';
+  if (btn) { btn.style.borderBottom = '2px solid var(--electric)'; btn.style.color = 'var(--electric)'; btn.style.fontWeight = '700'; }
+};
+
+window._dashGoToInv = function() { goto('inventario'); setTimeout(function(){ if(typeof filterInventarioTable==='function') filterInventarioTable(); }, 300); };
 
 </script>
 </body>
