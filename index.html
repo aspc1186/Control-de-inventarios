@@ -14402,6 +14402,22 @@ window._diag = function(page) {
 };
 console.log('[SF] Diagnóstico disponible: llama _diag() o _diag(\'inventario\') en consola');
 
+
+renders.escaner = function() {
+  var pg = document.getElementById('pg-escaner');
+  if (!pg) return;
+  pg.innerHTML = [
+    '<div style="max-width:600px;margin:0 auto;padding:20px">',
+    '<h2 style="font-size:18px;font-weight:700;margin-bottom:16px">📷 Escáner QR</h2>',
+    '<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:24px;text-align:center">',
+    '<div style="font-size:48px;margin-bottom:16px">📷</div>',
+    '<p style="color:var(--muted);margin-bottom:20px">Apunta la cámara a un código QR de producto</p>',
+    '<button class="btn btn-navy" onclick="goto(&quot;generar-qr&quot;)" style="margin-right:8px">Generar QR</button>',
+    '<button class="btn btn-ghost" onclick="if(typeof iniciarEscaner===&quot;function&quot;)iniciarEscaner()">Iniciar Cámara</button>',
+    '</div></div>'
+  ].join('');
+};
+
 </script>
 </body>
 </html>
