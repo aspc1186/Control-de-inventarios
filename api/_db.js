@@ -92,6 +92,19 @@ async function setupTables(sql) {
     )`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS empresas (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      nombre TEXT NOT NULL,
+      nit TEXT,
+      correo TEXT,
+      ciudad TEXT,
+      plan TEXT DEFAULT 'FREE',
+      estado TEXT DEFAULT 'ACTIVO',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS proveedores (
       id TEXT PRIMARY KEY,
       nombre TEXT,
@@ -109,6 +122,15 @@ async function setupTables(sql) {
       lead_time_dias INTEGER,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`;
+
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nombre TEXT`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nit TEXT`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS correo TEXT`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ciudad TEXT`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'FREE'`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'ACTIVO'`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
 
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_reservado NUMERIC(12,2) DEFAULT 0`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_seguridad NUMERIC(14,2) DEFAULT 0`;
@@ -146,6 +168,10 @@ async function setupTables(sql) {
     UPDATE usuarios
     SET password_hash = 'erp_92c82d65_9', rol = 'ADMINISTRADOR', estado = 'ACTIVO', updated_at = NOW()
     WHERE username = 'admin'`;
+  await sql`
+    INSERT INTO empresas (id, nombre, nit, correo, ciudad, plan, estado)
+    SELECT '00000000-0000-4000-8000-000000000001'::uuid, 'Empresa Principal', 'N/A', null, null, 'WMS', 'ACTIVO'
+    WHERE NOT EXISTS (SELECT 1 FROM empresas)`;
 
   // 9 bodegas
   const letras = ['A','B','C'];
