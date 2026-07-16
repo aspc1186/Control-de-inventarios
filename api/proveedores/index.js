@@ -54,6 +54,14 @@ async function saveProveedor(sql, p, empresaId) {
   const incomingId = text(p.id);
   const id = isUuid(incomingId) ? incomingId : randomUUID();
   const incomingEmpresaId = text(p.empresa_id) || empresaId;
+  let resolvedEmpresaId = isUuid(incomingEmpresaId) ? incomingEmpresaId : null;
+  if (!resolvedEmpresaId) {
+    const empresas = await sql`SELECT id FROM empresas LIMIT 1`.catch(() => []);
+    resolvedEmpresaId = empresas[0] && empresas[0].id ? String(empresas[0].id) : null;
+  }
+  if (!resolvedEmpresaId) {
+    throw new Error('No hay empresa_id valido para asociar el proveedor. Crea o selecciona una empresa antes de registrar proveedores.');
+  }
   const payload = {
     id,
     nombre: text(p.nombre),
@@ -65,7 +73,7 @@ async function saveProveedor(sql, p, empresaId) {
     ciudad: text(p.ciudad),
     pais: text(p.pais, 'Colombia'),
     estado: text(p.estado, 'ACTIVO'),
-    empresa_id: isUuid(incomingEmpresaId) ? incomingEmpresaId : randomUUID(),
+    empresa_id: resolvedEmpresaId,
     notas: text(p.notas),
     categoria: text(p.categoria),
     lead_time_dias: p.lead_time_dias === undefined || p.lead_time_dias === null || p.lead_time_dias === ''
