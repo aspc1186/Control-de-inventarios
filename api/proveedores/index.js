@@ -64,7 +64,7 @@ async function saveProveedor(sql, p, empresaId) {
     ciudad: text(p.ciudad),
     pais: text(p.pais, 'Colombia'),
     estado: text(p.estado, 'ACTIVO'),
-    empresa_id: text(p.empresa_id) || empresaId || null,
+    empresa_id: text(p.empresa_id) || empresaId || '__SA__',
     notas: text(p.notas),
     categoria: text(p.categoria),
     lead_time_dias: p.lead_time_dias === undefined || p.lead_time_dias === null || p.lead_time_dias === ''
