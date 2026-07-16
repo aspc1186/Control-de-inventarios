@@ -1202,16 +1202,37 @@ function saveItems(items) {
 function loadMovs() {
   var all = DB.get('movimientos') || [];
   var eid = _getEmpresaId();
-  if (eid === '__SA__') return all.filter(function(m){ return m.empresa_id === '__SA__' || !m.empresa_id; });
+  if (eid === '__SA__') return all;
   if (eid) return all.filter(function(m){ return m.empresa_id === eid; });
   return [];
 }
 function saveMovs(movs) {
   var eid = _getEmpresaId();
+  if (eid === '__SA__') {
+    DB.set('movimientos', movs || []);
+    return;
+  }
   var all = DB.get('movimientos') || [];
   var other = all.filter(function(m){ return m.empresa_id !== eid; });
   var mine  = movs.map(function(m){ return Object.assign({}, m, {empresa_id: eid}); });
   DB.set('movimientos', other.concat(mine));
+}
+function _syncMovimientosFromAPI(done) {
+  if (window._movimientosFetching) return;
+  window._movimientosFetching = true;
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var url = '/api/movimientos?limit=3000' + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
+  fetch(url)
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && Array.isArray(res.data)) {
+        saveMovs(res.data);
+        window._movimientosCloudLoaded = true;
+        if (typeof done === 'function') done(loadMovs());
+      }
+    })
+    .catch(function(){})
+    .finally(function(){ window._movimientosFetching = false; });
 }
 function loadUsers() {
   var all  = DB.get('usuarios') || [];
@@ -1299,6 +1320,38 @@ function _syncProveedoresFromAPI(done) {
     .catch(function(){})
     .finally(function(){ window._proveedoresFetching = false; });
 }
+function loadCompras() {
+  var all = DB.get('compras') || [];
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  if (eid === '__SA__') return all;
+  if (eid) return all.filter(function(o){ return o.empresa_id === eid; });
+  return all;
+}
+function saveCompras(ordenes) {
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  if (eid === '__SA__') { DB.set('compras', ordenes || []); return; }
+  var all = DB.get('compras') || [];
+  var other = all.filter(function(o){ return o.empresa_id !== eid; });
+  var mine = (ordenes || []).map(function(o){ return Object.assign({}, o, { empresa_id: eid }); });
+  DB.set('compras', other.concat(mine));
+}
+function _syncComprasFromAPI(done) {
+  if (window._comprasFetching) return;
+  window._comprasFetching = true;
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var url = '/api/compras' + (eid && eid !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eid) : '');
+  fetch(url)
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && Array.isArray(res.data)) {
+        saveCompras(res.data);
+        window._comprasCloudLoaded = true;
+        if (typeof done === 'function') done(loadCompras());
+      }
+    })
+    .catch(function(){})
+    .finally(function(){ window._comprasFetching = false; });
+}
 /* saveCiclicos aislado arriba */
 function saveUbicaciones(v){
   DB.set('bodegas', v);
@@ -1382,7 +1435,8 @@ function registrarMov(tipo, articuloId, cantidad, extra) {
     proveedor:   (extra && extra.proveedor)  || '',
     factura:     (extra && extra.factura)    || '',
     area:        (extra && extra.area)       || '',
-    observacion: (extra && extra.observacion)|| ''
+    observacion: (extra && extra.observacion)|| '',
+    empresa_id:  typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (art.empresa_id || null)
   };
   var movs = loadMovs();
   movs.unshift(mov);
@@ -1410,6 +1464,7 @@ function registrarMov(tipo, articuloId, cantidad, extra) {
       proveedor:   (extra && extra.proveedor)   || '',
       factura:     (extra && extra.factura)      || '',
       area:        (extra && extra.area)         || '',
+      empresa_id:   mov.empresa_id || null,
     })
   })
   .then(function(r) { return r.json(); })
@@ -9202,6 +9257,12 @@ renders.movimientos = function() {
 
   var items = (_invItems && _invItems.length > 0) ? _invItems : _getItems();
   var movs  = _getMovs();
+  if (!window._movimientosCloudLoaded) {
+    _syncMovimientosFromAPI(function(cloudMovs) {
+      if (currentPage === 'movimientos') renders.movimientos();
+      if (currentPage === 'inventario' && window._invTab === 'movimientos') _renderInvMovimientos();
+    });
+  }
 
   if (items.length === 0 && movs.length === 0) {
     pg.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24"><path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01"/></svg><p>Sin movimientos registrados.<br>Importa inventario y registra entradas o salidas.</p></div>';
@@ -10399,7 +10460,9 @@ function _loadHistorialData() {
   if (_histFetching) return;
   _histFetching = true;
 
-  fetch('/api/movimientos?limit=2000')
+  var eidHist = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var histUrl = '/api/movimientos?limit=2000' + (eidHist && eidHist !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eidHist) : '');
+  fetch(histUrl)
     .then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); })
     .then(function(res) {
       var apiMovs = res.data || [];
@@ -13444,22 +13507,39 @@ function _guardarMov() {
     id: uid(), sku: sku, codigo: sku,
     tipo: tipo, cantidad: qty,
     costo_unitario: costo || Number(item.costo||0),
-    stock_antes: stockAntes, stock_resultante: stockDespues,
+    stock_antes: stockAntes, stock_anterior: stockAntes, stock_resultante: stockDespues,
     fecha: t.fecha, hora: t.hora, ts: t.ts,
     usuario: SESSION.user && SESSION.user.nombre || 'Sistema',
     observacion: obs, referencia: ref,
-    empresa_id: typeof _getEmpresaId==='function' ? _getEmpresaId() : null,
+    empresa_id: typeof _getEmpresaId==='function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (item.empresa_id || null),
   });
   if (movs.length > 5000) movs = movs.slice(0, 5000);
   saveMovs(movs);
 
-  // Sync to Neon in background
-  fetch('/api/articulos', {
-    method: 'PUT',
+  // Sync to Neon through movements so stock and Kardex stay aligned
+  fetch('/api/movimientos', {
+    method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ sku: sku, stock: stockDespues,
-      ultima_entrada: item.ultima_entrada, ultima_salida: item.ultima_salida })
-  }).catch(function(){});
+    body: JSON.stringify({
+      tipo: tipo,
+      sku: sku,
+      cantidad: qty,
+      usuario: SESSION.user && SESSION.user.nombre || 'Sistema',
+      observacion: obs,
+      factura: ref,
+      area: '',
+      empresa_id: typeof _getEmpresaId==='function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (item.empresa_id || null)
+    })
+  }).then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && res.ok && res.stock_nuevo !== undefined) {
+        item.stock = Number(res.stock_nuevo);
+        items[idx] = item;
+        saveItems(items);
+        _syncMovimientosFromAPI(function(){ if (currentPage === 'movimientos') renders.movimientos(); });
+      }
+    })
+    .catch(function(){ showToast('Movimiento guardado localmente; pendiente sincronizar nube', 'amber'); });
 
   auditLog(tipo, 'SKU: '+sku+' | Cant: '+qty+' | Obs: '+(obs||'—'), SESSION.user&&SESSION.user.nombre);
 
@@ -14697,6 +14777,10 @@ renders['compras'] = function() {
   if (!pg) return;
   var provs = (typeof loadProveedores==='function') ? loadProveedores() : [];
   var items = (typeof loadItems==='function') ? loadItems() : [];
+  var ordenes = (typeof loadCompras==='function') ? loadCompras() : [];
+  if (!window._comprasCloudLoaded) {
+    _syncComprasFromAPI(function(){ if (currentPage === 'compras') renders.compras(); });
+  }
   // Artículos que necesitan reposición
   var needBuy = items.filter(function(it){ return (it.compra_sug||0)>0 || it.estado==='AGOTADO' || it.estado==='CRÍTICO'; });
   var fmt = function(n){ return (+(n||0)).toLocaleString('es-CO'); };
@@ -14707,7 +14791,7 @@ renders['compras'] = function() {
   h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">');
   h.push('<div><h2 style="font-size:18px;font-weight:700;color:var(--white);margin:0">🛒 Gestión de Compras</h2>');
   h.push('<p style="font-size:11px;color:var(--muted);margin:2px 0 0">Solicitudes · Órdenes · Recepciones · Proveedores</p></div>');
-  h.push('<button onclick="showToast(&quot;Pr&oacute;ximamente: crear orden de compra&quot;,&quot;blue&quot;)" style="background:var(--electric);color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">+ Nueva Orden</button>');
+  h.push('<button onclick="openNuevaOrdenCompra()" style="background:var(--electric);color:#000;border:none;padding:8px 16px;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">+ Nueva Orden</button>');
   h.push('</div>');
 
   // KPIs compras
@@ -14761,7 +14845,7 @@ renders['compras'] = function() {
       h.push('<td style="padding:7px 8px;font-size:11px;text-align:right;color:var(--muted)">'+fmtM(it.costo||0)+'</td>');
       h.push('<td style="padding:7px 8px;font-size:11px;text-align:right;font-weight:700;color:#22C55E">'+fmtM((it.compra_sug||0)*(it.costo||0))+'</td>');
       h.push('<td style="padding:7px 8px"><span style="font-size:10px;font-weight:700;color:'+color+';background:'+color+'18;padding:2px 8px;border-radius:20px;white-space:nowrap">'+(it.estado||'—')+'</span></td>');
-      h.push('<td style="padding:7px 8px"><button style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">+ Orden</button></td>');
+      h.push('<td style="padding:7px 8px"><button onclick="openNuevaOrdenCompra(&quot;'+it.sku+'&quot;)" style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:4px 10px;border-radius:6px;cursor:pointer;font-size:10px">+ Orden</button></td>');
       h.push('</tr>');
     });
     h.push('</tbody></table></div>');
@@ -14792,11 +14876,31 @@ renders['compras'] = function() {
 
   // Tab: Órdenes
   h.push('<div id="cp-ordenes" class="cpanel" style="display:none">');
+  if (ordenes.length) {
+    h.push('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">');
+    h.push('<thead><tr style="border-bottom:2px solid var(--border2)">');
+    ['Numero','Proveedor','Estado','Items','Total','Fecha'].forEach(function(col){ h.push('<th style="padding:8px;font-size:10px;font-weight:700;color:var(--muted);text-align:left">'+col+'</th>'); });
+    h.push('</tr></thead><tbody>');
+    ordenes.forEach(function(o){
+      var oi = Array.isArray(o.items) ? o.items : [];
+      var estado = String(o.estado||'BORRADOR').toUpperCase();
+      h.push('<tr style="border-bottom:1px solid var(--border)">');
+      h.push('<td style="padding:7px 8px;font-family:monospace;font-size:11px;color:var(--electric)">'+(o.numero||o.id||'OC')+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--white)">'+(o.proveedor||'Sin proveedor')+'</td>');
+      h.push('<td style="padding:7px 8px"><span style="font-size:10px;font-weight:700;color:#8B5CF6;background:rgba(139,92,246,.14);padding:2px 8px;border-radius:20px">'+estado+'</span></td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+oi.length+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;font-weight:700;color:#22C55E">'+fmtM(o.total||0)+'</td>');
+      h.push('<td style="padding:7px 8px;font-size:11px;color:var(--muted)">'+String(o.created_at||'').slice(0,10)+'</td>');
+      h.push('</tr>');
+    });
+    h.push('</tbody></table></div>');
+  } else {
   h.push('<div style="text-align:center;padding:40px;color:var(--muted)">');
   h.push('<div style="font-size:36px;margin-bottom:10px">📋</div>');
   h.push('<p style="font-size:14px;font-weight:600;color:var(--white)">Módulo de Órdenes de Compra</p>');
   h.push('<p style="font-size:12px;margin-top:8px">Próximamente: Crear · Aprobar · Enviar · Recibir órdenes de compra</p>');
   h.push('</div></div>');
+  }
 
   h.push('</div>');
   pg.innerHTML = h.join('');
@@ -14815,6 +14919,73 @@ renders['compras'] = function() {
     btn.style.borderBottom = idx === 0 ? '2px solid var(--electric)' : 'none';
   });
 };;
+
+function openNuevaOrdenCompra(sku) {
+  var items = (typeof loadItems === 'function') ? loadItems() : [];
+  var provs = (typeof loadProveedores === 'function') ? loadProveedores() : [];
+  var item = sku ? items.find(function(i){ return i.sku === sku; }) : null;
+  var qty = item ? Number(item.compra_sug || Math.max(Number(item.stock_minimo||0) - Number(item.stock||0), 1)) : 1;
+  var h = [];
+  h.push('<h3 style="margin-bottom:10px">Nueva orden de compra</h3>');
+  h.push('<div class="form-row"><label>Producto</label><select id="oc-sku">');
+  items.slice(0, 500).forEach(function(it){
+    h.push('<option value="'+it.sku+'"'+(item && it.sku===item.sku?' selected':'')+'>'+it.sku+' - '+(it.nombre||'')+'</option>');
+  });
+  h.push('</select></div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Proveedor</label><select id="oc-proveedor"><option value="">Sin proveedor</option>');
+  provs.forEach(function(p){
+    var name = p.razon_social || p.nombre || p.nombre_comercial || 'Proveedor';
+    h.push('<option value="'+name+'">'+name+'</option>');
+  });
+  h.push('</select></div>');
+  h.push('<div class="form-row"><label>Estado</label><select id="oc-estado"><option value="BORRADOR">Borrador</option><option value="APROBADA">Aprobada</option><option value="ENVIADA">Enviada</option></select></div>');
+  h.push('</div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Cantidad</label><input id="oc-cantidad" type="number" min="1" step="1" value="'+Math.max(1, qty||1)+'"></div>');
+  h.push('<div class="form-row"><label>Costo unitario</label><input id="oc-costo" type="number" min="0" step="1" value="'+(item?Number(item.costo||0):0)+'"></div>');
+  h.push('</div>');
+  h.push('<div class="form-row"><label>Observaciones</label><input id="oc-obs" placeholder="Notas de compra..."></div>');
+  h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="guardarOrdenCompra()">Guardar orden</button></div>');
+  openModal(h.join(''), 'modal-lg');
+}
+
+function guardarOrdenCompra() {
+  var sku = (document.getElementById('oc-sku')||{value:''}).value;
+  var items = (typeof loadItems === 'function') ? loadItems() : [];
+  var item = items.find(function(i){ return i.sku === sku; });
+  if (!item) { showToast('Selecciona un producto valido', 'red'); return; }
+  var qty = Number((document.getElementById('oc-cantidad')||{value:0}).value || 0);
+  var costo = Number((document.getElementById('oc-costo')||{value:0}).value || 0);
+  if (!qty || qty <= 0) { showToast('La cantidad debe ser mayor a cero', 'red'); return; }
+  var proveedor = (document.getElementById('oc-proveedor')||{value:''}).value;
+  var estado = (document.getElementById('oc-estado')||{value:'BORRADOR'}).value;
+  var obs = (document.getElementById('oc-obs')||{value:''}).value;
+  var eid = typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (item.empresa_id || null);
+  var orden = {
+    id: (typeof _newCloudId === 'function' ? _newCloudId('oc') : 'oc_' + Date.now()),
+    proveedor: proveedor,
+    estado: estado,
+    empresa_id: eid,
+    observaciones: obs,
+    items: [{ sku: sku, nombre: item.nombre || sku, cantidad: qty, costo: costo, total: qty * costo }],
+    total: qty * costo
+  };
+  var ordenes = loadCompras();
+  ordenes.unshift(orden);
+  saveCompras(ordenes);
+  fetch('/api/compras', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(orden) })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && res.ok) _syncComprasFromAPI(function(){ if (currentPage === 'compras') renders.compras(); });
+    })
+    .catch(function(){ showToast('Orden guardada localmente; pendiente sincronizar nube', 'amber'); });
+  closeModal();
+  showToast('Orden de compra guardada', 'green');
+  if (currentPage === 'compras') renders.compras();
+}
+window.openNuevaOrdenCompra = openNuevaOrdenCompra;
+window.guardarOrdenCompra = guardarOrdenCompra;
 
 renders['logistica'] = function() {
   var pg = document.getElementById('pg-logistica');

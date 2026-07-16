@@ -61,6 +61,7 @@ async function setupTables(sql) {
       proveedor        TEXT,
       factura          TEXT,
       area             TEXT,
+      empresa_id       TEXT,
       fecha            TEXT,
       hora             TEXT,
       created_at       TIMESTAMPTZ DEFAULT NOW()
@@ -124,6 +125,21 @@ async function setupTables(sql) {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS compras (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      numero TEXT,
+      proveedor TEXT,
+      proveedor_id TEXT,
+      estado TEXT DEFAULT 'BORRADOR',
+      total NUMERIC(14,2) DEFAULT 0,
+      items JSONB DEFAULT '[]',
+      observaciones TEXT,
+      empresa_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nombre TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS slug TEXT`;
   await sql`ALTER TABLE empresas ALTER COLUMN slug SET DEFAULT 'empresa-principal'`;
@@ -148,6 +164,18 @@ async function setupTables(sql) {
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bodega TEXT DEFAULT ''`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS codigo_barras TEXT DEFAULT ''`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS metodo_seguridad TEXT DEFAULT 'automatico'`;
+
+  await sql`ALTER TABLE movimientos ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS numero TEXT`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS proveedor TEXT`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS proveedor_id TEXT`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'BORRADOR'`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS total NUMERIC(14,2) DEFAULT 0`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS items JSONB DEFAULT '[]'`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS observaciones TEXT`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
 
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS username TEXT`;

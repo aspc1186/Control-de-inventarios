@@ -9,6 +9,30 @@ function nowParts() {
   };
 }
 
+async function ensureMovimientos(sql) {
+  await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS movimientos (
+      id               TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      tipo             TEXT NOT NULL,
+      sku              TEXT NOT NULL,
+      articulo         TEXT NOT NULL,
+      cantidad         NUMERIC(12,2) NOT NULL,
+      stock_anterior   NUMERIC(12,2) NOT NULL,
+      stock_resultante NUMERIC(12,2) NOT NULL,
+      usuario          TEXT,
+      observacion      TEXT,
+      proveedor        TEXT,
+      factura          TEXT,
+      area             TEXT,
+      empresa_id       TEXT,
+      fecha            TEXT,
+      hora             TEXT,
+      created_at       TIMESTAMPTZ DEFAULT NOW()
+    )`;
+  await sql`ALTER TABLE movimientos ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+}
+
 module.exports = async (req, res) => {
   cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -18,12 +42,33 @@ module.exports = async (req, res) => {
   // ── GET ──────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {
     try {
-      const { sku, tipo, usuario, limit = 2000, offset = 0 } = req.query;
+      await ensureMovimientos(sql);
+      const { sku, tipo, usuario, empresa_id, limit = 2000, offset = 0 } = req.query;
       const lim = Math.min(Number(limit) || 2000, 5000);
       const off = Number(offset) || 0;
 
       let rows;
-      if (sku && tipo) {
+      if (empresa_id && empresa_id !== '__SA__' && sku && tipo) {
+        rows = await sql`
+          SELECT * FROM movimientos
+          WHERE empresa_id = ${empresa_id} AND sku = ${sku.toUpperCase()} AND tipo = ${tipo}
+          ORDER BY created_at DESC LIMIT ${lim} OFFSET ${off}`;
+      } else if (empresa_id && empresa_id !== '__SA__' && sku) {
+        rows = await sql`
+          SELECT * FROM movimientos
+          WHERE empresa_id = ${empresa_id} AND sku = ${sku.toUpperCase()}
+          ORDER BY created_at DESC LIMIT ${lim} OFFSET ${off}`;
+      } else if (empresa_id && empresa_id !== '__SA__' && tipo) {
+        rows = await sql`
+          SELECT * FROM movimientos
+          WHERE empresa_id = ${empresa_id} AND tipo = ${tipo}
+          ORDER BY created_at DESC LIMIT ${lim} OFFSET ${off}`;
+      } else if (empresa_id && empresa_id !== '__SA__') {
+        rows = await sql`
+          SELECT * FROM movimientos
+          WHERE empresa_id = ${empresa_id}
+          ORDER BY created_at DESC LIMIT ${lim} OFFSET ${off}`;
+      } else if (sku && tipo) {
         rows = await sql`
           SELECT * FROM movimientos
           WHERE sku = ${sku.toUpperCase()} AND tipo = ${tipo}
@@ -57,7 +102,8 @@ module.exports = async (req, res) => {
 
   // ── POST ─────────────────────────────────────────────────────────────────
   if (req.method === 'POST') {
-    const { tipo, sku, cantidad, usuario, observacion, proveedor, factura, area } = req.body || {};
+    await ensureMovimientos(sql);
+    const { tipo, sku, cantidad, usuario, observacion, proveedor, factura, area, empresa_id } = req.body || {};
 
     // Validate inputs
     if (!tipo)  return res.status(400).json({ error: 'tipo es requerido' });
@@ -70,7 +116,7 @@ module.exports = async (req, res) => {
     try {
       // 1. Get current article
       const arts = await sql`
-        SELECT id, sku, nombre, stock, stock_reservado
+        SELECT id, sku, nombre, stock, stock_reservado, empresa_id
         FROM articulos WHERE sku = ${skuUp}`;
 
       if (!arts.length) {
@@ -115,12 +161,13 @@ module.exports = async (req, res) => {
       }
 
       const stockConfirmado = Number(updated[0].stock);
+      const empresaId = empresa_id && empresa_id !== '__SA__' ? empresa_id : (art.empresa_id || null);
 
       // 5. Register movement
       const movRows = await sql`
         INSERT INTO movimientos
           (tipo, sku, articulo, cantidad, stock_anterior, stock_resultante,
-           usuario, observacion, proveedor, factura, area, fecha, hora)
+           usuario, observacion, proveedor, factura, area, empresa_id, fecha, hora)
         VALUES (
           ${tipo}, ${skuUp}, ${art.nombre}, ${qty},
           ${anterior}, ${stockConfirmado},
@@ -129,6 +176,7 @@ module.exports = async (req, res) => {
           ${proveedor  || null},
           ${factura    || null},
           ${area       || null},
+          ${empresaId},
           ${fecha}, ${hora}
         )
         RETURNING *`;
