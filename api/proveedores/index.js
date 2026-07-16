@@ -1,9 +1,14 @@
 // api/proveedores/index.js - StockFlow WMS suppliers API
 const { getSQL, cors } = require('../_db');
+const { randomUUID } = require('crypto');
 
 function text(v, fallback = null) {
   if (v === undefined || v === null || v === '') return fallback;
   return String(v).trim();
+}
+
+function isUuid(v) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v || ''));
 }
 
 async function ensureProveedores(sql) {
@@ -46,7 +51,8 @@ async function ensureProveedores(sql) {
 }
 
 async function saveProveedor(sql, p, empresaId) {
-  const id = text(p.id) || ('pv_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6));
+  const incomingId = text(p.id);
+  const id = isUuid(incomingId) ? incomingId : randomUUID();
   const payload = {
     id,
     nombre: text(p.nombre),
@@ -139,6 +145,7 @@ module.exports = async (req, res) => {
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id) return res.status(400).json({ ok: false, error: 'id requerido' });
+      if (!isUuid(id)) return res.status(200).json({ ok: true, skipped: true });
       await sql`UPDATE proveedores SET estado = 'INACTIVO', updated_at = NOW() WHERE id = ${id}`;
       return res.status(200).json({ ok: true });
     }
