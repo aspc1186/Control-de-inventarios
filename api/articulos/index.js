@@ -28,24 +28,21 @@ function s(v) {
 }
 
 async function ensureColumns(sql) {
-  // Add any missing columns (idempotent)
-  const alterStatements = [
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_seguridad  NUMERIC(14,2) DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS consumo_diario   NUMERIC(14,4) DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS lead_time        NUMERIC(8,0)  DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS dias_cobertura   NUMERIC(8,0)  DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS metodo_seguridad VARCHAR(20)   DEFAULT 'automatico'`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS subcategoria     VARCHAR(200)  DEFAULT ''`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bodega           VARCHAR(200)  DEFAULT ''`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS precio           NUMERIC(14,2) DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS codigo_barras    VARCHAR(100)  DEFAULT ''`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS empresa_id       VARCHAR(100)`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS ultima_entrada   TEXT`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS ultima_salida    TEXT`,
-  ];
-  for (const stmt of alterStatements) {
-    try { await sql.unsafe(stmt); } catch(e) { /* column exists */ }
-  }
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_reservado NUMERIC(12,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_seguridad  NUMERIC(14,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS punto_reorden   NUMERIC(14,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS consumo_diario   NUMERIC(14,4) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS lead_time        NUMERIC(8,0)  DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS dias_cobertura   NUMERIC(8,0)  DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS metodo_seguridad VARCHAR(20)   DEFAULT 'automatico'`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS subcategoria     VARCHAR(200)  DEFAULT ''`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bodega           VARCHAR(200)  DEFAULT ''`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS precio           NUMERIC(14,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS codigo_barras    VARCHAR(100)  DEFAULT ''`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS empresa_id       VARCHAR(100)`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS estado           TEXT DEFAULT 'Activo'`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS ultima_entrada   TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS ultima_salida    TEXT`;
 }
 
 module.exports = async (req, res) => {

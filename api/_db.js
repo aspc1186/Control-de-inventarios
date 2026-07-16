@@ -110,24 +110,28 @@ async function setupTables(sql) {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`;
 
-  const alterStatements = [
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_reservado NUMERIC(12,2) DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_seguridad NUMERIC(14,2) DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS punto_reorden NUMERIC(14,2) DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS consumo_diario NUMERIC(14,4) DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS lead_time NUMERIC(8,0) DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS dias_cobertura NUMERIC(8,0) DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS precio NUMERIC(14,2) DEFAULT 0`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'Activo'`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS empresa_id TEXT`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS subcategoria TEXT DEFAULT ''`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bodega TEXT DEFAULT ''`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS codigo_barras TEXT DEFAULT ''`,
-    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS metodo_seguridad TEXT DEFAULT 'automatico'`
-  ];
-  for (const stmt of alterStatements) {
-    await sql.unsafe(stmt).catch(() => {});
-  }
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_reservado NUMERIC(12,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_seguridad NUMERIC(14,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS punto_reorden NUMERIC(14,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS consumo_diario NUMERIC(14,4) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS lead_time NUMERIC(8,0) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS dias_cobertura NUMERIC(8,0) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS precio NUMERIC(14,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'Activo'`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS subcategoria TEXT DEFAULT ''`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bodega TEXT DEFAULT ''`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS codigo_barras TEXT DEFAULT ''`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS metodo_seguridad TEXT DEFAULT 'automatico'`;
+
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo TEXT`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS documento TEXT`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefono TEXT`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cargo TEXT`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS area TEXT`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS rol TEXT DEFAULT 'CONSULTA'`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'ACTIVO'`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
 
   // Admin user — password: Admin123! → hash: erp_1d6a1e67_8
   await sql`
