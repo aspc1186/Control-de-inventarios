@@ -139,9 +139,13 @@ async function setupTables(sql) {
   // Admin user — password: Admin123! → hash: erp_1d6a1e67_8
   await sql`
     INSERT INTO usuarios (nombre, username, password_hash, rol, rol_id)
-    SELECT 'Administrador Sistema', 'admin', 'erp_1d6a1e67_8', 'ADMINISTRADOR',
+    SELECT 'Administrador Sistema', 'admin', 'erp_92c82d65_9', 'ADMINISTRADOR',
            COALESCE((SELECT rol_id FROM usuarios WHERE rol_id IS NOT NULL LIMIT 1), gen_random_uuid())
     WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE username = 'admin')`;
+  await sql`
+    UPDATE usuarios
+    SET password_hash = 'erp_92c82d65_9', rol = 'ADMINISTRADOR', estado = 'ACTIVO', updated_at = NOW()
+    WHERE username = 'admin'`;
 
   // 9 bodegas
   const letras = ['A','B','C'];

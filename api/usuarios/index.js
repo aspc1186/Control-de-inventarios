@@ -3,8 +3,8 @@ const { getSQL, cors } = require('../_db');
 
 function simpleHash(str) {
   let h = 5381;
-  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) & 0x7fffffff;
-  return 'erp_' + h.toString(16).padStart(8,'0') + '_' + str.length;
+  for (let i = 0; i < str.length; i++) h = (((h << 5) + h) + str.charCodeAt(i)) | 0;
+  return 'erp_' + (h >>> 0).toString(16).padStart(8,'0') + '_' + str.length;
 }
 
 module.exports = async (req, res) => {
