@@ -132,7 +132,7 @@ async function setupTables(sql) {
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cargo TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS area TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS rol TEXT DEFAULT 'CONSULTA'`;
-  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS rol_id TEXT DEFAULT 'CONSULTA'`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS rol_id UUID DEFAULT gen_random_uuid()`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'ACTIVO'`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
 
@@ -140,7 +140,7 @@ async function setupTables(sql) {
   await sql`
     INSERT INTO usuarios (nombre, username, password_hash, rol, rol_id)
     SELECT 'Administrador Sistema', 'admin', 'erp_1d6a1e67_8', 'ADMINISTRADOR',
-           COALESCE((SELECT rol_id::text FROM usuarios WHERE rol_id IS NOT NULL LIMIT 1), gen_random_uuid()::text)
+           COALESCE((SELECT rol_id FROM usuarios WHERE rol_id IS NOT NULL LIMIT 1), gen_random_uuid())
     WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE username = 'admin')`;
 
   // 9 bodegas
