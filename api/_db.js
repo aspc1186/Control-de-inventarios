@@ -8,6 +8,8 @@ function getSQL() {
 }
 
 async function setupTables(sql) {
+  await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
+
   await sql`
     CREATE TABLE IF NOT EXISTS articulos (
       id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
@@ -23,8 +25,21 @@ async function setupTables(sql) {
       stock           NUMERIC(12,2) DEFAULT 0,
       stock_minimo    NUMERIC(12,2) DEFAULT 0,
       stock_maximo    NUMERIC(12,2),
+      stock_reservado NUMERIC(12,2) DEFAULT 0,
+      stock_seguridad NUMERIC(14,2) DEFAULT 0,
+      punto_reorden   NUMERIC(14,2) DEFAULT 0,
+      consumo_diario  NUMERIC(14,4) DEFAULT 0,
+      lead_time       NUMERIC(8,0) DEFAULT 0,
+      dias_cobertura  NUMERIC(8,0) DEFAULT 0,
       costo           NUMERIC(14,4) DEFAULT 0,
+      precio          NUMERIC(14,2) DEFAULT 0,
       proveedor       TEXT,
+      estado          TEXT DEFAULT 'Activo',
+      empresa_id      TEXT,
+      subcategoria    TEXT DEFAULT '',
+      bodega          TEXT DEFAULT '',
+      codigo_barras   TEXT DEFAULT '',
+      metodo_seguridad TEXT DEFAULT 'automatico',
       created_at      TIMESTAMPTZ DEFAULT NOW(),
       created_by      TEXT,
       ultima_entrada  TEXT,
@@ -75,6 +90,44 @@ async function setupTables(sql) {
       pasillos    JSONB DEFAULT '[]',
       created_at  TIMESTAMPTZ DEFAULT NOW()
     )`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS proveedores (
+      id TEXT PRIMARY KEY,
+      nombre TEXT,
+      nit TEXT,
+      contacto TEXT,
+      telefono TEXT,
+      correo TEXT,
+      direccion TEXT,
+      ciudad TEXT,
+      pais TEXT DEFAULT 'Colombia',
+      estado TEXT DEFAULT 'ACTIVO',
+      empresa_id TEXT,
+      notas TEXT,
+      categoria TEXT,
+      lead_time_dias INTEGER,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+
+  const alterStatements = [
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_reservado NUMERIC(12,2) DEFAULT 0`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_seguridad NUMERIC(14,2) DEFAULT 0`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS punto_reorden NUMERIC(14,2) DEFAULT 0`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS consumo_diario NUMERIC(14,4) DEFAULT 0`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS lead_time NUMERIC(8,0) DEFAULT 0`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS dias_cobertura NUMERIC(8,0) DEFAULT 0`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS precio NUMERIC(14,2) DEFAULT 0`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'Activo'`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS empresa_id TEXT`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS subcategoria TEXT DEFAULT ''`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bodega TEXT DEFAULT ''`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS codigo_barras TEXT DEFAULT ''`,
+    `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS metodo_seguridad TEXT DEFAULT 'automatico'`
+  ];
+  for (const stmt of alterStatements) {
+    await sql.unsafe(stmt).catch(() => {});
+  }
 
   // Admin user — password: Admin123! → hash: erp_1d6a1e67_8
   await sql`

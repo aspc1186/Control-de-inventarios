@@ -781,7 +781,7 @@ to{opacity:1;transform:translateY(0)}}
       <!-- ══ ANALÍTICA ══════════════════════════════════════════════════ -->
       <div class="nav-section" id="nav-sec-analitica">Analítica</div>
 
-      <a onclick="goto('gerencial')" id="nav-gerencial">
+      <a onclick="goto('dashboard')" id="nav-gerencial" style="display:none">
         <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Dashboard Gerencial</a>
 
       <!-- ══ BODEGAS ═════════════════════════════════════════════════════ -->
@@ -1048,7 +1048,7 @@ function seed() {
     }
   ];
 
-  var SYSTEM_IDS = SYSTEM_IDS = SYSTEM_USERS.map(function(u){ return u.id; });
+  var SYSTEM_IDS = SYSTEM_USERS.map(function(u){ return u.id; });
 
   // Si ya está en la versión actual Y los usuarios del sistema existen y son correctos:
   if (storedVersion === SEED_VERSION) {
@@ -2033,7 +2033,7 @@ function togglePwd(id) {
 ══════════════════════════════════════════════ */
 var PAGE_TITLES = {
   empresas:'Empresas Cliente',
-  dashboard:'Dashboard', inventario:'Inventario', 'generar-qr':'Generar QR',
+  dashboard:'Dashboard Control', inventario:'Inventario', compras:'Compras', logistica:'Logistica', 'generar-qr':'Generar QR',
   escaner:'Escáner QR', movimientos:'Movimientos', importar:'Importar desde Excel',
   reportes:'Reportes', conciliacion:'Conciliación de Inventarios',
   proveedores:'Proveedores', ciclicos:'Inventarios Cíclicos', ubicaciones:'Bodegas y Ubicaciones', auditoria:'Auditoría',
@@ -2047,6 +2047,19 @@ var _invItems    = null;   // in-memory cache — source of truth
 var _invFetching = false;  // prevent concurrent fetches
 
 function goto(page, param) {
+  var pageAliases = {
+    gerencial: 'dashboard',
+    movimientos: 'inventario',
+    historial: 'inventario',
+    ciclicos: 'inventario',
+    conciliacion: 'inventario'
+  };
+  if (pageAliases[page]) {
+    if (page === 'movimientos' || page === 'historial') window._invTab = 'kardex';
+    if (page === 'ciclicos') window._invTab = 'conteos';
+    if (page === 'conciliacion') window._invTab = 'conciliacion';
+    page = pageAliases[page];
+  }
   var rol = (SESSION.user && SESSION.user.rol) || 'CONSULTA';
   var isRoot      = (rol === 'ROOT');
   var isFullAdmin = isRoot || rol === 'SUPER ADMINISTRADOR' || rol === 'ADMINISTRADOR';
@@ -2656,7 +2669,7 @@ function _dashRender(pg) {
     h.push('<div style="background:var(--card2);border:1px solid var(--border2);border-radius:12px;padding:14px;margin-bottom:12px">');
     h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">');
     h.push('<div style="font-size:13px;font-weight:700;color:var(--white)">🏆 Top 10 por Valor</div>');
-    h.push('<button onclick="goto(\'gerencial\')" style="font-size:11px;color:var(--electric);background:none;border:none;cursor:pointer">Ver análisis completo →</button>');
+    h.push('<button onclick="_KPI_invalidar&&_KPI_invalidar();renders.dashboard()" style="font-size:11px;color:var(--electric);background:none;border:none;cursor:pointer">Actualizar indicadores →</button>');
     h.push('</div>');
     h.push('<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse">');
     h.push('<thead><tr style="border-bottom:2px solid var(--border2)">');
@@ -2684,14 +2697,14 @@ function _dashRender(pg) {
     {icon:'📦',l:'Inventario',    p:'inventario', c:'#00A8FF'},
     {icon:'🛒',l:'Compras',       p:'compras',    c:'#22C55E'},
     {icon:'🏭',l:'Proveedores',   p:'proveedores',c:'#F59E0B'},
-    {icon:'📊',l:'Gerencial',     p:'gerencial',  c:'#8B5CF6'},
+    {icon:'📊',l:'Control',       p:'dashboard',  c:'#8B5CF6'},
     {icon:'🏠',l:'Bodegas',       p:'ubicaciones',c:'#06B6D4'},
     {icon:'📱',l:'Generar QR',    p:'generar-qr', c:'#EF4444'},
     {icon:'💾',l:'Respaldos',     p:'respaldos',  c:'#64748b'},
     {icon:'📥',l:'Importar',      p:'importar',   c:'#F97316'},
   ];
   accesos.forEach(function(a) {
-    h.push('<div onclick="goto(\'\'+a.p+\'\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:.15s" onmouseenter="this.style.borderColor=\''+a.c+'\';this.style.background=\''+a.c+'11\'" onmouseleave="this.style.borderColor=\'var(--border2)\';this.style.background=\'var(--card2)\'">');
+    h.push('<div onclick="goto(\''+a.p+'\')" style="background:var(--card2);border:1px solid var(--border2);border-radius:10px;padding:12px;text-align:center;cursor:pointer;transition:.15s" onmouseenter="this.style.borderColor=\''+a.c+'\';this.style.background=\''+a.c+'11\'" onmouseleave="this.style.borderColor=\'var(--border2)\';this.style.background=\'var(--card2)\'">');
     h.push('<div style="font-size:22px;margin-bottom:4px">'+a.icon+'</div>');
     h.push('<div style="font-size:10px;font-weight:600;color:var(--text2)">'+a.l+'</div>');
     h.push('</div>');
@@ -4660,9 +4673,9 @@ function checkPublicRoute() {
   var search = window.location.search  || '';
   var hash   = window.location.hash    || '';
   var params = new URLSearchParams(search);
-  var skuFromPath   = path.match(/\/producto\/([/?#]+)/i);
+  var skuFromPath   = path.match(/\/producto\/([^/?#]+)/i);
   var skuFromParam  = params.get('producto') || params.get('sku');
-  var skuFromHash   = hash.match(/producto=([&]+)/i);
+  var skuFromHash   = hash.match(/producto=([^&]+)/i);
   var sku = (skuFromPath && skuFromPath[1]) || skuFromParam || (skuFromHash && skuFromHash[1]);
   if (!sku) return false;
   showPublicProductCard(sku.toUpperCase());
@@ -14639,8 +14652,8 @@ renders['compras'] = function() {
 
   // Tabs
   h.push('<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border2)">');
-  [['sugeridas','🔁 Compras Sugeridas'],['proveedores','🏭 Proveedores'],['ordenes','📋 Órdenes']].forEach(function(tab,i){
-  h.push('<button id="ctab-first" class="ctab" style="padding:8px 16px;border:none;background:transparent;color:var(--electric);font-size:12px;font-weight:700;cursor:pointer;border-bottom:2px solid var(--electric)">🔁 Compras Sugeridas</button>');
+  [['sugeridas','Compras Sugeridas'],['proveedores','Proveedores'],['ordenes','Ordenes']].forEach(function(tab,i){
+    h.push('<button class="ctab" onclick="_comprasTab(\''+tab[0]+'\',this)" style="padding:8px 16px;border:none;background:transparent;color:'+(i===0?'var(--electric)':'var(--muted)')+';font-size:12px;font-weight:'+(i===0?'700':'400')+';cursor:pointer;border-bottom:'+(i===0?'2px solid var(--electric)':'none')+'">'+tab[1]+'</button>');
   });
   h.push('</div>');
 
@@ -14707,6 +14720,20 @@ renders['compras'] = function() {
 
   h.push('</div>');
   pg.innerHTML = h.join('');
+  var compraTabs = [
+    ['sugeridas', 'Compras Sugeridas'],
+    ['proveedores', 'Proveedores'],
+    ['ordenes', 'Ordenes']
+  ];
+  Array.prototype.forEach.call(pg.querySelectorAll('.ctab'), function(btn, idx) {
+    var tab = compraTabs[idx] || compraTabs[0];
+    btn.removeAttribute('id');
+    btn.textContent = tab[1];
+    btn.onclick = function(){ window._comprasTab(tab[0], btn); };
+    btn.style.color = idx === 0 ? 'var(--electric)' : 'var(--muted)';
+    btn.style.fontWeight = idx === 0 ? '700' : '400';
+    btn.style.borderBottom = idx === 0 ? '2px solid var(--electric)' : 'none';
+  });
 };;
 
 renders['logistica'] = function() {

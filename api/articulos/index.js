@@ -1,8 +1,7 @@
 // api/articulos/index.js — StockFlow WMS v2
 // Maneja GET, POST (batch upsert), PUT (update single), DELETE, deactivate
-import { neon } from '@neondatabase/serverless';
+const { getSQL, cors } = require('../_db');
 
-const sql = neon(process.env.DATABASE_URL);
 
 // Todos los campos del modelo — sincronizados con COL mapping del frontend
 const CAMPOS_TEXTO = [
@@ -28,7 +27,7 @@ function s(v) {
   return str === '' ? null : str;
 }
 
-async function ensureColumns() {
+async function ensureColumns(sql) {
   // Add any missing columns (idempotent)
   const alterStatements = [
     `ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_seguridad  NUMERIC(14,2) DEFAULT 0`,
@@ -49,15 +48,14 @@ async function ensureColumns() {
   }
 }
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+module.exports = async (req, res) => {
+  cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
+  const sql = getSQL();
 
   try {
     // Ensure columns exist on every request (cheap — uses IF NOT EXISTS)
-    await ensureColumns();
+    await ensureColumns(sql);
 
     const { action, limit = 5000, empresa_id } = req.query;
 
@@ -227,4 +225,4 @@ export default async function handler(req, res) {
     console.error('[API articulos]', err.message);
     return res.status(500).json({ error: err.message });
   }
-}
+};

@@ -1,13 +1,10 @@
 // api/proveedores/index.js — StockFlow WMS
-import { neon } from '@neondatabase/serverless';
+const { getSQL, cors } = require('../_db');
 
-const sql = neon(process.env.DATABASE_URL);
-
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+module.exports = async (req, res) => {
+  cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
+  const sql = getSQL();
 
   const empresa_id = req.query.empresa_id || null;
 
@@ -126,4 +123,4 @@ export default async function handler(req, res) {
     }
     return res.status(500).json({ ok: false, error: err.message });
   }
-}
+};

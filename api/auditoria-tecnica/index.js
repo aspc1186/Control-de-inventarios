@@ -2,12 +2,10 @@
 // StockFlow WMS — Auditoría Técnica Automática
 // Métodos: GET (listar), POST (registrar), DELETE (limpiar)
 
-import { neon } from '@neondatabase/serverless';
-
-const sql = neon(process.env.DATABASE_URL);
+const { getSQL, cors } = require('../_db');
 
 /* ── Crear tabla si no existe ─────────────────────────────────────── */
-async function ensureTable() {
+async function ensureTable(sql) {
   await sql`
     CREATE TABLE IF NOT EXISTS auditoria_tecnica (
       id            SERIAL PRIMARY KEY,
@@ -35,15 +33,13 @@ async function ensureTable() {
   `;
 }
 
-export default async function handler(req, res) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+module.exports = async (req, res) => {
+  cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
+  const sql = getSQL();
 
   try {
-    await ensureTable();
+    await ensureTable(sql);
 
     /* ── GET — Listar registros ──────────────────────────────────── */
     if (req.method === 'GET') {
@@ -185,4 +181,4 @@ export default async function handler(req, res) {
       hint:  'Verifica DATABASE_URL en variables de entorno de Vercel',
     });
   }
-}
+};
