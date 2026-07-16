@@ -125,6 +125,8 @@ async function setupTables(sql) {
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS metodo_seguridad TEXT DEFAULT 'automatico'`;
 
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo TEXT`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS username TEXT`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS password_hash TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS documento TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefono TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cargo TEXT`;
@@ -136,8 +138,8 @@ async function setupTables(sql) {
   // Admin user — password: Admin123! → hash: erp_1d6a1e67_8
   await sql`
     INSERT INTO usuarios (nombre, username, password_hash, rol)
-    VALUES ('Administrador Sistema', 'admin', 'erp_1d6a1e67_8', 'ADMINISTRADOR')
-    ON CONFLICT (username) DO NOTHING`;
+    SELECT 'Administrador Sistema', 'admin', 'erp_1d6a1e67_8', 'ADMINISTRADOR'
+    WHERE NOT EXISTS (SELECT 1 FROM usuarios WHERE username = 'admin')`;
 
   // 9 bodegas
   const letras = ['A','B','C'];
@@ -156,8 +158,8 @@ async function setupTables(sql) {
     }));
     await sql`
       INSERT INTO ubicaciones (id, nombre, descripcion, pasillos)
-      VALUES (${'bod-'+i}, ${'Bodega '+i}, ${'Bodega de almacenamiento '+i}, ${JSON.stringify(pasillos)})
-      ON CONFLICT DO NOTHING`;
+      SELECT ${'bod-'+i}, ${'Bodega '+i}, ${'Bodega de almacenamiento '+i}, ${JSON.stringify(pasillos)}
+      WHERE NOT EXISTS (SELECT 1 FROM ubicaciones WHERE id = ${'bod-'+i})`;
   }
 }
 
