@@ -53,6 +53,7 @@ async function ensureProveedores(sql) {
 async function saveProveedor(sql, p, empresaId) {
   const incomingId = text(p.id);
   const id = isUuid(incomingId) ? incomingId : randomUUID();
+  const incomingEmpresaId = text(p.empresa_id) || empresaId;
   const payload = {
     id,
     nombre: text(p.nombre),
@@ -64,7 +65,7 @@ async function saveProveedor(sql, p, empresaId) {
     ciudad: text(p.ciudad),
     pais: text(p.pais, 'Colombia'),
     estado: text(p.estado, 'ACTIVO'),
-    empresa_id: text(p.empresa_id) || empresaId || '__SA__',
+    empresa_id: isUuid(incomingEmpresaId) ? incomingEmpresaId : randomUUID(),
     notas: text(p.notas),
     categoria: text(p.categoria),
     lead_time_dias: p.lead_time_dias === undefined || p.lead_time_dias === null || p.lead_time_dias === ''
