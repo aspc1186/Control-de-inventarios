@@ -16,6 +16,7 @@ async function ensureEmpresas(sql) {
     CREATE TABLE IF NOT EXISTS empresas (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       nombre TEXT NOT NULL,
+      slug TEXT,
       nit TEXT,
       correo TEXT,
       ciudad TEXT,
@@ -26,6 +27,8 @@ async function ensureEmpresas(sql) {
     )`;
 
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nombre TEXT`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS slug TEXT`;
+  await sql`ALTER TABLE empresas ALTER COLUMN slug SET DEFAULT 'empresa-principal'`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nit TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS correo TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ciudad TEXT`;
@@ -35,8 +38,8 @@ async function ensureEmpresas(sql) {
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
 
   await sql`
-    INSERT INTO empresas (id, nombre, nit, plan, estado)
-    SELECT '00000000-0000-4000-8000-000000000001'::uuid, 'Empresa Principal', 'N/A', 'WMS', 'ACTIVO'
+    INSERT INTO empresas (id, nombre, slug, nit, plan, estado)
+    SELECT '00000000-0000-4000-8000-000000000001'::uuid, 'Empresa Principal', 'empresa-principal', 'N/A', 'WMS', 'ACTIVO'
     WHERE NOT EXISTS (SELECT 1 FROM empresas)`;
 }
 
@@ -46,6 +49,7 @@ async function saveEmpresa(sql, body) {
   const payload = {
     id,
     nombre: text(body.nombre, 'Empresa sin nombre'),
+    slug: text(body.slug) || text(body.nombre, 'empresa').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'empresa',
     nit: text(body.nit),
     correo: text(body.correo),
     ciudad: text(body.ciudad),
@@ -57,7 +61,7 @@ async function saveEmpresa(sql, body) {
   if (existing.length) {
     await sql`
       UPDATE empresas SET
-        nombre=${payload.nombre}, nit=${payload.nit}, correo=${payload.correo},
+        nombre=${payload.nombre}, slug=${payload.slug}, nit=${payload.nit}, correo=${payload.correo},
         ciudad=${payload.ciudad}, plan=${payload.plan}, estado=${payload.estado},
         updated_at=NOW()
       WHERE id=${id}`;
@@ -65,8 +69,8 @@ async function saveEmpresa(sql, body) {
   }
 
   await sql`
-    INSERT INTO empresas (id, nombre, nit, correo, ciudad, plan, estado, created_at, updated_at)
-    VALUES (${payload.id}, ${payload.nombre}, ${payload.nit}, ${payload.correo},
+    INSERT INTO empresas (id, nombre, slug, nit, correo, ciudad, plan, estado, created_at, updated_at)
+    VALUES (${payload.id}, ${payload.nombre}, ${payload.slug}, ${payload.nit}, ${payload.correo},
             ${payload.ciudad}, ${payload.plan}, ${payload.estado}, NOW(), NOW())`;
   return { id, inserted: true };
 }

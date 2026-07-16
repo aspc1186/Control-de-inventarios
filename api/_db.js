@@ -95,6 +95,7 @@ async function setupTables(sql) {
     CREATE TABLE IF NOT EXISTS empresas (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       nombre TEXT NOT NULL,
+      slug TEXT,
       nit TEXT,
       correo TEXT,
       ciudad TEXT,
@@ -124,6 +125,8 @@ async function setupTables(sql) {
     )`;
 
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nombre TEXT`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS slug TEXT`;
+  await sql`ALTER TABLE empresas ALTER COLUMN slug SET DEFAULT 'empresa-principal'`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nit TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS correo TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ciudad TEXT`;
@@ -169,8 +172,8 @@ async function setupTables(sql) {
     SET password_hash = 'erp_92c82d65_9', rol = 'ADMINISTRADOR', estado = 'ACTIVO', updated_at = NOW()
     WHERE username = 'admin'`;
   await sql`
-    INSERT INTO empresas (id, nombre, nit, correo, ciudad, plan, estado)
-    SELECT '00000000-0000-4000-8000-000000000001'::uuid, 'Empresa Principal', 'N/A', null, null, 'WMS', 'ACTIVO'
+    INSERT INTO empresas (id, nombre, slug, nit, correo, ciudad, plan, estado)
+    SELECT '00000000-0000-4000-8000-000000000001'::uuid, 'Empresa Principal', 'empresa-principal', 'N/A', null, null, 'WMS', 'ACTIVO'
     WHERE NOT EXISTS (SELECT 1 FROM empresas)`;
 
   // 9 bodegas
