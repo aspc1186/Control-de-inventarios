@@ -1244,7 +1244,7 @@ function saveAudit(arr) {
 function loadProveedores() {
   var all = DB.get('proveedores') || [];
   var eid = _getEmpresaId();
-  if (eid === '__SA__') return all.filter(function(p){ return p.empresa_id === '__SA__' || !p.empresa_id; });
+  if (eid === '__SA__') return all;
   if (eid) return all.filter(function(p){ return p.empresa_id === eid; });
   return [];
 }
@@ -1281,6 +1281,24 @@ function saveUsers(arr) {
   }
 }
 function saveProveedores(v){ DB.set('proveedores', v); }  // API sync done in guardarProveedor
+function _syncProveedoresFromAPI(done) {
+  if (window._proveedoresFetching) return;
+  window._proveedoresFetching = true;
+  fetch('/api/proveedores')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && Array.isArray(res.data)) {
+        saveProveedores(res.data.map(function(p){
+          if (!p.razon_social && p.nombre) p.razon_social = p.nombre;
+          return p;
+        }));
+        window._proveedoresCloudLoaded = true;
+        if (typeof done === 'function') done(loadProveedores());
+      }
+    })
+    .catch(function(){})
+    .finally(function(){ window._proveedoresFetching = false; });
+}
 /* saveCiclicos aislado arriba */
 function saveUbicaciones(v){
   DB.set('bodegas', v);
@@ -7894,6 +7912,25 @@ function loadEmpresas() {
 function saveEmpresas(arr) {
   try { localStorage.setItem('sf_empresas', JSON.stringify(arr)); } catch(e){}
 }
+function _newCloudId(prefix) {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+  return (prefix || 'id') + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+}
+function _syncEmpresasFromAPI(done) {
+  if (window._empresasFetching) return;
+  window._empresasFetching = true;
+  fetch('/api/empresas')
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && Array.isArray(res.data)) {
+        saveEmpresas(res.data);
+        window._empresasCloudLoaded = true;
+        if (typeof done === 'function') done(res.data);
+      }
+    })
+    .catch(function(){})
+    .finally(function(){ window._empresasFetching = false; });
+}
 
 /* ── Generar username y contraseña temporal para admin de empresa ─────────── */
 function _genAdminEmpresa(nombreEmpresa) {
@@ -8002,7 +8039,7 @@ function _confirmarNuevaEmpresa() {
 
   // Generar credenciales del admin
   var creds   = _genAdminEmpresa(nombre);
-  var empId   = 'emp_' + Date.now();
+  var empId   = _newCloudId('emp');
   var hoy     = new Date().toISOString().slice(0,10);
 
   // Crear empresa
@@ -8020,6 +8057,15 @@ function _confirmarNuevaEmpresa() {
   };
   empresas.push(empresa);
   saveEmpresas(empresas);
+  fetch('/api/empresas', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(empresa)
+  }).then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && res.ok) _syncEmpresasFromAPI(function(){ if (currentPage === 'empresas') renders.empresas(); });
+    })
+    .catch(function(){ showToast('Empresa guardada localmente; pendiente sincronizar nube', 'amber'); });
 
   // Crear usuario Administrador de la empresa
   // Guardar DIRECTAMENTE en DB para no perder por filtro empresa del SA
@@ -8111,6 +8157,11 @@ renders.empresas = function() {
   if (!isSuperAdmin()) { goto('dashboard'); return; }
   var pg = document.getElementById('pg-empresas');
   if (!pg) return;
+  if (!window._empresasCloudLoaded) {
+    _syncEmpresasFromAPI(function(){
+      if (currentPage === 'empresas') renders.empresas();
+    });
+  }
 
   var empresas = loadEmpresas();
   var h = [];
@@ -9538,15 +9589,19 @@ renders.proveedores = function() {
   var canW  = (typeof canDo === 'function') ? canDo('crear_articulo') : true;
 
   // Mostrar datos locales inmediatamente
-  _buildProveedoresUI(provs, canW, pg);
+  _buildProvUI(provs, canW, pg);
 
   // ── Sincronizar con API en background ────────────────────────────────
   fetch('/api/proveedores')
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res) {
-      if (res && res.data && res.data.length) {
-        saveProveedores(res.data);
-        if (currentPage === 'proveedores') _buildProvUI(res.data, canW, pg);
+      if (res && Array.isArray(res.data)) {
+        saveProveedores(res.data.map(function(p){
+          if (!p.razon_social && p.nombre) p.razon_social = p.nombre;
+          return p;
+        }));
+        window._proveedoresCloudLoaded = true;
+        if (currentPage === 'proveedores') _buildProvUI(loadProveedores(), canW, pg);
       }
     }).catch(function(){});
 
@@ -9559,6 +9614,14 @@ function _provEstChange(v){ window._provFiltEst=v; _buildProvUI(loadProveedores(
 function _clearProvFiltros() {
   window._provSearch=''; window._provFiltTipo=''; window._provFiltEst='';
   renders.proveedores();
+}
+function _provEstado(p) {
+  var raw = (p && p.estado) ? String(p.estado) : 'Activo';
+  var low = raw.toLowerCase();
+  if (low === 'activo') return 'Activo';
+  if (low === 'inactivo') return 'Inactivo';
+  if (low === 'bloqueado') return 'Bloqueado';
+  return raw;
 }
 
 function _buildProvUI(provs, canW, pg) {
@@ -9576,7 +9639,7 @@ function _buildProvUI(provs, canW, pg) {
       (p.tipo_proveedor||'').toLowerCase().includes(srch)
     )) return false;
     if (filtTipo && (p.tipo_proveedor||'') !== filtTipo) return false;
-    if (filtEst  && (p.estado||'Activo') !== filtEst) return false;
+    if (filtEst  && _provEstado(p) !== filtEst) return false;
     return true;
   });
 
@@ -9601,9 +9664,9 @@ function _buildProvUI(provs, canW, pg) {
     // ── KPIs ─────────────────────────────────────────────────────────────
     '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:12px">' +
       '<div class="kpi k-blue" style="cursor:default"><span class="lbl">Total</span><span class="val">' + provs.length + '</span></div>' +
-      '<div class="kpi k-green" style="cursor:default"><span class="lbl">Activos</span><span class="val">' + provs.filter(function(p){ return (p.estado||'Activo')==='Activo'; }).length + '</span></div>' +
-      '<div class="kpi k-yellow" style="cursor:default"><span class="lbl">Inactivos</span><span class="val">' + provs.filter(function(p){ return p.estado==='Inactivo'; }).length + '</span></div>' +
-      '<div class="kpi k-red" style="cursor:default"><span class="lbl">Bloqueados</span><span class="val">' + provs.filter(function(p){ return p.estado==='Bloqueado'; }).length + '</span></div>' +
+      '<div class="kpi k-green" style="cursor:default"><span class="lbl">Activos</span><span class="val">' + provs.filter(function(p){ return _provEstado(p)==='Activo'; }).length + '</span></div>' +
+      '<div class="kpi k-yellow" style="cursor:default"><span class="lbl">Inactivos</span><span class="val">' + provs.filter(function(p){ return _provEstado(p)==='Inactivo'; }).length + '</span></div>' +
+      '<div class="kpi k-red" style="cursor:default"><span class="lbl">Bloqueados</span><span class="val">' + provs.filter(function(p){ return _provEstado(p)==='Bloqueado'; }).length + '</span></div>' +
     '</div>' +
 
     // ── Search + Filters ──────────────────────────────────────────────────
@@ -9640,7 +9703,7 @@ function _buildProvUI(provs, canW, pg) {
           '</tr></thead><tbody>' +
           filtered.map(function(p, fi) {
             var realIdx = provs.indexOf(p);
-            var est = (p.estado||'Activo');
+            var est = _provEstado(p);
             var estClr = est==='Activo'?'b-ok':est==='Bloqueado'?'b-out':'b-gray';
             return '<tr>' +
               '<td style="font-family:monospace;font-size:11px;color:var(--muted)">' + (p.nit||'—') + '</td>' +
@@ -9786,6 +9849,7 @@ function guardarProveedor(idx) {
 
   // Manual proveedores are always tagged as MANUAL
   data.origen_registro = 'MANUAL';
+  data.empresa_id = _getEmpresaId() === '__SA__' ? null : _getEmpresaId();
 
   if (!isNew) {
     // Editing existing - preserve origen_registro if already MANUAL
@@ -9808,7 +9872,15 @@ function guardarProveedor(idx) {
     provs.push(data);
   }
   saveProveedores(provs);
-  fetch('/api/proveedores', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) }).catch(function(){});
+  fetch('/api/proveedores', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && res.ok && res.id) {
+        data.id = res.id;
+        _syncProveedoresFromAPI(function(){ if (currentPage === 'proveedores') renders.proveedores(); });
+      }
+    })
+    .catch(function(){ showToast('Proveedor guardado localmente; pendiente sincronizar nube', 'amber'); });
   closeModal();
   renders.proveedores();
   showToast('Proveedor guardado ✓', 'green');
@@ -9820,6 +9892,14 @@ function deleteProveedor(idx) {
   if (!p || !confirm('Eliminar proveedor "' + (p.razon_social||p.nombre) + '"?')) return;
   provs.splice(idx, 1);
   saveProveedores(provs);
+  if (p.id) {
+    fetch('/api/proveedores?id=' + encodeURIComponent(p.id), { method:'DELETE' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(res){
+        if (res && res.ok) _syncProveedoresFromAPI(function(){ if (currentPage === 'proveedores') renders.proveedores(); });
+      })
+      .catch(function(){ showToast('Proveedor eliminado localmente; pendiente sincronizar nube', 'amber'); });
+  }
   renders.proveedores();
   showToast('Proveedor eliminado', '');
 }
