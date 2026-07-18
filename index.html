@@ -1398,8 +1398,8 @@ function registrarMov(tipo, articuloId, cantidad, extra) {
     return { ok: false, msg: '🔒 Bodega bloqueada por inventario en proceso: ' + bloqueoPor + '\nNo se permiten movimientos hasta que finalice el conteo.' };
   }
 
-  var isSalida = (tipo === 'SALIDA' || tipo === 'AJUSTE_NEG');
-  var isEntrada= (tipo === 'ENTRADA' || tipo === 'AJUSTE_POS');
+  var isSalida = (tipo === 'SALIDA' || tipo === 'AJUSTE_NEG' || tipo === 'TRASLADO_SAL');
+  var isEntrada= (tipo === 'ENTRADA' || tipo === 'AJUSTE_POS' || tipo === 'TRASLADO_ENT');
 
   if (isSalida && qty > disp) {
     return { ok: false, msg: 'Stock insuficiente. Disponible: ' + disp + ' | Actual: ' + stock + (reserv?' | Reservado: '+reserv:'') };
@@ -1688,6 +1688,7 @@ function auditSecurity(accion, detalle, resultado) {
     id: uid(), fecha: (now()||{}).fecha||'', hora: (now()||{}).hora||'',
     accion: accion, detalle: detalle, resultado: resultado,
     usuario: SESSION.user && SESSION.user.nombre || 'Sistema',
+    empresa_id: typeof _getEmpresaId==='function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : null,
     dispositivo: navigator.userAgent.slice(0,80),
   };
   var audit = loadAudit();
@@ -3245,11 +3246,31 @@ function DB_traslados_load() {
 function DB_traslados_save(d) {
   try { localStorage.setItem('erp_traslados', JSON.stringify(d.slice(0,500))); } catch(e){}
 }
+function _syncTrasladosFromAPI(done) {
+  if (window._trasladosFetching) return;
+  window._trasladosFetching = true;
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var url = '/api/traslados?limit=1000' + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
+  fetch(url)
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && Array.isArray(res.data)) {
+        DB_traslados_save(res.data);
+        window._trasladosCloudLoaded = true;
+        if (typeof done === 'function') done(res.data);
+      }
+    })
+    .catch(function(){})
+    .finally(function(){ window._trasladosFetching = false; });
+}
 
 renders.traslados = function() {
   var pg = document.getElementById('pg-traslados');
   if (!pg) return;
   _traslado = null;
+  if (!window._trasladosCloudLoaded) {
+    _syncTrasladosFromAPI(function(){ if (currentPage === 'traslados') _buildTrasladosUI(pg); });
+  }
   _buildTrasladosUI(pg);
 };
 
@@ -3516,8 +3537,18 @@ function _confirmarTraslado() {
     sku: p.sku, nombre: p.nombre, cantidad: p.cantidad,
     origen: p.origen, destino: p.destino,
     usuario: SESSION.user && SESSION.user.nombre || 'Sistema',
+    empresa_id: typeof _getEmpresaId==='function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (art.empresa_id || null),
   });
   DB_traslados_save(hist);
+  fetch('/api/traslados', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(hist[0])
+  }).then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && res.ok) _syncTrasladosFromAPI(function(){ if (currentPage === 'traslados') _buildTrasladosUI(document.getElementById('pg-traslados')); });
+    })
+    .catch(function(){ showToast('Traslado guardado localmente; pendiente sincronizar nube', 'amber'); });
 
   auditLog('TRASLADO', p.sku + ' | ' + p.cantidad + ' und | ' + p.origen + ' → ' + p.destino, SESSION.user&&SESSION.user.nombre);
 
@@ -12659,8 +12690,9 @@ renders.ubicaciones = function() {
   fetch('/api/ubicaciones')
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res) {
-      if (res && res.data) {
-        saveUbicaciones(res.data);
+      var rows = res && Array.isArray(res.data) ? res.data : (Array.isArray(res) ? res : null);
+      if (rows) {
+        saveUbicaciones(rows);
         if (currentPage === 'ubicaciones') _buildUbicacionesUI();
       }
     }).catch(function(){});
@@ -15034,7 +15066,7 @@ renders['logistica'] = function() {
     h.push('<div style="font-size:28px;margin-bottom:8px">'+f.icon+'</div>');
     h.push('<div style="font-size:13px;font-weight:700;color:var(--white);margin-bottom:6px">'+f.title+'</div>');
     h.push('<div style="font-size:11px;color:var(--muted);flex:1;margin-bottom:12px">'+f.desc+'</div>');
-    h.push('<button style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:7px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600">'+f.btn+'</button>');
+    h.push('<button onclick="'+f.action+'" style="background:rgba(0,168,255,.1);border:1px solid rgba(0,168,255,.3);color:var(--electric);padding:7px;border-radius:8px;cursor:pointer;font-size:11px;font-weight:600">'+f.btn+'</button>');
     h.push('</div>');
   });
   h.push('</div>');

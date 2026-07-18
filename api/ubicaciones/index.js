@@ -8,7 +8,7 @@ module.exports = async (req, res) => {
 
   if (req.method === 'GET') {
     const rows = await sql`SELECT * FROM ubicaciones ORDER BY nombre`;
-    return res.json(rows);
+    return res.json({ ok: true, data: rows, total: rows.length });
   }
   if (req.method === 'POST') {
     const { nombre, descripcion, pasillos } = req.body || {};
@@ -16,7 +16,7 @@ module.exports = async (req, res) => {
     const rows = await sql`
       INSERT INTO ubicaciones (nombre, descripcion, pasillos)
       VALUES (${nombre}, ${descripcion||null}, ${JSON.stringify(pasillos||[])}) RETURNING *`;
-    return res.status(201).json(rows[0]);
+    return res.status(201).json({ ok: true, data: rows[0], id: rows[0].id });
   }
   res.status(405).end();
 };

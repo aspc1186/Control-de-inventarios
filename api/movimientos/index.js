@@ -127,8 +127,8 @@ module.exports = async (req, res) => {
       const anterior = Number(art.stock || 0);
       const reservado= Number(art.stock_reservado || 0);
       const disp     = Math.max(0, anterior - reservado);
-      const isEntry  = ['ENTRADA','AJUSTE_POS'].includes(tipo);
-      const isSalida = ['SALIDA','AJUSTE_NEG'].includes(tipo);
+      const isEntry  = ['ENTRADA','AJUSTE_POS','TRASLADO_ENT'].includes(tipo);
+      const isSalida = ['SALIDA','AJUSTE_NEG','TRASLADO_SAL'].includes(tipo);
 
       // 2. Validate stock
       if (isSalida && qty > disp) {

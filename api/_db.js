@@ -140,6 +140,22 @@ async function setupTables(sql) {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS traslados (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      sku TEXT NOT NULL,
+      nombre TEXT,
+      cantidad NUMERIC(12,2) NOT NULL,
+      origen TEXT,
+      destino TEXT,
+      usuario TEXT,
+      observacion TEXT,
+      empresa_id TEXT,
+      fecha TEXT,
+      hora TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nombre TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS slug TEXT`;
   await sql`ALTER TABLE empresas ALTER COLUMN slug SET DEFAULT 'empresa-principal'`;
@@ -176,6 +192,15 @@ async function setupTables(sql) {
   await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS observaciones TEXT`;
   await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
   await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
+
+  await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS nombre TEXT`;
+  await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS origen TEXT`;
+  await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS destino TEXT`;
+  await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS usuario TEXT`;
+  await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS observacion TEXT`;
+  await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS fecha TEXT`;
+  await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS hora TEXT`;
 
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS username TEXT`;
