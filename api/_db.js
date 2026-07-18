@@ -77,6 +77,7 @@ async function setupTables(sql) {
       password_hash TEXT NOT NULL,
       cargo         TEXT,
       area          TEXT,
+      empresa_id    TEXT,
       rol           TEXT DEFAULT 'CONSULTA',
       estado        TEXT DEFAULT 'ACTIVO',
       created_at    TIMESTAMPTZ DEFAULT NOW(),
@@ -226,6 +227,11 @@ async function setupTables(sql) {
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefono TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cargo TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS area TEXT`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS intentos INTEGER DEFAULT 0`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS primer_ingreso BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_pwd BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pwd_temporal BOOLEAN DEFAULT FALSE`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS rol TEXT DEFAULT 'CONSULTA'`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS rol_id UUID DEFAULT gen_random_uuid()`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'ACTIVO'`;

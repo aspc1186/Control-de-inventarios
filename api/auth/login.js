@@ -15,6 +15,7 @@ module.exports = async (req, res) => {
 
   const body = req.body || {};
   const sql  = getSQL();
+  await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_id TEXT`.catch(()=>{});
 
   // ── REGISTER new user ─────────────────────────────────────────────────
   if (body.action === 'register') {
@@ -28,6 +29,7 @@ module.exports = async (req, res) => {
       await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS telefono  TEXT`.catch(()=>{});
       await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS cargo     TEXT`.catch(()=>{});
       await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS area      TEXT`.catch(()=>{});
+      await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_id TEXT`.catch(()=>{});
 
       const hash = simpleHash(password);
       await sql`
@@ -61,7 +63,7 @@ module.exports = async (req, res) => {
 
   try {
     const rows = await sql`
-      SELECT id, nombre, username, correo, rol, cargo, area, estado, password_hash
+      SELECT id, nombre, username, correo, rol, cargo, area, estado, empresa_id, password_hash
       FROM usuarios
       WHERE (username = ${login.toLowerCase()} OR correo = ${login.toLowerCase()})
       LIMIT 1`;
@@ -94,6 +96,8 @@ module.exports = async (req, res) => {
         rol:      user.rol,
         cargo:    user.cargo,
         area:     user.area,
+        estado:   user.estado,
+        empresa_id:user.empresa_id,
       }
     });
 

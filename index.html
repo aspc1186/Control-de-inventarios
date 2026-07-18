@@ -1248,6 +1248,10 @@ function loadUsers() {
   }
   return [];
 }
+function _cloudResourceUrl(recurso) {
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  return '/api/movimientos?recurso=' + encodeURIComponent(recurso) + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
+}
 function loadAudit() {
   var all = DB.get('auditoria') || [];
   var eid = _getEmpresaId();
@@ -1261,6 +1265,29 @@ function saveAudit(arr) {
   var other = all.filter(function(a){ return a.empresa_id !== eid; });
   var mine  = arr.map(function(a){ return Object.assign({}, a, {empresa_id: eid}); });
   DB.set('auditoria', other.concat(mine));
+}
+function _syncAuditFromAPI(done) {
+  if (window._auditFetching) return;
+  window._auditFetching = true;
+  fetch(_cloudResourceUrl('auditoria'))
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && Array.isArray(res.data)) {
+        var all = DB.get('auditoria') || [];
+        var map = {};
+        all.concat(res.data).forEach(function(a){
+          if (!a) return;
+          var id = a.id || (a.ts + '_' + a.accion + '_' + a.usuario);
+          a.id = id || uid();
+          map[a.id] = Object.assign({}, map[a.id] || {}, a);
+        });
+        DB.set('auditoria', Object.keys(map).map(function(k){ return map[k]; }).sort(function(a,b){ return (b.ts || b.timestamp || 0) - (a.ts || a.timestamp || 0); }).slice(0, 2000));
+        window._auditCloudLoaded = true;
+        if (typeof done === 'function') done(loadAudit());
+      }
+    })
+    .catch(function(){})
+    .finally(function(){ window._auditFetching = false; });
 }
 function loadProveedores() {
   var all = DB.get('proveedores') || [];
@@ -1300,6 +1327,53 @@ function saveUsers(arr) {
   } else {
     DB.set('usuarios', arr);
   }
+}
+function _mergeUsuariosFromAPI(rows) {
+  var all = DB.get('usuarios') || [];
+  var map = {};
+  all.forEach(function(u){ if (u && (u.username || u.id)) map[u.username || u.id] = u; });
+  (rows || []).forEach(function(apiU){
+    if (!apiU) return;
+    var key = apiU.username || apiU.id;
+    var local = map[key] || {};
+    map[key] = Object.assign({}, local, apiU, {
+      password: local.password || apiU.password || '',
+      intentos: Number(apiU.intentos || local.intentos || 0)
+    });
+  });
+  DB.set('usuarios', Object.keys(map).map(function(k){ return map[k]; }));
+}
+function _syncUsersFromAPI(done) {
+  if (window._usuariosFetching) return;
+  window._usuariosFetching = true;
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var url = '/api/usuarios' + (eid && eid !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eid) : '');
+  fetch(url)
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && Array.isArray(res.data)) {
+        _mergeUsuariosFromAPI(res.data);
+        window._usuariosCloudLoaded = true;
+        if (typeof done === 'function') done(loadUsers());
+      }
+    })
+    .catch(function(){})
+    .finally(function(){ window._usuariosFetching = false; });
+}
+function _pushUsuarioCloud(u, plainPassword) {
+  if (!u || !u.username) return;
+  var body = {
+    id: u.id, username: u.username, nombre: u.nombre || u.username,
+    correo: u.correo || null, rol: u.rol || 'CONSULTA',
+    cargo: u.cargo || null, area: u.area || null, documento: u.documento || null,
+    telefono: u.telefono || null, estado: u.estado || 'ACTIVO',
+    empresa_id: u.empresa_id || (typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : null),
+    intentos: Number(u.intentos || 0), primer_ingreso: !!u.primer_ingreso,
+    debe_cambiar_pwd: !!u.debe_cambiar_pwd, pwd_temporal: !!u.pwd_temporal
+  };
+  if (plainPassword) body.password = plainPassword;
+  else if (u.password) body.password_hash = u.password;
+  fetch('/api/usuarios', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(function(){});
 }
 function saveProveedores(v){ DB.set('proveedores', v); }  // API sync done in guardarProveedor
 function _syncProveedoresFromAPI(done) {
@@ -1376,6 +1450,7 @@ function auditLog(accion, detalle, usuario) {
   audit.unshift(entry);
   // saveAudit preserves other companies' records
   if (typeof saveAudit === 'function') { saveAudit(audit); } else { DB.set('auditoria', audit); }
+  fetch(_cloudResourceUrl('auditoria'), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(entry) }).catch(function(){});
 }
 
 function registrarMov(tipo, articuloId, cantidad, extra) {
@@ -3564,8 +3639,7 @@ function _confirmarTraslado() {
 ══════════════════════════════════════════════════════════════════════════ */
 
 function _wmsResourceUrl(recurso) {
-  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
-  return '/api/movimientos?recurso=' + encodeURIComponent(recurso) + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
+  return _cloudResourceUrl(recurso);
 }
 function _wmsAttachEmpresa(row) {
   var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
@@ -7316,6 +7390,11 @@ function _auditSeg(accion, detalle, extra) {
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify(Object.assign({tipo_error:'PERMISOS', modulo:'Seguridad'}, entry)),
   }).catch(function(){});
+  fetch(_cloudResourceUrl('seguridad'), {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(entry),
+  }).catch(function(){});
 }
 function loadSecAudit() {
   try { return JSON.parse(localStorage.getItem('sf_sec_audit')||'[]'); } catch(e){ return []; }
@@ -8443,7 +8522,7 @@ function _editarEmpresa(empId) {
   h.push('</select></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy">💾 Guardar</button>');
+  h.push('<button class="btn btn-navy" onclick="_guardarEdicionEmpresa(\''+empId+'\')">💾 Guardar</button>');
   h.push('</div>');
   openModal(h.join(''), 'modal-lg');
 }
@@ -11729,7 +11808,8 @@ renders.auditoria = function() {
     pg.innerHTML = '<div class="empty-state"><p>Sin permiso para ver auditoría</p></div>';
     return;
   }
-  var audit = DB.get('auditoria') || [];
+  if (!window._auditCloudLoaded) _syncAuditFromAPI(function(){ if (currentPage === 'auditoria') renders.auditoria(); });
+  var audit = loadAudit();
   var tech  = DB.get('auditoria_tecnica') || [];
   var h = [];
   h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">');
@@ -11804,31 +11884,9 @@ renders.usuarios = function() {
   var localUsers = loadUsers();
   _buildUsuariosUI(localUsers);
 
-  // Fetch users from API and sync to localStorage
-  fetch('/api/usuarios')
-    .then(function(r){ return r.ok ? r.json() : null; })
-    .then(function(res) {
-      if (res && res.data && res.data.length > 0) {
-        // Merge: keep local password hashes, update rest from API
-        var local = loadUsers();
-        var merged = res.data.map(function(apiU) {
-          var loc = local.find(function(l){ return l.username === apiU.username; });
-          return Object.assign({}, apiU, {
-            password: (loc && loc.password) || apiU.password || '',
-            intentos: (loc && loc.intentos) || 0,
-          });
-        });
-        // Add any local-only users not in API
-        local.forEach(function(l) {
-          if (!merged.find(function(m){ return m.username === l.username; })) {
-            merged.push(l);
-          }
-        });
-        saveUsers(merged);
-        if (currentPage === 'usuarios') _buildUsuariosUI(merged);
-      }
-    })
-    .catch(function(){});
+  _syncUsersFromAPI(function(users){
+    if (currentPage === 'usuarios') _buildUsuariosUI(users);
+  });
 
   var users = loadUsers();
   var myId  = SESSION.user && SESSION.user.id;
@@ -11864,7 +11922,7 @@ function nuevoUsuario() {
   h.push('<div class="form-row"><label>Teléfono</label><input id="u-tel" type="text" placeholder="300 123 4567"></div>');
   h.push('</div>');
   h.push('<div class="form-grid">');
-  h.push('<div class="form-row"><label>Usuario (login) *</label><input id="u-user" type="text" placeholder="juangarcia" oninput="this.value=this.value.toLowerCase().replace(/[a-z0-9_]/g,\'\')"></div>');
+  h.push('<div class="form-row"><label>Usuario (login) *</label><input id="u-user" type="text" placeholder="juangarcia" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,\'\')"></div>');
   h.push('<div class="form-row"><label>Contraseña *</label><input id="u-pwd" type="password" placeholder="Mínimo 8 caracteres" oninput="checkPwdReqs(\'u-pwd\',\'u-reqs\')"></div>');
   h.push('</div>');
   h.push('<div id="u-reqs" style="margin-bottom:10px"></div>');
@@ -11920,6 +11978,7 @@ function guardarUsuario() {
     id: uid(), nombre: nom, documento: doc, correo: mail,
     telefono: tel, username: user, password: hash,
     cargo, area, rol, estado: 'ACTIVO', intentos: 0,
+    empresa_id: typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : null,
     created_at: (now()||{}).fecha||new Date().toISOString().slice(0,10)
   };
 
@@ -11927,15 +11986,7 @@ function guardarUsuario() {
   users.push(newUser);
   saveUsers(users);
 
-  // Sync to Neon
-  fetch('/api/usuarios', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ username:user, password:pwd, nombre:nom, correo:mail, rol, cargo, area, documento:doc, telefono:tel })
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(res){ if(res.ok) console.log('Usuario sincronizado:', user); else console.warn('Neon sync:', res.error); })
-  .catch(function(e){ console.warn('Neon sync failed:', e.message); });
+  _pushUsuarioCloud(newUser, pwd);
 
   auditLog('CREAR_USUARIO', 'Usuario: '+user+' | Rol: '+rol, SESSION.user&&SESSION.user.nombre);
   closeModal();
@@ -11976,7 +12027,7 @@ function editarUsuario(id) {
   h.push('</div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy">💾 Guardar</button>');
+  h.push('<button class="btn btn-navy" onclick="_guardarEdicionUsuario(\''+id+'\')">💾 Guardar</button>');
   h.push('</div>');
   openModal(h.join(''));
 }
@@ -11998,6 +12049,7 @@ function _guardarEdicionUsuario(id) {
   if (area)  users[idx].area   = area;
   if (rol)   users[idx].rol    = rol;
   DB.set('usuarios', users);
+  _pushUsuarioCloud(users[idx]);
   closeModal();
   showToast('✅ Usuario actualizado: '+(nom||users[idx].username),'green');
   auditLog('EDITAR_USUARIO','Editado: '+users[idx].username, SESSION.user&&SESSION.user.nombre);
@@ -12017,6 +12069,7 @@ function actualizarUsuario(id) {
     estado: document.getElementById('eu-estado').value,
   });
   saveUsers(users);
+  _pushUsuarioCloud(users[idx]);
   auditLog('EDITAR_USUARIO', 'Usuario: ' + users[idx].username, SESSION.user && SESSION.user.nombre);
   closeModal(); renders.usuarios();
   showToast('Usuario actualizado ✓', 'green');
@@ -12033,6 +12086,7 @@ function resetPassword(id) {
   users[idx].intentos = 0;
   users[idx].estado   = 'ACTIVO';
   saveUsers(users);
+  _pushUsuarioCloud(users[idx], nueva);
   auditLog('RESET_PASSWORD', 'Usuario: '+users[idx].username+'', (SESSION.user && SESSION.user.nombre));
   renders.usuarios();
   showToast('Contraseña restablecida ✓', 'green');
@@ -13642,6 +13696,7 @@ function cambiarEstadoUsuario(userId) {
   var nuevo = u.estado==='ACTIVO' ? 'INACTIVO' : 'ACTIVO';
   users[idx].estado = nuevo;
   DB.set('usuarios', users);
+  _pushUsuarioCloud(users[idx]);
   showToast('Usuario '+(nuevo==='ACTIVO'?'activado':'desactivado')+': '+u.username,'green');
   auditLog('CAMBIAR_ESTADO','Usuario: '+u.username+' → '+nuevo, SESSION.user&&SESSION.user.nombre);
   if (currentPage==='usuarios') renders.usuarios();
@@ -13660,7 +13715,7 @@ function resetPasswordUsuario(userId) {
   h.push('<div id="rp-reqs" class="pwd-req" style="margin-top:6px"></div></div>');
   h.push('<div class="modal-actions">');
   h.push('<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>');
-  h.push('<button class="btn btn-navy">🔑 Resetear</button>');
+  h.push('<button class="btn btn-navy" onclick="_confirmarResetPwd(\''+userId+'\')">🔑 Resetear</button>');
   h.push('</div>');
   openModal(h.join(''));
 }
@@ -13675,6 +13730,7 @@ function _confirmarResetPwd(userId) {
   users[idx].intentos = 0;
   users[idx].estado   = 'ACTIVO';
   DB.set('usuarios', users);
+  _pushUsuarioCloud(users[idx], pwd);
   closeModal();
   showToast('Contraseña reseteada para: '+users[idx].username,'green');
   auditLog('RESET_PASSWORD','Usuario: '+users[idx].username, SESSION.user&&SESSION.user.nombre);
