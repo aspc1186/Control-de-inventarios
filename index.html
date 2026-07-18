@@ -10160,6 +10160,118 @@ function _provDrop(e) {
   _provDragLeave();
   if (e.dataTransfer && e.dataTransfer.files[0]) _leerArchivoProveedores(e.dataTransfer.files[0]);
 }
+
+function _sfNormHeader(v) {
+  return String(v || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function _sfCellByAliases(row, aliases) {
+  var keys = Object.keys(row || {});
+  for (var i=0; i<keys.length; i++) {
+    var nk = _sfNormHeader(keys[i]);
+    for (var j=0; j<aliases.length; j++) {
+      if (nk === _sfNormHeader(aliases[j])) return row[keys[i]];
+    }
+  }
+  return '';
+}
+
+function _sfConvertInventarioAProveedores(rows) {
+  rows = rows || [];
+  if (!rows.length) return null;
+  var headers = Object.keys(rows[0] || {}).map(_sfNormHeader);
+  var hasProveedor = headers.indexOf('proveedor') >= 0;
+  var hasInventario = headers.indexOf('codigo') >= 0 || headers.indexOf('cantidad') >= 0 || headers.indexOf('stockminimo') >= 0;
+  var hasProveedorTpl = headers.indexOf('razonsocial') >= 0 || headers.indexOf('razon_social') >= 0 || headers.indexOf('nit') >= 0;
+  if (!hasProveedor || hasProveedorTpl || !hasInventario) return null;
+
+  var map = {};
+  rows.forEach(function(row) {
+    var nombre = String(_sfCellByAliases(row, ['Proveedor','proveedor','supplier','vendor']) || '').trim();
+    if (!nombre || nombre === '-' || nombre.toLowerCase() === 'nan') return;
+    var key = _sfSlug(nombre);
+    if (!key) return;
+    if (!map[key]) {
+      map[key] = {
+        ID_Proveedor: 'PROV-' + key,
+        NIT: key,
+        Razon_Social: nombre,
+        Nombre_Comercial: nombre,
+        Tipo_Proveedor: 'Nacional',
+        Categoria_Principal: '',
+        Marca_Representada: '',
+        Contacto_Principal: '',
+        Cargo: '',
+        Telefono: '',
+        Celular: '',
+        WhatsApp: '',
+        Correo_Compras: '',
+        Correo_Cartera: '',
+        Sitio_Web: '',
+        Pais: 'Colombia',
+        Departamento: '',
+        Ciudad: '',
+        Direccion: '',
+        Codigo_Postal: '',
+        Condicion_Pago: '',
+        Descuento_Comercial: 0,
+        Tiempo_Entrega_Dias: 0,
+        Pedido_Minimo: 0,
+        Banco: '',
+        Tipo_Cuenta: '',
+        Numero_Cuenta: '',
+        Estado: 'Activo',
+        Observaciones: 'Generado desde plantilla de inventario'
+      };
+    }
+    var categoria = String(_sfCellByAliases(row, ['Categoría','Categoria','categoria']) || '').trim();
+    var marca = String(_sfCellByAliases(row, ['Marca','marca']) || '').trim();
+    var lead = Number(_sfCellByAliases(row, ['Lead Time','lead_time','leadtime']) || 0);
+    if (categoria && map[key].Categoria_Principal.indexOf(categoria) < 0) map[key].Categoria_Principal = map[key].Categoria_Principal ? map[key].Categoria_Principal + ', ' + categoria : categoria;
+    if (marca && map[key].Marca_Representada.indexOf(marca) < 0) map[key].Marca_Representada = map[key].Marca_Representada ? map[key].Marca_Representada + ', ' + marca : marca;
+    if (lead > 0) map[key].Tiempo_Entrega_Dias = map[key].Tiempo_Entrega_Dias ? Math.round((map[key].Tiempo_Entrega_Dias + lead) / 2) : lead;
+  });
+  var out = Object.keys(map).map(function(k){ return map[k]; });
+  return out.length ? out : null;
+}
+
+function _sfHeadersPlantillaProveedores() {
+  return ['ID_Proveedor','NIT','Razon_Social','Nombre_Comercial','Tipo_Proveedor',
+    'Categoria_Principal','Marca_Representada','Contacto_Principal','Cargo','Telefono','Celular',
+    'WhatsApp','Correo_Compras','Correo_Cartera','Sitio_Web','Pais','Departamento','Ciudad',
+    'Direccion','Codigo_Postal','Condicion_Pago','Descuento_Comercial','Tiempo_Entrega_Dias',
+    'Pedido_Minimo','Banco','Tipo_Cuenta','Numero_Cuenta','Estado','Observaciones'];
+}
+
+function _sfWritePlantillaProveedores(rows, fileName) {
+  var headers = _sfHeadersPlantillaProveedores();
+  var fallback = {
+    ID_Proveedor:'PROV-001', NIT:'900123456-1', Razon_Social:'Proveedor ejemplo', Nombre_Comercial:'Proveedor ejemplo',
+    Tipo_Proveedor:'Nacional', Categoria_Principal:'Inventario', Marca_Representada:'', Pais:'Colombia',
+    Descuento_Comercial:0, Tiempo_Entrega_Dias:3, Pedido_Minimo:0, Estado:'Activo', Observaciones:'Ejemplo'
+  };
+  var dataRows = (rows && rows.length ? rows : [fallback]).map(function(r){
+    return headers.map(function(h){ return r[h] !== undefined ? r[h] : ''; });
+  });
+  var ayuda = [
+    ['Campo','Obligatorio','Formato','Valores validos'],
+    ['NIT','Si','Texto o numero unico','Puede ser NIT real o codigo generado'],
+    ['Razon_Social','Si','Texto libre','Nombre del proveedor'],
+    ['Estado','No','Texto exacto','Activo / Inactivo / Bloqueado'],
+    ['Tiempo_Entrega_Dias','No','Numero entero positivo','Se toma del Lead Time del inventario si existe']
+  ];
+  var wb = XLSX.utils.book_new();
+  var ws1 = XLSX.utils.aoa_to_sheet([headers].concat(dataRows));
+  ws1['!cols'] = headers.map(function(){ return {wch:20}; });
+  XLSX.utils.book_append_sheet(wb, ws1, 'Proveedores');
+  var ws2 = XLSX.utils.aoa_to_sheet(ayuda);
+  ws2['!cols'] = [{wch:22},{wch:12},{wch:28},{wch:42}];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Ayuda');
+  XLSX.writeFile(wb, fileName || 'plantilla_proveedores_stockflow.xlsx');
+}
+
 function _leerArchivoProveedores(file) {
   if (!file) return;
   if (file.size > 20*1024*1024) { showToast('Archivo muy grande (max 20MB)', 'red'); return; }
@@ -10176,6 +10288,11 @@ function _leerArchivoProveedores(file) {
       var rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
 
       if (!rows.length) { if (preview) preview.innerHTML = '<p style="color:var(--red);padding:12px">El archivo esta vacio</p>'; return; }
+      var convertedFromInventory = _sfConvertInventarioAProveedores(rows);
+      if (convertedFromInventory && convertedFromInventory.length) {
+        rows = convertedFromInventory;
+        showToast('Plantilla de inventario convertida a ' + rows.length + ' proveedores unicos', 'green');
+      }
       if (rows.length > 500) { showToast('Maximo 500 proveedores por archivo', 'red'); return; }
 
       var provs       = loadProveedores();
@@ -10200,13 +10317,13 @@ function _leerArchivoProveedores(file) {
         if (!rs) rowErrs.push('Razon_Social vacia');
 
         // Email validation
-        var emailRe = /[\s@]+@[\s@]+\.[\s@]+$/;
+        var emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (correo  && !emailRe.test(correo))  rowErrs.push('Correo_Compras invalido');
         if (correo2 && !emailRe.test(correo2)) rowErrs.push('Correo_Cartera invalido');
 
         // Numeric validation
-        if (tel && /[0-9+\-\s\(\)]/.test(tel)) rowErrs.push('Telefono con caracteres invalidos');
-        if (cel && /[0-9+\-\s]/.test(cel))     rowErrs.push('Celular invalido');
+        if (tel && /[^0-9+\-\s\(\)]/.test(tel)) rowErrs.push('Telefono con caracteres invalidos');
+        if (cel && /[^0-9+\-\s]/.test(cel))     rowErrs.push('Celular invalido');
         if (isNaN(tdias)||tdias<0)               rowErrs.push('Tiempo_Entrega_Dias invalido');
         if (isNaN(desc)||desc<0||desc>100)       rowErrs.push('Descuento_Comercial debe ser 0-100');
         if (!['Activo','Inactivo','Bloqueado',''].includes(estado)) rowErrs.push('Estado invalido');
@@ -10481,6 +10598,33 @@ function _exportarErroresProv(errors) {
 
 
 /* ── EXPORTAR EXCEL ──────────────────────────────────────────────────────── */
+function _sfDescargarPlantillaProveedoresIntegrada() {
+  if (typeof XLSX === 'undefined') { showToast('XLSX no disponible', 'red'); return; }
+  var invRows = (typeof loadItems === 'function' ? loadItems() : []).map(function(i){
+    return { Proveedor:i.proveedor, Categoria:i.categoria, Marca:i.marca, 'Lead Time':i.lead_time, Codigo:i.sku || i.codigo, Cantidad:i.stock };
+  });
+  var fromLocal = _sfConvertInventarioAProveedores(invRows);
+  if (fromLocal && fromLocal.length) {
+    _sfWritePlantillaProveedores(fromLocal, 'plantilla_proveedores_stockflow_integrada.xlsx');
+    showToast('Plantilla de proveedores generada con ' + fromLocal.length + ' proveedores del inventario', 'green');
+    return;
+  }
+  fetch('Plantilla.xlsx')
+    .then(function(r){ if (!r.ok) throw new Error('Plantilla.xlsx no disponible'); return r.arrayBuffer(); })
+    .then(function(buf){
+      var wb = XLSX.read(new Uint8Array(buf), { type:'array', cellDates:true });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+      var converted = _sfConvertInventarioAProveedores(rows) || [];
+      _sfWritePlantillaProveedores(converted, 'plantilla_proveedores_stockflow_integrada.xlsx');
+      showToast('Plantilla integrada generada con ' + converted.length + ' proveedores', 'green');
+    })
+    .catch(function(){
+      _sfWritePlantillaProveedores([], 'plantilla_proveedores_stockflow.xlsx');
+      showToast('No se encontro inventario; se genero plantilla base', 'amber');
+    });
+}
+
 function exportProveedoresExcel() {
   if (typeof XLSX === 'undefined') { showToast('XLSX no disponible', 'red'); return; }
   var provs = loadProveedores();
@@ -10521,6 +10665,7 @@ function exportProveedoresExcel() {
 /* ── PLANTILLA ───────────────────────────────────────────────────────────── */
 function descargarPlantillaProveedores() {
   if (typeof XLSX === 'undefined') { showToast('XLSX no disponible', 'red'); return; }
+  if (typeof _sfDescargarPlantillaProveedoresIntegrada === 'function') return _sfDescargarPlantillaProveedoresIntegrada();
   var headers = ['ID_Proveedor','NIT','Razon_Social','Nombre_Comercial','Tipo_Proveedor',
     'Categoria_Principal','Marca_Representada','Contacto_Principal','Cargo','Telefono','Celular',
     'WhatsApp','Correo_Compras','Correo_Cartera','Sitio_Web','Pais','Departamento','Ciudad',
