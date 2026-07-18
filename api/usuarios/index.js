@@ -24,6 +24,10 @@ module.exports = async (req, res) => {
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS primer_ingreso BOOLEAN DEFAULT FALSE`.catch(()=>{});
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS debe_cambiar_pwd BOOLEAN DEFAULT FALSE`.catch(()=>{});
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS pwd_temporal BOOLEAN DEFAULT FALSE`.catch(()=>{});
+  await sql`
+    UPDATE usuarios
+    SET rol = 'SUPER ADMINISTRADOR', estado = 'ACTIVO', empresa_id = NULL, updated_at = NOW()
+    WHERE username IN ('superadmin', 'superadministrador')`.catch(()=>{});
 
   // GET — list all users (without password_hash)
   if (req.method === 'GET') {

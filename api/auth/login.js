@@ -16,6 +16,10 @@ module.exports = async (req, res) => {
   const body = req.body || {};
   const sql  = getSQL();
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS empresa_id TEXT`.catch(()=>{});
+  await sql`
+    UPDATE usuarios
+    SET rol = 'SUPER ADMINISTRADOR', estado = 'ACTIVO', empresa_id = NULL, updated_at = NOW()
+    WHERE username IN ('superadmin', 'superadministrador')`.catch(()=>{});
 
   // ── REGISTER new user ─────────────────────────────────────────────────
   if (body.action === 'register') {
