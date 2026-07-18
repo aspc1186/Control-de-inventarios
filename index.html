@@ -1595,7 +1595,7 @@ var PLANES = {
   PRO: {
     nombre: 'Pro',
     modulos: ['dashboard','inventario','importar','movimientos','reportes',
-              'proveedores','historial','ubicaciones',
+              'proveedores','compras','historial','ubicaciones',
               'gerencial','ciclicos','conciliacion','auditoria',
               'usuarios','respaldos'],
     limites:  { bodegas: -1, referencias: -1, usuarios: -1 },
@@ -1603,10 +1603,10 @@ var PLANES = {
   WMS: {
     nombre: 'WMS',
     modulos: ['dashboard','inventario','importar','movimientos','reportes',
-              'proveedores','historial','ubicaciones',
+              'proveedores','compras','logistica','historial','ubicaciones',
               'gerencial','ciclicos','conciliacion','auditoria',
               'usuarios','respaldos',
-              'generar-qr','escaner','traslados',
+              'generar-qr','escaner','traslados','picking','packing',
               'mis-inventarios','integraciones'],
     limites:  { bodegas: -1, referencias: -1, usuarios: -1 },
   },
@@ -1616,35 +1616,35 @@ var PERMISOS = {
   // SA — acceso total a la plataforma, sin restricciones
   'SUPER ADMINISTRADOR': [
     'dashboard','inventario','importar','movimientos','reportes',
-    'proveedores','historial','ubicaciones',
+    'proveedores','compras','logistica','historial','ubicaciones',
     'gerencial','ciclicos','conciliacion','auditoria',
     'usuarios','respaldos',
-    'generar-qr','escaner','traslados','mis-inventarios','integraciones',
+    'generar-qr','escaner','traslados','picking','packing','mis-inventarios','integraciones',
     'empresas','centro-pruebas','salud-sistema','consulta-productos',
   ],
   // ADMINISTRADOR — todos los módulos del plan contratado
   'ADMINISTRADOR': [
     'dashboard','inventario','importar','movimientos','reportes',
-    'proveedores','historial','ubicaciones',
+    'proveedores','compras','logistica','historial','ubicaciones',
     'gerencial','ciclicos','conciliacion','auditoria',
     'usuarios','respaldos',
-    'generar-qr','escaner','traslados','mis-inventarios','integraciones',
+    'generar-qr','escaner','traslados','picking','packing','mis-inventarios','integraciones',
     'consulta-productos',
   ],
   // JEFE INVENTARIOS — inventario, movimientos, conteos, ubicaciones
   'JEFE INVENTARIOS': [
     'dashboard','inventario','importar','movimientos','reportes',
-    'historial','ubicaciones','ciclicos','conciliacion','auditoria','gerencial',
-    'generar-qr','escaner','mis-inventarios',
+    'compras','logistica','historial','ubicaciones','ciclicos','conciliacion','auditoria','gerencial',
+    'generar-qr','escaner','traslados','picking','packing','mis-inventarios',
   ],
   // COMPRAS — proveedores e inventario solo lectura
   'COMPRAS': [
-    'dashboard','inventario','proveedores','importar','reportes','historial',
+    'dashboard','inventario','proveedores','compras','importar','reportes','historial',
   ],
   // ALMACENISTA — entradas, salidas, traslados, QR
   'ALMACENISTA': [
     'dashboard','inventario','movimientos','historial',
-    'generar-qr','escaner','traslados','mis-inventarios',
+    'generar-qr','escaner','traslados','logistica','picking','packing','mis-inventarios',
   ],
   // OPERARIO INVENTARIO — solo conteos y lectura
   'OPERARIO INVENTARIO': [
@@ -6281,7 +6281,7 @@ function applyPlanUI() {
     'inventario','importar','historial','proveedores',
     'movimientos','traslados','reportes',
     'ubicaciones','generar-qr','escaner',
-    'gerencial',
+    'compras','logistica','gerencial',
     'ciclicos','conciliacion','mis-inventarios',
     'auditoria',
     'empresas','usuarios','integraciones','respaldos',
@@ -6295,8 +6295,8 @@ function applyPlanUI() {
   // ── Calcular módulos disponibles DESPUÉS de declarar allNavIds ─────
   var plan    = isFullAdmin ? 'WMS' : (SESSION.plan || (typeof getEmpresaPlan==='function' ? getEmpresaPlan() : null) || 'FREE');
   var planDef = (typeof PLANES!=='undefined' && PLANES) ? (PLANES[plan] || PLANES['FREE'] || {modulos:[]}) : {modulos:[]};
-  var rolPerms= (typeof PERMISOS!=='undefined' && PERMISOS) ? (PERMISOS[rol] || {}) : {};
-  var rolMods = rolPerms.modulos || [];
+  var rolPerms= (typeof PERMISOS!=='undefined' && PERMISOS) ? (PERMISOS[rol] || []) : [];
+  var rolMods = Array.isArray(rolPerms) ? rolPerms : (rolPerms.modulos || []);
 
   // ROOT/SA: todos los módulos. Otros: intersección plan ∩ rol
   var disponibles = isFullAdmin
@@ -6334,8 +6334,8 @@ function applyPlanUI() {
 
   // ── Mostrar secciones según módulos visibles ──────────────────────
   var secMap = {
-    'nav-sec-operacion':  ['inventario','importar','proveedores','movimientos','traslados'],
-    'nav-sec-analitica':  ['gerencial','reportes'],
+    'nav-sec-operacion':  ['inventario','importar','proveedores','compras','logistica','movimientos','traslados'],
+    'nav-sec-analitica':  ['reportes'],
     'nav-sec-bodegas':    ['ubicaciones','generar-qr','escaner'],
     'nav-sec-seguridad':  ['auditoria'],
     'nav-sec-admin':      ['empresas','usuarios','integraciones','respaldos'],
@@ -12873,7 +12873,6 @@ function _renderBodegaCard(b, i, canEdit) {
       (canEdit ?
         '<div style="display:flex;gap:6px">' +
           '<button class="btn-icon" onclick="openEditBodega(' + i + ')" title="Editar">✏️</button>' +
-          '<button class="btn-icon" onclick="" title=""></button>' +
         '</div>' : '') +
       '</div>';
 }
@@ -14807,7 +14806,7 @@ function _renderInvConteos() {
     currentPage = orig;
     document.getElementById('inv-conteos-content').innerHTML = content;
   } else {
-    document.getElementById('inv-conteos-content').innerHTML = '<div class="empty-state"><p>Módulo de conteos cíclicos</p><button class="btn btn-navy" onclick=\"goto(\'\1\')\">Ir a Conteos</button></div>';
+    document.getElementById('inv-conteos-content').innerHTML = '<div class="empty-state"><p>Modulo de conteos ciclicos</p><button class="btn btn-navy" onclick="goto(\'ciclicos\')">Ir a Conteos</button></div>';
   }
 }
 
@@ -16015,7 +16014,7 @@ function _sfNormalizeBodega(b, idx) {
     });
   }
   return Object.assign({}, b, {
-    id: String(b.id || codigo),
+    id: codigo,
     codigo: codigo,
     nombre: nombre,
     estado: b.estado || 'Activa',
@@ -16144,8 +16143,12 @@ function guardarRemision() {
   var item = loadItems().find(function(i){ return (i.sku||i.codigo) === sku; });
   if (!item) { showToast('Articulo no encontrado', 'red'); return; }
   var rem = { id: uid(), numero:'REM-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + String(Date.now()).slice(-4), cliente:cliente, fecha:(document.getElementById('rm-fecha')||{}).value, sku:sku, articulo:item.nombre, cantidad:qty, transportadora:((document.getElementById('rm-trans')||{}).value||''), observacion:((document.getElementById('rm-obs')||{}).value||''), estado:'EMITIDA', usuario:SESSION.user&&SESSION.user.nombre, empresa_id:typeof _getEmpresaId==='function'&&_getEmpresaId()!=='__SA__'?_getEmpresaId():null };
+  var mov = registrarMov('SALIDA', item.id, qty, { observacion:'Remision '+rem.numero+' - '+cliente, usuario:rem.usuario });
+  if (!mov || mov.ok === false) {
+    showToast((mov && mov.msg) || 'No se pudo registrar la salida de inventario', 'red');
+    return;
+  }
   var out = DB_remisiones_load(); out.unshift(rem); DB_remisiones_save(out);
-  registrarMov('SALIDA', item.id, qty, { observacion:'Remision '+rem.numero+' - '+cliente, usuario:rem.usuario });
   auditLog('CREAR_REMISION', rem.numero + ' | ' + sku + ' x ' + qty, rem.usuario);
   closeModal();
   showToast('Remision creada y salida registrada', 'green');
@@ -16176,7 +16179,7 @@ renders.logistica = function() {
   var h = [];
   h.push('<div style="padding:16px;display:flex;flex-direction:column;gap:14px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><h2 style="font-size:18px;margin:0;color:var(--white)">Logistica WMS</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Picking, packing, guias, despachos, remisiones y traslados funcionales</p></div><button class="btn btn-navy btn-sm" onclick="abrirNuevaRemision()">Nueva remision</button></div>');
   h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">');
-  [['Picking',c.picking,'#f59e0b',"_packTab='packing';goto('picking')"],['Packing',c.packing,'#a78bfa',"_packTab='packing';goto('packing')"],['Guias',c.guias,'#38bdf8',"_packTab='guias';goto('packing')"],['Despachos',c.despachos,'#22c55e',"_packTab='despacho';goto('packing')"],['Remisiones',c.remisiones,'#fb7185',"abrirNuevaRemision()"]].forEach(function(k){
+  [['Picking',c.picking,'#f59e0b',"goto('picking')"],['Packing',c.packing,'#a78bfa',"_packTab='packing';goto('packing')"],['Guias',c.guias,'#38bdf8',"_packTab='guias';goto('packing')"],['Despachos',c.despachos,'#22c55e',"_packTab='despacho';goto('packing')"],['Remisiones',c.remisiones,'#fb7185',"abrirNuevaRemision()"],['Traslados',DB_movimientos().filter(function(m){ return String(m.tipo||'').indexOf('TRASLADO')===0; }).length,'#60a5fa',"goto('traslados')"]].forEach(function(k){
     h.push('<button onclick="'+k[3]+'" style="text-align:left;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:14px;cursor:pointer"><div style="font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase">'+k[0]+'</div><div style="font-size:26px;font-weight:900;color:'+k[2]+'">'+k[1]+'</div></button>');
   });
   h.push('</div>');
@@ -16205,19 +16208,78 @@ function _seedBodegasDesdeInventario() {
 window._seedBodegasDesdeInventario = _seedBodegasDesdeInventario;
 
 ERP_CONNECTORS = [
-  { id:'sap_b1', nombre:'SAP Business One', logo:'SAP', desc:'ERP empresarial', estado:'PENDIENTE' },
-  { id:'sap_s4', nombre:'SAP S/4HANA', logo:'SAP', desc:'ERP corporativo', estado:'PENDIENTE' },
-  { id:'netsuite', nombre:'Oracle NetSuite', logo:'NS', desc:'Cloud ERP', estado:'PENDIENTE' },
-  { id:'dynamics365', nombre:'Microsoft Dynamics 365', logo:'D365', desc:'ERP/CRM Microsoft', estado:'PENDIENTE' },
-  { id:'odoo', nombre:'Odoo', logo:'ODOO', desc:'ERP modular', estado:'PENDIENTE' },
-  { id:'sage', nombre:'Sage', logo:'SAGE', desc:'ERP contable', estado:'PENDIENTE' },
-  { id:'quickbooks', nombre:'QuickBooks', logo:'QB', desc:'Contabilidad y compras', estado:'PENDIENTE' },
-  { id:'zoho', nombre:'Zoho Inventory/Books', logo:'ZOHO', desc:'Inventario y facturacion', estado:'PENDIENTE' },
-  { id:'siigo', nombre:'Siigo', logo:'SIIGO', desc:'ERP Colombia', estado:'PENDIENTE' },
-  { id:'alegra', nombre:'Alegra', logo:'ALG', desc:'Facturacion e inventario', estado:'PENDIENTE' },
-  { id:'world_office', nombre:'World Office', logo:'WO', desc:'ERP Colombia', estado:'PENDIENTE' },
-  { id:'helisa', nombre:'Helisa', logo:'HEL', desc:'Contabilidad Colombia', estado:'PENDIENTE' }
+  { id:'sap_b1', name:'SAP Business One', nombre:'SAP Business One', logo:'SAP', desc:'ERP empresarial', estado:'PENDIENTE', color:'#0ea5e9', fields:['url','company','username','password'] },
+  { id:'sap_s4', name:'SAP S/4HANA', nombre:'SAP S/4HANA', logo:'SAP', desc:'ERP corporativo', estado:'PENDIENTE', color:'#2563eb', fields:['url','empresa_id','api_key'] },
+  { id:'netsuite', name:'Oracle NetSuite', nombre:'Oracle NetSuite', logo:'NS', desc:'Cloud ERP', estado:'PENDIENTE', color:'#ef4444', fields:['url','empresa_id','api_key'] },
+  { id:'dynamics365', name:'Microsoft Dynamics 365', nombre:'Microsoft Dynamics 365', logo:'D365', desc:'ERP/CRM Microsoft', estado:'PENDIENTE', color:'#6366f1', fields:['url','empresa_id','api_key'] },
+  { id:'odoo', name:'Odoo', nombre:'Odoo', logo:'ODOO', desc:'ERP modular', estado:'PENDIENTE', color:'#a855f7', fields:['url','db','username','password'] },
+  { id:'sage', name:'Sage', nombre:'Sage', logo:'SAGE', desc:'ERP contable', estado:'PENDIENTE', color:'#22c55e', fields:['url','api_key','empresa_id'] },
+  { id:'quickbooks', name:'QuickBooks', nombre:'QuickBooks', logo:'QB', desc:'Contabilidad y compras', estado:'PENDIENTE', color:'#16a34a', fields:['empresa_id','api_key'] },
+  { id:'zoho', name:'Zoho Inventory/Books', nombre:'Zoho Inventory/Books', logo:'ZOHO', desc:'Inventario y facturacion', estado:'PENDIENTE', color:'#dc2626', fields:['empresa_id','api_key'] },
+  { id:'siigo', name:'Siigo', nombre:'Siigo', logo:'SIIGO', desc:'ERP Colombia', estado:'PENDIENTE', color:'#06b6d4', fields:['username','api_key'] },
+  { id:'alegra', name:'Alegra', nombre:'Alegra', logo:'ALG', desc:'Facturacion e inventario', estado:'PENDIENTE', color:'#f59e0b', fields:['username','token'] },
+  { id:'world_office', name:'World Office', nombre:'World Office', logo:'WO', desc:'ERP Colombia', estado:'PENDIENTE', color:'#64748b', fields:['formato','ruta'] },
+  { id:'helisa', name:'Helisa', nombre:'Helisa', logo:'HEL', desc:'Contabilidad Colombia', estado:'PENDIENTE', color:'#475569', fields:['server','port','empresa','usuario','contrasena'] }
 ];
+
+renders.integraciones = function() {
+  var pg = document.getElementById('pg-integraciones');
+  if (!pg) return;
+  var cfg = loadERPConfig();
+  var log = loadERPLog();
+  var h = [];
+  h.push('<div style="max-width:1100px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:14px">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><h2 style="font-size:18px;margin:0;color:var(--white)">Integraciones ERP</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Conectores principales en estado pendiente hasta configurar credenciales reales.</p></div><button class="btn btn-ghost btn-sm" onclick="_erpSyncManual()">Sincronizar activos</button></div>');
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px">');
+  ERP_CONNECTORS.forEach(function(erp){
+    var conn = cfg[erp.id] || {};
+    var active = conn.activo === true;
+    h.push('<div class="card" style="border:1px solid '+(active?'rgba(34,197,94,.35)':'var(--border2)')+'">');
+    h.push('<div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start"><div><p style="font-size:13px;font-weight:800;color:var(--white);margin:0">'+erp.name+'</p><p style="font-size:10px;color:var(--muted);margin:3px 0 0">'+erp.desc+'</p></div><span style="font-size:10px;font-weight:800;color:'+(active?'var(--neon)':'var(--amber)')+'">'+(active?'CONECTADO':'PENDIENTE')+'</span></div>');
+    h.push('<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-navy btn-xs" onclick="_erpConfigModal(\''+erp.id+'\')">'+(active?'Configurar':'Conectar')+'</button>');
+    if (active) h.push('<button class="btn btn-ghost btn-xs" onclick="_erpSync(\''+erp.id+'\')">Sync</button><button class="btn btn-ghost btn-xs" onclick="_erpDesconectar(\''+erp.id+'\')" style="color:var(--red)">Desconectar</button>');
+    h.push('</div></div>');
+  });
+  h.push('</div>');
+  h.push('<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="font-size:13px;margin:0;color:var(--white)">Historial de sincronizaciones</h3><span style="font-size:11px;color:var(--muted)">'+log.length+' eventos</span></div>');
+  if (!log.length) h.push('<p style="color:var(--muted);font-size:12px;text-align:center;padding:18px">Sin sincronizaciones registradas.</p>');
+  else {
+    h.push('<div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Fecha</th><th>ERP</th><th>Entidad</th><th>Registros</th><th>Estado</th></tr></thead><tbody>');
+    log.slice(0,50).forEach(function(entry){ h.push('<tr><td>'+new Date(entry.ts).toLocaleString('es-CO').slice(0,16)+'</td><td>'+entry.erp+'</td><td>'+entry.entidad+'</td><td style="text-align:right">'+(entry.registros||0)+'</td><td>'+entry.status+'</td></tr>'); });
+    h.push('</tbody></table></div>');
+  }
+  h.push('</div></div>');
+  pg.innerHTML = h.join('');
+};
+
+_erpConfigModal = function(erpId) {
+  var erp = ERP_CONNECTORS.find(function(e){ return e.id === erpId; });
+  if (!erp) return;
+  var cfg = loadERPConfig();
+  var conn = cfg[erpId] || {};
+  var labels = {
+    api_key:'API Key / Token', empresa_id:'ID Empresa', ambiente:'Ambiente', url:'URL del servidor',
+    db:'Base de datos', username:'Usuario', password:'Contrasena', server:'Servidor / Host',
+    port:'Puerto', company:'Compania SAP', usuario:'Usuario', contrasena:'Contrasena',
+    empresa:'Codigo de empresa', formato:'Formato de archivo', ruta:'Ruta / URL de archivos',
+    metodo:'Metodo HTTP', token:'Token de autorizacion'
+  };
+  var h = [];
+  h.push('<h3 style="margin-bottom:4px">Configurar '+erp.name+'</h3>');
+  h.push('<p style="font-size:11px;color:var(--muted);margin-bottom:14px">'+erp.desc+' - Estado: pendiente hasta guardar credenciales.</p>');
+  (erp.fields || ['url','api_key']).forEach(function(f){
+    var type = /password|contrasena/i.test(f) ? 'password' : (/port/i.test(f) ? 'number' : 'text');
+    h.push('<div class="form-row"><label>'+(labels[f] || f)+'</label><input id="erp-'+f+'" type="'+type+'" value="'+(type==='password'?'':(conn[f]||''))+'"></div>');
+  });
+  h.push('<div class="form-row"><label>Entidades a sincronizar</label><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">');
+  ERP_SYNC_ENTITIES.forEach(function(ent){
+    var checked = conn.entidades && conn.entidades[ent];
+    h.push('<label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="erp-ent-'+ent+'"'+(checked?' checked':'')+' style="accent-color:var(--electric)">'+ent+'</label>');
+  });
+  h.push('</div></div>');
+  h.push('<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-ghost" onclick="_erpTestConn(\''+erpId+'\')">Probar conexion</button><button class="btn btn-navy" onclick="_erpGuardarConfig(\''+erpId+'\')">Guardar y Conectar</button></div>');
+  openModal(h.join(''), 'modal-lg');
+};
 
 var _origDownloadPlantilla = typeof downloadPlantilla === 'function' ? downloadPlantilla : null;
 downloadPlantilla = function() {
@@ -16250,6 +16312,77 @@ renders.conciliacion = function() {
     })
     .catch(function(){});
 };
+
+function _sfAppendOnce(arr, values) {
+  if (!Array.isArray(arr)) return values.slice();
+  values.forEach(function(v){ if (arr.indexOf(v) < 0) arr.push(v); });
+  return arr;
+}
+
+function _sfEnsureOperationalModules() {
+  var ops = ['compras','logistica','traslados','picking','packing','conciliacion','ubicaciones','integraciones'];
+  ['PRO','WMS'].forEach(function(plan){
+    if (PLANES[plan]) PLANES[plan].modulos = _sfAppendOnce(PLANES[plan].modulos || [], ops);
+  });
+  ['SUPER ADMINISTRADOR','ADMINISTRADOR','JEFE INVENTARIOS'].forEach(function(rol){
+    if (PERMISOS[rol]) PERMISOS[rol] = _sfAppendOnce(PERMISOS[rol], ops);
+  });
+  if (PERMISOS.COMPRAS) PERMISOS.COMPRAS = _sfAppendOnce(PERMISOS.COMPRAS, ['compras','proveedores','conciliacion']);
+  if (PERMISOS.ALMACENISTA) PERMISOS.ALMACENISTA = _sfAppendOnce(PERMISOS.ALMACENISTA, ['logistica','traslados','picking','packing']);
+}
+
+_renderBodegaCard = function(b, i, canEdit) {
+  b = _sfNormalizeBodega(b, i);
+  var isActive = b.estado !== 'Inactiva';
+  var ubicaciones = Array.isArray(b.ubicaciones) ? b.ubicaciones.length : _countUbicaciones(b);
+  return '<div class="card" style="margin-bottom:12px;border-left:3px solid ' + (isActive ? 'var(--electric)' : 'var(--muted)') + '">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">' +
+      '<div style="min-width:0">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">' +
+          '<span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--electric);background:rgba(0,168,255,.1);padding:2px 8px;border-radius:6px">' + (b.codigo || 'BOD') + '</span>' +
+          '<h3 style="font-size:14px;font-weight:700;color:var(--white);margin:0">' + (b.nombre || b.codigo || 'Bodega') + '</h3>' +
+          '<span class="badge ' + (isActive ? 'cic-done' : 'cic-close') + '">' + (isActive ? 'Activa' : 'Inactiva') + '</span>' +
+        '</div>' +
+        '<div style="display:flex;gap:16px;font-size:11px;color:var(--muted);flex-wrap:wrap">' +
+          (b.responsable ? '<span>Responsable: ' + b.responsable + '</span>' : '') +
+          (b.direccion ? '<span>Direccion: ' + b.direccion + '</span>' : '') +
+          '<span>' + ubicaciones + ' ubicaciones</span>' +
+        '</div>' +
+      '</div>' +
+      (canEdit ? '<button class="btn btn-ghost btn-sm" onclick="openEditBodega(' + i + ')">Editar</button>' : '') +
+    '</div>' +
+  '</div>';
+};
+
+var _sfApplyPlanUIFinal = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+applyPlanUI = function() {
+  _sfEnsureOperationalModules();
+  if (_sfApplyPlanUIFinal) _sfApplyPlanUIFinal();
+  var gerencial = document.getElementById('nav-gerencial');
+  if (gerencial) gerencial.style.display = 'none';
+  var principal = document.getElementById('nav-sec-principal');
+  if (principal) principal.style.display = '';
+};
+_sfEnsureOperationalModules();
+
+var _sfGetModulosDisponiblesFinal = typeof getModulosDisponibles === 'function' ? getModulosDisponibles : null;
+getModulosDisponibles = function() {
+  _sfEnsureOperationalModules();
+  var rol = SESSION.user && SESSION.user.rol || 'CONSULTA';
+  if (rol === 'ROOT' || rol === 'SUPER ADMINISTRADOR') return (PLANES.WMS.modulos || []).concat(['empresas','usuarios','centro-pruebas','salud-sistema']);
+  if (rol === 'ADMINISTRADOR') return (PLANES[SESSION.plan || getEmpresaPlan()] || PLANES.WMS).modulos.slice();
+  return _sfGetModulosDisponiblesFinal ? _sfGetModulosDisponiblesFinal() : [];
+};
+
+var _sfGotoFinal = typeof goto === 'function' ? goto : null;
+goto = function(page, param) {
+  _sfEnsureOperationalModules();
+  var rol = SESSION.user && SESSION.user.rol || '';
+  if (rol === 'ROOT' && typeof _origGoto === 'function') return _origGoto(page, param);
+  return _sfGotoFinal ? _sfGotoFinal(page, param) : undefined;
+};
+
+setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
 </body>
