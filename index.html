@@ -15987,7 +15987,269 @@ renders.dashboard = function() {
   _renderDashboardUnico();
 };
 
+/* Consolidacion final: bodegas, WMS, remisiones, ERP y plantilla real */
+function _sfSlug(v) {
+  return String(v || '').trim().toUpperCase().replace(/\s+/g, '_').replace(/[^A-Z0-9_-]/g, '');
+}
+
+function _sfNormalizeBodega(b, idx) {
+  b = b || {};
+  var codigo = _sfSlug(b.codigo || b.nombre || b.id || ('BOD_' + (idx + 1)));
+  var nombre = String(b.nombre || b.descripcion || codigo || 'Bodega').trim();
+  var pasillos = Array.isArray(b.pasillos) ? b.pasillos : [];
+  var ubicaciones = Array.isArray(b.ubicaciones) ? b.ubicaciones : [];
+  if (!ubicaciones.length && pasillos.length) {
+    pasillos.forEach(function(p){
+      (p.estantes || []).forEach(function(e){
+        (e.niveles || []).forEach(function(n){
+          (n.posiciones || []).forEach(function(pos){
+            ubicaciones.push({
+              codigo: [codigo, p.nombre, e.nombre, n.nombre, pos.nombre].map(_sfSlug).join('-'),
+              nombre: [p.nombre, e.nombre, n.nombre, pos.nombre].join(' / '),
+              pasillo: p.nombre, modulo: e.nombre, nivel: n.nombre, posicion: pos.nombre,
+              estado: 'Activo'
+            });
+          });
+        });
+      });
+    });
+  }
+  return Object.assign({}, b, {
+    id: String(b.id || codigo),
+    codigo: codigo,
+    nombre: nombre,
+    estado: b.estado || 'Activa',
+    pasillos: pasillos,
+    ubicaciones: ubicaciones
+  });
+}
+
+function _sfDedupeBodegas(arr) {
+  var map = {};
+  (arr || []).forEach(function(b, idx){
+    var nb = _sfNormalizeBodega(b, idx);
+    var key = nb.codigo || _sfSlug(nb.nombre);
+    if (!map[key]) map[key] = nb;
+    else {
+      map[key].ubicaciones = (map[key].ubicaciones || []).concat(nb.ubicaciones || []);
+      map[key].pasillos = (map[key].pasillos || []).length ? map[key].pasillos : (nb.pasillos || []);
+      map[key] = _sfNormalizeBodega(map[key], idx);
+    }
+  });
+  return Object.keys(map).map(function(k){
+    var b = map[k], seen = {};
+    b.ubicaciones = (b.ubicaciones || []).filter(function(u){
+      var code = _ubiCode ? _ubiCode(u) : (u.codigo || String(u));
+      if (!code || seen[code]) return false;
+      seen[code] = true;
+      return true;
+    });
+    return b;
+  }).sort(function(a,b){ return String(a.codigo).localeCompare(String(b.codigo)); });
+}
+
+_countUbicaciones = function(bodega) {
+  if (bodega && Array.isArray(bodega.ubicaciones) && bodega.ubicaciones.length) return bodega.ubicaciones.length;
+  var p = bodega && bodega.pasillos ? bodega.pasillos.length : 0;
+  var e = bodega && bodega.est_por_pasillo || 0;
+  var n = bodega && bodega.niveles || 0;
+  var pos = bodega && bodega.posiciones || 0;
+  return p * e * n * pos;
+};
+
+loadBodegas = function() {
+  var rows = _sfDedupeBodegas(DB.get('bodegas') || []);
+  if (rows.length !== (DB.get('bodegas') || []).length) DB.set('bodegas', rows);
+  return rows;
+};
+loadUbicaciones = loadBodegas;
+saveBodegas = function(data) {
+  var rows = _sfDedupeBodegas(data || []);
+  DB.set('bodegas', rows);
+  rows.forEach(function(b){ fetch('/api/ubicaciones', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(b) }).catch(function(){}); });
+};
+saveUbicaciones = function(data) {
+  DB.set('bodegas', _sfDedupeBodegas(data || []));
+};
+
+function openNuevaBodega() {
+  var h = [];
+  h.push('<h3 style="margin-bottom:12px">Nueva bodega</h3>');
+  h.push('<div class="form-row"><label>Codigo *</label><input id="nb-cod" placeholder="BPT"></div>');
+  h.push('<div class="form-row"><label>Nombre *</label><input id="nb-nom" placeholder="Bodega producto terminado"></div>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Pasillos</label><input id="nb-pas" type="number" min="1" value="3"></div><div class="form-row"><label>Estantes</label><input id="nb-est" type="number" min="1" value="3"></div></div>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Niveles</label><input id="nb-niv" type="number" min="1" value="4"></div><div class="form-row"><label>Posiciones</label><input id="nb-pos" type="number" min="1" value="5"></div></div>');
+  h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_guardarNuevaBodega()">Guardar</button></div>');
+  openModal(h.join(''), true);
+}
+window.abrirNuevaBodega = openNuevaBodega;
+
+openEditBodega = function(idx) {
+  var bodegas = loadBodegas();
+  var b = bodegas[idx];
+  if (!b) { showToast('Bodega no encontrada','red'); return; }
+  var h = [];
+  h.push('<h3 style="margin-bottom:12px">Editar bodega</h3>');
+  h.push('<div class="form-row"><label>Codigo</label><input id="eb-cod" value="'+(b.codigo||'')+'" placeholder="B01"></div>');
+  h.push('<div class="form-row"><label>Nombre *</label><input id="eb-nom" value="'+(b.nombre||'')+'" placeholder="Bodega principal"></div>');
+  h.push('<div class="form-row"><label>Direccion</label><input id="eb-dir" value="'+(b.direccion||'')+'" placeholder="Direccion fisica"></div>');
+  h.push('<div class="form-row"><label>Responsable</label><input id="eb-resp" value="'+(b.responsable||'')+'" placeholder="Nombre del responsable"></div>');
+  h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_guardarBodega('+idx+')">Guardar</button></div>');
+  openModal(h.join(''), true);
+};
+
+function _guardarNuevaBodega() {
+  var cod = _sfSlug((document.getElementById('nb-cod') || {}).value);
+  var nom = ((document.getElementById('nb-nom') || {}).value || '').trim();
+  if (!cod || !nom) { showToast('Codigo y nombre son obligatorios', 'red'); return; }
+  var pas = Number((document.getElementById('nb-pas') || {}).value || 1);
+  var est = Number((document.getElementById('nb-est') || {}).value || 1);
+  var niv = Number((document.getElementById('nb-niv') || {}).value || 1);
+  var pos = Number((document.getElementById('nb-pos') || {}).value || 1);
+  var ubicaciones = [];
+  for (var p=1; p<=pas; p++) for (var e=1; e<=est; e++) for (var n=1; n<=niv; n++) for (var x=1; x<=pos; x++) {
+    ubicaciones.push({ codigo: cod + '-P' + p + '-E' + e + '-N' + n + '-U' + x, nombre: 'P' + p + ' / E' + e + ' / N' + n + ' / U' + x, pasillo:'P'+p, modulo:'E'+e, nivel:'N'+n, posicion:'U'+x, estado:'Activo' });
+  }
+  var bodegas = loadBodegas();
+  if (bodegas.some(function(b){ return b.codigo === cod; })) { showToast('Ya existe una bodega con ese codigo', 'red'); return; }
+  bodegas.push({ id: cod, codigo: cod, nombre: nom, estado:'Activa', ubicaciones: ubicaciones, pasillos: [] });
+  saveBodegas(bodegas);
+  closeModal();
+  if (currentPage === 'ubicaciones') renders.ubicaciones();
+  showToast('Bodega creada sin duplicados', 'green');
+}
+
+function DB_remisiones_load(){ try { return JSON.parse(localStorage.getItem('erp_remisiones') || '[]'); } catch(e){ return []; } }
+function DB_remisiones_save(rows){ try { localStorage.setItem('erp_remisiones', JSON.stringify((rows || []).slice(0,500))); } catch(e){} _wmsPush('remisiones', rows || []); }
+function _syncRemisiones(done){ _wmsPull('remisiones', DB_remisiones_save, done); }
+
+function abrirNuevaRemision() {
+  var items = loadItems();
+  var h = [];
+  h.push('<h3 style="margin-bottom:12px">Nueva remision</h3>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Cliente / destino *</label><input id="rm-cliente" placeholder="Cliente o area destino"></div><div class="form-row"><label>Fecha</label><input id="rm-fecha" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div></div>');
+  h.push('<div class="form-row"><label>Articulo *</label><select id="rm-sku">'+items.slice(0,500).map(function(i){ return '<option value="'+(i.sku||i.codigo)+'">'+(i.sku||i.codigo)+' - '+(i.nombre||'')+'</option>'; }).join('')+'</select></div>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Cantidad *</label><input id="rm-cant" type="number" min="1" value="1"></div><div class="form-row"><label>Transportadora</label><input id="rm-trans" placeholder="Propia / tercero"></div></div>');
+  h.push('<div class="form-row"><label>Observacion</label><textarea id="rm-obs" rows="2"></textarea></div>');
+  h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="guardarRemision()">Crear remision</button></div>');
+  openModal(h.join(''), true);
+}
+window.abrirNuevaRemision = abrirNuevaRemision;
+
+function guardarRemision() {
+  var sku = (document.getElementById('rm-sku') || {}).value || '';
+  var qty = Number((document.getElementById('rm-cant') || {}).value || 0);
+  var cliente = ((document.getElementById('rm-cliente') || {}).value || '').trim();
+  if (!sku || !qty || !cliente) { showToast('Cliente, articulo y cantidad son obligatorios', 'red'); return; }
+  var item = loadItems().find(function(i){ return (i.sku||i.codigo) === sku; });
+  if (!item) { showToast('Articulo no encontrado', 'red'); return; }
+  var rem = { id: uid(), numero:'REM-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + String(Date.now()).slice(-4), cliente:cliente, fecha:(document.getElementById('rm-fecha')||{}).value, sku:sku, articulo:item.nombre, cantidad:qty, transportadora:((document.getElementById('rm-trans')||{}).value||''), observacion:((document.getElementById('rm-obs')||{}).value||''), estado:'EMITIDA', usuario:SESSION.user&&SESSION.user.nombre, empresa_id:typeof _getEmpresaId==='function'&&_getEmpresaId()!=='__SA__'?_getEmpresaId():null };
+  var out = DB_remisiones_load(); out.unshift(rem); DB_remisiones_save(out);
+  registrarMov('SALIDA', item.id, qty, { observacion:'Remision '+rem.numero+' - '+cliente, usuario:rem.usuario });
+  auditLog('CREAR_REMISION', rem.numero + ' | ' + sku + ' x ' + qty, rem.usuario);
+  closeModal();
+  showToast('Remision creada y salida registrada', 'green');
+  if (currentPage === 'logistica') renders.logistica();
+}
+window.guardarRemision = guardarRemision;
+
+function _wmsCounts() {
+  return {
+    picking: DB_picking_load().filter(function(x){ return x.estado !== 'CANCELADO' && x.estado !== 'COMPLETADO'; }).length,
+    packing: DB_packing_load().filter(function(x){ return x.estado !== 'PACKING_COMPLETADO'; }).length,
+    guias: DB_guias_load().length,
+    despachos: DB_despachos_load().filter(function(x){ return x.estado === 'DESPACHADO'; }).length,
+    remisiones: DB_remisiones_load().length
+  };
+}
+
+renders.logistica = function() {
+  var pg = document.getElementById('pg-logistica');
+  if (!pg) return;
+  ['picking','packing','guias','despachos','remisiones'].forEach(function(r){
+    if (!window['_wmsLoaded_' + r]) {
+      if (r === 'remisiones') _syncRemisiones(function(){ if (currentPage === 'logistica') renders.logistica(); });
+      else _wmsPull(r, r==='picking'?DB_picking_save:r==='packing'?DB_packing_save:r==='guias'?DB_guias_save:DB_despachos_save, function(){ if (currentPage === 'logistica') renders.logistica(); });
+    }
+  });
+  var c = _wmsCounts();
+  var h = [];
+  h.push('<div style="padding:16px;display:flex;flex-direction:column;gap:14px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><h2 style="font-size:18px;margin:0;color:var(--white)">Logistica WMS</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Picking, packing, guias, despachos, remisiones y traslados funcionales</p></div><button class="btn btn-navy btn-sm" onclick="abrirNuevaRemision()">Nueva remision</button></div>');
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">');
+  [['Picking',c.picking,'#f59e0b',"_packTab='packing';goto('picking')"],['Packing',c.packing,'#a78bfa',"_packTab='packing';goto('packing')"],['Guias',c.guias,'#38bdf8',"_packTab='guias';goto('packing')"],['Despachos',c.despachos,'#22c55e',"_packTab='despacho';goto('packing')"],['Remisiones',c.remisiones,'#fb7185',"abrirNuevaRemision()"]].forEach(function(k){
+    h.push('<button onclick="'+k[3]+'" style="text-align:left;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:14px;cursor:pointer"><div style="font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase">'+k[0]+'</div><div style="font-size:26px;font-weight:900;color:'+k[2]+'">'+k[1]+'</div></button>');
+  });
+  h.push('</div>');
+  var rems = DB_remisiones_load();
+  h.push('<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="font-size:13px;margin:0">Remisiones recientes</h3><button class="btn btn-ghost btn-sm" onclick="abrirNuevaRemision()">Crear</button></div><div style="overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>Numero</th><th>Cliente</th><th>SKU</th><th>Cantidad</th><th>Estado</th></tr></thead><tbody>');
+  if (!rems.length) h.push('<tr><td colspan="5" style="padding:22px;text-align:center;color:var(--muted)">Sin remisiones</td></tr>');
+  rems.slice(0,10).forEach(function(r){ h.push('<tr><td><code>'+r.numero+'</code></td><td>'+r.cliente+'</td><td>'+r.sku+'</td><td style="text-align:right">'+r.cantidad+'</td><td><span class="badge b-ok">'+r.estado+'</span></td></tr>'); });
+  h.push('</tbody></table></div></div></div>');
+  pg.innerHTML = h.join('');
+};
+
+function _seedBodegasDesdeInventario() {
+  var items = loadItems();
+  var map = {};
+  items.forEach(function(i){
+    var cod = _sfSlug(i.bodega || String(i.ubicacion || '').split('-')[0]);
+    if (!cod) return;
+    if (!map[cod]) map[cod] = { id:cod, codigo:cod, nombre:cod, estado:'Activa', ubicaciones:[] };
+    if (i.ubicacion) map[cod].ubicaciones.push({ codigo:i.ubicacion, nombre:i.ubicacion, estado:'Activo' });
+  });
+  var bodegas = _sfDedupeBodegas(loadBodegas().concat(Object.keys(map).map(function(k){ return map[k]; })));
+  saveBodegas(bodegas);
+  showToast('Bodegas organizadas desde inventario', 'green');
+  if (currentPage === 'ubicaciones') renders.ubicaciones();
+}
+window._seedBodegasDesdeInventario = _seedBodegasDesdeInventario;
+
+ERP_CONNECTORS = [
+  { id:'sap_b1', nombre:'SAP Business One', logo:'SAP', desc:'ERP empresarial', estado:'PENDIENTE' },
+  { id:'sap_s4', nombre:'SAP S/4HANA', logo:'SAP', desc:'ERP corporativo', estado:'PENDIENTE' },
+  { id:'netsuite', nombre:'Oracle NetSuite', logo:'NS', desc:'Cloud ERP', estado:'PENDIENTE' },
+  { id:'dynamics365', nombre:'Microsoft Dynamics 365', logo:'D365', desc:'ERP/CRM Microsoft', estado:'PENDIENTE' },
+  { id:'odoo', nombre:'Odoo', logo:'ODOO', desc:'ERP modular', estado:'PENDIENTE' },
+  { id:'sage', nombre:'Sage', logo:'SAGE', desc:'ERP contable', estado:'PENDIENTE' },
+  { id:'quickbooks', nombre:'QuickBooks', logo:'QB', desc:'Contabilidad y compras', estado:'PENDIENTE' },
+  { id:'zoho', nombre:'Zoho Inventory/Books', logo:'ZOHO', desc:'Inventario y facturacion', estado:'PENDIENTE' },
+  { id:'siigo', nombre:'Siigo', logo:'SIIGO', desc:'ERP Colombia', estado:'PENDIENTE' },
+  { id:'alegra', nombre:'Alegra', logo:'ALG', desc:'Facturacion e inventario', estado:'PENDIENTE' },
+  { id:'world_office', nombre:'World Office', logo:'WO', desc:'ERP Colombia', estado:'PENDIENTE' },
+  { id:'helisa', nombre:'Helisa', logo:'HEL', desc:'Contabilidad Colombia', estado:'PENDIENTE' }
+];
+
+var _origDownloadPlantilla = typeof downloadPlantilla === 'function' ? downloadPlantilla : null;
+downloadPlantilla = function() {
+  var a = document.createElement('a');
+  a.href = 'Plantilla.xlsx';
+  a.download = 'Plantilla_StockFlow_Inventario.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  showToast('Descargando plantilla oficial', 'green');
+};
+
 window._dashGoToInv = function() { goto('inventario'); setTimeout(function(){ if(typeof filterInventarioTable==='function') filterInventarioTable(); }, 300); };
+
+renders.conciliacion = function() {
+  var pg = document.getElementById('pg-conciliacion');
+  if (!pg) return;
+  _buildConciliacionUI();
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var url = '/api/articulos?limit=5000' + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
+  fetch(url)
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && Array.isArray(res.data)) {
+        _invItems = res.data;
+        saveItems(res.data);
+        if (typeof _KPI_invalidar === 'function') _KPI_invalidar();
+        if (currentPage === 'conciliacion' || window._invTab === 'conciliacion') _buildConciliacionUI();
+      }
+    })
+    .catch(function(){});
+};
 
 </script>
 </body>

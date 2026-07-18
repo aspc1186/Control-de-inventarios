@@ -23,6 +23,7 @@ module.exports = async (req, res) => {
       '/api/movimientos?recurso=packing',
       '/api/movimientos?recurso=guias',
       '/api/movimientos?recurso=despachos',
+      '/api/movimientos?recurso=remisiones',
       '/api/movimientos?recurso=auditoria',
       '/api/movimientos?recurso=seguridad',
       '/api/proveedores',
