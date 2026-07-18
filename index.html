@@ -15890,6 +15890,103 @@ window._comprasTab = function(tabName, btn) {
   if (btn) { btn.style.borderBottom = '2px solid var(--electric)'; btn.style.color = 'var(--electric)'; btn.style.fontWeight = '700'; }
 };
 
+/* Dashboard unico: compras e inventarios */
+function _dashSyncCloud(done) {
+  if (window._dashCloudSyncing) return;
+  window._dashCloudSyncing = true;
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var suffix = eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '';
+  Promise.all([
+    fetch('/api/articulos?limit=5000' + suffix).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
+    fetch('/api/movimientos?limit=3000' + suffix).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
+    fetch('/api/proveedores').then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
+    fetch('/api/movimientos?recurso=compras' + suffix).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; })
+  ]).then(function(res){
+    if (res[0] && Array.isArray(res[0].data)) { _invItems = res[0].data; saveItems(res[0].data); }
+    if (res[1] && Array.isArray(res[1].data)) saveMovs(res[1].data);
+    if (res[2] && Array.isArray(res[2].data)) saveProveedores(res[2].data);
+    if (res[3] && Array.isArray(res[3].data)) saveCompras(res[3].data);
+    if (typeof _KPI_invalidar === 'function') _KPI_invalidar();
+    window._dashCloudLoaded = true;
+    if (typeof done === 'function') done();
+  }).finally(function(){ window._dashCloudSyncing = false; });
+}
+
+function _dashMoney(n) {
+  var v = Number(n || 0);
+  if (v >= 1000000000) return '$' + (v / 1000000000).toFixed(2) + 'B';
+  if (v >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
+  if (v >= 1000) return '$' + Math.round(v / 1000).toLocaleString('es-CO') + 'K';
+  return '$' + Math.round(v).toLocaleString('es-CO');
+}
+
+function _dashCard(label, value, note, color, action) {
+  return '<button onclick="' + action + '" style="text-align:left;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:12px;min-height:84px;cursor:pointer;overflow:hidden">' +
+    '<div style="font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + label + '</div>' +
+    '<div style="font-size:22px;font-weight:900;color:' + color + ';line-height:1.15;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + value + '</div>' +
+    '<div style="font-size:10px;color:var(--muted);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + note + '</div>' +
+    '</button>';
+}
+
+function _renderDashboardUnico() {
+  var pg = document.getElementById('pg-dashboard');
+  if (!pg) return;
+  var K = typeof _KPI_get === 'function' ? _KPI_get({}, true) : {};
+  var items = K.items || [];
+  var compras = typeof loadCompras === 'function' ? loadCompras() : [];
+  var movs = typeof loadMovs === 'function' ? loadMovs() : [];
+  var provs = typeof loadProveedores === 'function' ? loadProveedores() : [];
+  var fmt = function(n){ return Number(n || 0).toLocaleString('es-CO'); };
+  var alertas = Number(K.nAgot || 0) + Number(K.nCrit || 0) + Number(K.nBajo || 0);
+  var abiertas = compras.filter(function(o){ return ['BORRADOR','PENDIENTE','APROBADA','ENVIADA','RECIBIDA_PARCIAL'].indexOf(String(o.estado || 'BORRADOR').toUpperCase()) >= 0; });
+  var sugeridas = (K.top10Comp && K.top10Comp.length ? K.top10Comp : items.filter(function(i){ return Number(i.compra_sug || 0) > 0; })).slice(0, 8);
+  var criticas = items.filter(function(i){ return i.agot || i.crit || i.bajo; }).slice(0, 8);
+  var inversion = sugeridas.reduce(function(s,i){ return s + Number(i.compra_sug || 0) * Number(i.costo || 0); }, 0);
+  var recientes = movs.slice(0, 8);
+  var totalOC = abiertas.reduce(function(s,o){ return s + Number(o.total || 0); }, 0);
+  var h = [];
+  h.push('<style>.dash-u-table td,.dash-u-table th{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.05);font-size:11px}.dash-u-table th{font-size:10px;color:var(--muted);text-transform:uppercase;text-align:left}.dash-u-band{background:var(--card2);border:1px solid var(--border2);border-radius:8px;overflow:hidden}.dash-u-scroll{overflow:auto;max-height:310px}@media(max-width:900px){.dash-u-main,.dash-u-half{grid-template-columns:1fr!important}}</style>');
+  h.push('<div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">');
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><h2 style="margin:0;font-size:18px;color:var(--white);font-weight:850">Dashboard de compras e inventarios</h2><p style="margin:3px 0 0;font-size:11px;color:var(--muted)">Actualizado ' + new Date().toLocaleTimeString('es-CO') + ' · ' + ((SESSION.user && SESSION.user.nombre) || 'Usuario') + '</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="_KPI_invalidar&&_KPI_invalidar();window._dashCloudLoaded=false;renders.dashboard()">Actualizar</button><button class="btn btn-navy btn-sm" onclick="openNuevaOrdenCompra&&openNuevaOrdenCompra()">Nueva orden</button></div></div>');
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">');
+  h.push(_dashCard('Valor inventario', _dashMoney(K.valorTotal), fmt(K.totalItems || 0) + ' referencias', '#38bdf8', "goto('inventario')"));
+  h.push(_dashCard('Alertas stock', fmt(alertas), (K.nAgot || 0) + ' agotados · ' + (K.nCrit || 0) + ' criticos', alertas ? '#f97316' : '#22c55e', "invFiltro='BAJO';goto('inventario')"));
+  h.push(_dashCard('Para comprar', fmt(K.nReord || sugeridas.length), _dashMoney(inversion) + ' estimado', '#a78bfa', "goto('compras')"));
+  h.push(_dashCard('Ordenes abiertas', fmt(abiertas.length), _dashMoney(totalOC), '#22c55e', "goto('compras')"));
+  h.push(_dashCard('Cobertura media', Math.round(K.cobMedia || 0) + 'd', 'rotacion ' + Number(K.rotProm || 0).toFixed(1) + 'x', '#06b6d4', "goto('inventario')"));
+  h.push(_dashCard('Proveedores', fmt(provs.filter(function(p){return String(p.estado||'ACTIVO').toUpperCase() !== 'INACTIVO';}).length), 'activos', '#f59e0b', "goto('proveedores')"));
+  h.push('</div>');
+  h.push('<div class="dash-u-main" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr);gap:12px">');
+  h.push('<section class="dash-u-band"><div style="padding:12px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center"><strong style="font-size:13px;color:var(--white)">Reposicion prioritaria</strong><button onclick="goto(\'compras\')" style="background:none;border:none;color:var(--electric);font-size:11px;cursor:pointer">Compras</button></div><div class="dash-u-scroll"><table class="dash-u-table" style="width:100%;border-collapse:collapse"><thead><tr><th>SKU</th><th>Producto</th><th>Disp.</th><th>Sugerido</th><th>Valor</th></tr></thead><tbody>');
+  if (!sugeridas.length) h.push('<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px">Sin reposiciones sugeridas</td></tr>');
+  sugeridas.forEach(function(it){ h.push('<tr onclick="goto(\'compras\')" style="cursor:pointer"><td style="font-family:monospace;color:var(--electric)">' + (it.sku || '-') + '</td><td style="color:var(--white);max-width:210px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (it.nombre || '-') + '</td><td style="text-align:right;color:var(--muted)">' + fmt(it.disp || 0) + '</td><td style="text-align:right;color:#a78bfa;font-weight:800">+' + fmt(it.compra_sug || 0) + '</td><td style="text-align:right;color:#22c55e;font-weight:700">' + _dashMoney(Number(it.compra_sug || 0) * Number(it.costo || 0)) + '</td></tr>'); });
+  h.push('</tbody></table></div></section>');
+  h.push('<section class="dash-u-band"><div style="padding:12px;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center"><strong style="font-size:13px;color:var(--white)">Riesgo de inventario</strong><button onclick="goto(\'inventario\')" style="background:none;border:none;color:var(--electric);font-size:11px;cursor:pointer">Inventario</button></div><div style="padding:12px;display:grid;gap:8px">');
+  [['Agotado',K.nAgot||0,'#ef4444'],['Critico',K.nCrit||0,'#f97316'],['Bajo minimo',K.nBajo||0,'#f59e0b'],['Sobre stock',K.nSobre||0,'#38bdf8'],['Normal',K.nNorm||0,'#22c55e']].forEach(function(r){ var pct = Math.round(Number(r[1] || 0) / Math.max(Number(K.totalItems || 0), 1) * 100); h.push('<div><div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px"><span style="color:var(--text2)">'+r[0]+'</span><b style="color:'+r[2]+'">'+fmt(r[1])+'</b></div><div style="height:7px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:'+r[2]+'"></div></div></div>'); });
+  if (criticas.length) { h.push('<div style="border-top:1px solid var(--border2);padding-top:8px;margin-top:2px">'); criticas.slice(0,4).forEach(function(it){ h.push('<div style="display:flex;justify-content:space-between;gap:8px;padding:5px 0;font-size:10px;color:var(--muted)"><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(it.sku||'')+' · '+(it.nombre||'')+'</span><b style="color:#f97316">'+(it.estado||'ALERTA')+'</b></div>'); }); h.push('</div>'); }
+  h.push('</div></section></div>');
+  h.push('<div class="dash-u-half" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px">');
+  h.push('<section class="dash-u-band"><div style="padding:12px;border-bottom:1px solid var(--border2)"><strong style="font-size:13px;color:var(--white)">Ordenes de compra</strong></div><div class="dash-u-scroll"><table class="dash-u-table" style="width:100%;border-collapse:collapse"><thead><tr><th>Numero</th><th>Proveedor</th><th>Estado</th><th>Total</th></tr></thead><tbody>');
+  if (!compras.length) h.push('<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">Sin ordenes registradas</td></tr>');
+  compras.slice(0,8).forEach(function(o){ h.push('<tr onclick="goto(\'compras\')" style="cursor:pointer"><td style="font-family:monospace;color:var(--electric)">'+(o.numero||o.id||'OC')+'</td><td style="color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">'+(o.proveedor||'Sin proveedor')+'</td><td style="color:#a78bfa;font-weight:700">'+String(o.estado||'BORRADOR').toUpperCase()+'</td><td style="text-align:right;color:#22c55e;font-weight:700">'+_dashMoney(o.total||0)+'</td></tr>'); });
+  h.push('</tbody></table></div></section><section class="dash-u-band"><div style="padding:12px;border-bottom:1px solid var(--border2)"><strong style="font-size:13px;color:var(--white)">Movimientos recientes</strong></div><div class="dash-u-scroll"><table class="dash-u-table" style="width:100%;border-collapse:collapse"><thead><tr><th>Fecha</th><th>Tipo</th><th>SKU</th><th>Cant.</th></tr></thead><tbody>');
+  if (!recientes.length) h.push('<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">Sin movimientos recientes</td></tr>');
+  recientes.forEach(function(m){ var color = /ENTRADA|COMPRA|AJUSTE_POS/.test(String(m.tipo||'')) ? '#22c55e' : '#ef4444'; h.push('<tr onclick="window._invTab=\'kardex\';goto(\'inventario\')" style="cursor:pointer"><td style="color:var(--muted)">'+(m.fecha||'')+'</td><td style="color:'+color+';font-weight:800">'+(m.tipo||'')+'</td><td style="font-family:monospace;color:var(--electric)">'+(m.sku||'-')+'</td><td style="text-align:right;color:var(--white);font-weight:700">'+fmt(m.cantidad||0)+'</td></tr>'); });
+  h.push('</tbody></table></div></section></div></div>');
+  pg.innerHTML = h.join('');
+}
+
+renders.dashboard = function() {
+  var pg = document.getElementById('pg-dashboard');
+  if (!pg) return;
+  if (!window._dashCloudLoaded && !window._dashCloudSyncing) {
+    pg.innerHTML = '<div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">' + Array(6).fill('<div style="height:84px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;animation:pulse 1.2s ease-in-out infinite"></div>').join('') + '</div>';
+    _dashSyncCloud(function(){ if (currentPage === 'dashboard') _renderDashboardUnico(); });
+    return;
+  }
+  _renderDashboardUnico();
+};
+
 window._dashGoToInv = function() { goto('inventario'); setTimeout(function(){ if(typeof filterInventarioTable==='function') filterInventarioTable(); }, 300); };
 
 </script>
