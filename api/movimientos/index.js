@@ -76,6 +76,25 @@ async function ensureTraslados(sql) {
     )`;
 }
 
+async function ensureWmsOperaciones(sql) {
+  await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS wms_operaciones (
+      id TEXT PRIMARY KEY,
+      recurso TEXT NOT NULL,
+      estado TEXT,
+      empresa_id TEXT,
+      data JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+  await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS recurso TEXT`;
+  await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS estado TEXT`;
+  await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS data JSONB DEFAULT '{}'`;
+  await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
+}
+
 function normalizeCompraItems(items) {
   if (!Array.isArray(items)) return [];
   return items.map((it) => ({
@@ -168,6 +187,47 @@ module.exports = async (req, res) => {
   }
 
   // ── GET ──────────────────────────────────────────────────────────────────
+  if (['picking','packing','guias','despachos'].includes(recurso)) {
+    try {
+      await ensureWmsOperaciones(sql);
+      if (req.method === 'GET') {
+        const { empresa_id, limit = 1000 } = req.query;
+        const lim = Math.min(Number(limit) || 1000, 5000);
+        const rows = empresa_id && empresa_id !== '__SA__'
+          ? await sql`SELECT id, recurso, estado, empresa_id, data, created_at, updated_at FROM wms_operaciones WHERE recurso = ${recurso} AND empresa_id = ${empresa_id} ORDER BY updated_at DESC LIMIT ${lim}`
+          : await sql`SELECT id, recurso, estado, empresa_id, data, created_at, updated_at FROM wms_operaciones WHERE recurso = ${recurso} ORDER BY updated_at DESC LIMIT ${lim}`;
+        return res.status(200).json({
+          ok: true,
+          data: rows.map((r) => ({ ...r.data, id: r.id, recurso: r.recurso, estado: r.estado || (r.data && r.data.estado), empresa_id: r.empresa_id || (r.data && r.data.empresa_id), created_at: r.created_at, updated_at: r.updated_at })),
+          total: rows.length
+        });
+      }
+      if (req.method === 'POST' || req.method === 'PUT') {
+        const body = req.body || {};
+        const items = Array.isArray(body) ? body : [body];
+        const saved = [];
+        for (const item of items) {
+          const id = text(item.id) || randomUUID();
+          const estado = text(item.estado);
+          const empresaId = text(item.empresa_id);
+          const data = { ...item, id };
+          const existing = await sql`SELECT id FROM wms_operaciones WHERE id = ${id} LIMIT 1`;
+          if (existing.length) {
+            await sql`UPDATE wms_operaciones SET recurso=${recurso}, estado=${estado}, empresa_id=${empresaId}, data=${JSON.stringify(data)}::jsonb, updated_at=NOW() WHERE id=${id}`;
+          } else {
+            await sql`INSERT INTO wms_operaciones (id, recurso, estado, empresa_id, data, created_at, updated_at) VALUES (${id}, ${recurso}, ${estado}, ${empresaId}, ${JSON.stringify(data)}::jsonb, NOW(), NOW())`;
+          }
+          saved.push(id);
+        }
+        return res.status(200).json({ ok: true, count: saved.length, ids: saved, id: saved.length === 1 ? saved[0] : undefined });
+      }
+      return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    } catch (err) {
+      console.error('[wms via movimientos]', recurso, err.message);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  }
+
   if (req.method === 'GET') {
     try {
       await ensureMovimientos(sql);

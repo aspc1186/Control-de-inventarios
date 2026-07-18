@@ -156,6 +156,17 @@ async function setupTables(sql) {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )`;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS wms_operaciones (
+      id TEXT PRIMARY KEY,
+      recurso TEXT NOT NULL,
+      estado TEXT,
+      empresa_id TEXT,
+      data JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nombre TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS slug TEXT`;
   await sql`ALTER TABLE empresas ALTER COLUMN slug SET DEFAULT 'empresa-principal'`;
@@ -201,6 +212,12 @@ async function setupTables(sql) {
   await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
   await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS fecha TEXT`;
   await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS hora TEXT`;
+
+  await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS recurso TEXT`;
+  await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS estado TEXT`;
+  await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS data JSONB DEFAULT '{}'`;
+  await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
 
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS username TEXT`;

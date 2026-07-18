@@ -3563,12 +3563,45 @@ function _confirmarTraslado() {
    MÓDULO DE PICKING — Preparación de pedidos
 ══════════════════════════════════════════════════════════════════════════ */
 
+function _wmsResourceUrl(recurso) {
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  return '/api/movimientos?recurso=' + encodeURIComponent(recurso) + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
+}
+function _wmsAttachEmpresa(row) {
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  if (eid && eid !== '__SA__' && row && !row.empresa_id) row.empresa_id = eid;
+  return row;
+}
+function _wmsPush(recurso, rows) {
+  if (window._wmsApplyingCloud) return;
+  rows = (rows || []).filter(function(r){ return r && r.id; }).map(function(r){ return _wmsAttachEmpresa(Object.assign({}, r)); });
+  if (!rows.length) return;
+  fetch(_wmsResourceUrl(recurso), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(rows.slice(0, 100)) }).catch(function(){});
+}
+function _wmsPull(recurso, saveFn, done) {
+  if (window['_wmsFetching_' + recurso]) return;
+  window['_wmsFetching_' + recurso] = true;
+  fetch(_wmsResourceUrl(recurso))
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && Array.isArray(res.data)) {
+        window._wmsApplyingCloud = true;
+        saveFn(res.data);
+        window._wmsApplyingCloud = false;
+        window['_wmsLoaded_' + recurso] = true;
+        if (typeof done === 'function') done(res.data);
+      }
+    })
+    .catch(function(){})
+    .finally(function(){ window['_wmsFetching_' + recurso] = false; window._wmsApplyingCloud = false; });
+}
 function DB_picking_load() { try { return JSON.parse(localStorage.getItem('erp_picking')||'[]'); } catch(e){ return []; } }
-function DB_picking_save(d) { try { localStorage.setItem('erp_picking', JSON.stringify(d.slice(0,200))); } catch(e){} }
+function DB_picking_save(d) { try { localStorage.setItem('erp_picking', JSON.stringify(d.slice(0,200))); } catch(e){} _wmsPush('picking', d); }
 
 renders.picking = function() {
   var pg = document.getElementById('pg-picking');
   if (!pg) return;
+  if (!window._wmsLoaded_picking) _wmsPull('picking', DB_picking_save, function(){ if (currentPage === 'picking') _buildPickingUI(pg); });
   _buildPickingUI(pg);
 };
 
@@ -3838,11 +3871,11 @@ MÓDULO PACKING — GUÍAS — DESPACHO
 
 /* ── Persistencia ───────────────────────────────────────────────────────── */
 function DB_packing_load()   { try { return JSON.parse(localStorage.getItem('erp_packing')||'[]');  } catch(e){ return []; } }
-function DB_packing_save(d)  { try { localStorage.setItem('erp_packing',  JSON.stringify(d.slice(0,500))); } catch(e){} }
+function DB_packing_save(d)  { try { localStorage.setItem('erp_packing',  JSON.stringify(d.slice(0,500))); } catch(e){} _wmsPush('packing', d); }
 function DB_guias_load()     { try { return JSON.parse(localStorage.getItem('erp_guias')||'[]');    } catch(e){ return []; } }
-function DB_guias_save(d)    { try { localStorage.setItem('erp_guias',    JSON.stringify(d.slice(0,500))); } catch(e){} }
+function DB_guias_save(d)    { try { localStorage.setItem('erp_guias',    JSON.stringify(d.slice(0,500))); } catch(e){} _wmsPush('guias', d); }
 function DB_despachos_load() { try { return JSON.parse(localStorage.getItem('erp_despachos')||'[]'); } catch(e){ return []; } }
-function DB_despachos_save(d){ try { localStorage.setItem('erp_despachos',JSON.stringify(d.slice(0,500))); } catch(e){} }
+function DB_despachos_save(d){ try { localStorage.setItem('erp_despachos',JSON.stringify(d.slice(0,500))); } catch(e){} _wmsPush('despachos', d); }
 
 /* ── Config flexible por empresa (todos OFF por defecto) ────────────────── */
 function _getPackingConfig() {
@@ -3875,6 +3908,9 @@ var _packTab = 'packing'; // 'packing' | 'guias' | 'despacho' | 'config'
 renders.packing = function() {
   var pg = document.getElementById('pg-packing');
   if (!pg) return;
+  if (!window._wmsLoaded_packing) _wmsPull('packing', DB_packing_save, function(){ if (currentPage === 'packing') _renderPackTab(); });
+  if (!window._wmsLoaded_guias) _wmsPull('guias', DB_guias_save, function(){ if (currentPage === 'packing') _renderPackTab(); });
+  if (!window._wmsLoaded_despachos) _wmsPull('despachos', DB_despachos_save, function(){ if (currentPage === 'packing') _renderPackTab(); });
   _renderPackTab();
 };
 
@@ -15055,8 +15091,8 @@ renders['logistica'] = function() {
   h.push('<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px">');
   var flujos = [
     {icon:'🔍',title:'Picking',desc:'Selección de artículos del almacén para cumplir pedidos',btn:'Iniciar Picking',action:"goto('inventario')"},
-    {icon:'📦',title:'Packing',desc:'Empaque y etiquetado de pedidos para despacho',btn:'Ver Packing',action:"showToast('Packing próximamente','blue')"},
-    {icon:'🚚',title:'Despacho',desc:'Programación y registro de salidas de mercancía',btn:'Programar Despacho',action:"showToast('Despacho próximamente','blue')"},
+    {icon:'📦',title:'Packing',desc:'Empaque y etiquetado de pedidos para despacho',btn:'Ver Packing',action:"_packTab='packing';goto('packing')"},
+    {icon:'🚚',title:'Despacho',desc:'Programación y registro de salidas de mercancía',btn:'Programar Despacho',action:"_packTab='despacho';goto('packing')"},
     {icon:'📥',title:'Recepción',desc:'Recepción e inspección de mercancía entrante',btn:'Nueva Recepción',action:"showToast('Recepción próximamente','blue')"},
     {icon:'🔄',title:'Traslados',desc:'Movimientos internos entre bodegas y ubicaciones',btn:'Nuevo Traslado',action:"goto('traslados')"},
     {icon:'📊',title:'Inventarios',desc:'Conteos cíclicos y conciliación de inventario físico',btn:'Iniciar Conteo',action:"goto('ciclicos')"},
