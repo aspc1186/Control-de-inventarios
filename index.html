@@ -12213,7 +12213,11 @@ renders.importar = function() {
           '<p style="font-size:12px;font-weight:700;color:#0369a1">¿Primera vez?</p>' +
           '<p style="font-size:11px;color:#0369a1">Descarga la plantilla con el formato correcto</p>' +
         '</div>' +
-        '<button class="btn btn-blue btn-sm" onclick="downloadPlantilla()">📥 Descargar plantilla</button>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">' +
+          '<button class="btn btn-ghost btn-sm" onclick="cargarPlantillaOficial(false)">Vista previa oficial</button>' +
+          '<button class="btn btn-navy btn-sm" onclick="cargarPlantillaOficial(true)">Integrar plantilla</button>' +
+          '<button class="btn btn-blue btn-sm" onclick="downloadPlantilla()">📥 Descargar plantilla</button>' +
+        '</div>' +
       '</div>' +
     '</div>' +
 
@@ -12306,7 +12310,7 @@ function handleImportFile(file) {
           // comma as decimal separator: 12,5 = 12.5
           s = s.replace(',', '.');
         }
-        s = s.replace(/[\d\.]/g,'');  // remove any remaining non-numeric
+        s = s.replace(/[^\d.-]/g,'');  // remove any remaining non-numeric
         var n = parseFloat(s);
         return isNaN(n) ? 0 : n;
       }
@@ -12421,6 +12425,10 @@ function handleImportFile(file) {
       var toDeact   = existing.filter(function(i){ return !fileSkus.has(i.sku); });
 
       renderSyncPreview(parsed, invalid, toCreate, toUpdate, toDeact);
+      if (window._sfAutoSyncPlantilla) {
+        window._sfAutoSyncPlantilla = false;
+        setTimeout(function(){ executeSync(window._importParsed || parsed); }, 300);
+      }
     } catch(err) {
       alert('Error al leer el archivo: ' + err.message);
     }
@@ -12718,9 +12726,10 @@ function executeSync(parsed) {
             return item;
           });
           _invItems = merged;
-          saveItems(res.data); } })
+          saveItems(merged); } })
       .catch(function(){});
 
+    if (typeof _sfIntegrarCatalogosDesdeItems === 'function') _sfIntegrarCatalogosDesdeItems(valid);
     auditLog('SYNC_INVENTARIO',
       'Archivo: '+(window._importFile||'Excel')+
       ' | Creados: '+created+' | Actualizados: '+updated+
@@ -15623,6 +15632,7 @@ function _buildTemaSelector() {
     h.push('<div style="');
     h.push('background:var(--card2);border:2px solid '+(active?'var(--electric)':'var(--border2)')+';');
     h.push('border-radius:12px;padding:14px;cursor:pointer;transition:.2s" ');
+    h.push('onclick="_aplicarTema(\''+key+'\');closeModal();showToast(\'Tema aplicado: '+t.label.replace(/'/g,'')+'\',\'green\')" ');
     h.push('onmouseenter="this.style.borderColor=\'var(--electric)\'" onmouseleave="this.style.borderColor=\''+(active?'var(--electric)':'var(--border2)')+'\'"');
     h.push('>');
     h.push('<div style="font-size:20px;margin-bottom:6px">'+t.label.split(' ')[0]+'</div>');
@@ -16179,7 +16189,7 @@ renders.logistica = function() {
   var h = [];
   h.push('<div style="padding:16px;display:flex;flex-direction:column;gap:14px"><div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap"><div><h2 style="font-size:18px;margin:0;color:var(--white)">Logistica WMS</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Picking, packing, guias, despachos, remisiones y traslados funcionales</p></div><button class="btn btn-navy btn-sm" onclick="abrirNuevaRemision()">Nueva remision</button></div>');
   h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">');
-  [['Picking',c.picking,'#f59e0b',"goto('picking')"],['Packing',c.packing,'#a78bfa',"_packTab='packing';goto('packing')"],['Guias',c.guias,'#38bdf8',"_packTab='guias';goto('packing')"],['Despachos',c.despachos,'#22c55e',"_packTab='despacho';goto('packing')"],['Remisiones',c.remisiones,'#fb7185',"abrirNuevaRemision()"],['Traslados',DB_movimientos().filter(function(m){ return String(m.tipo||'').indexOf('TRASLADO')===0; }).length,'#60a5fa',"goto('traslados')"]].forEach(function(k){
+  [['Picking',c.picking,'#f59e0b',"goto('picking')"],['Packing',c.packing,'#a78bfa',"_packTab='packing';goto('packing')"],['Guias',c.guias,'#38bdf8',"_packTab='guias';goto('packing')"],['Despachos',c.despachos,'#22c55e',"_packTab='despacho';goto('packing')"],['Remisiones',c.remisiones,'#fb7185',"abrirNuevaRemision()"],['Traslados',(typeof loadMovs==='function'?loadMovs():[]).filter(function(m){ return String(m.tipo||'').indexOf('TRASLADO')===0; }).length,'#60a5fa',"goto('traslados')"]].forEach(function(k){
     h.push('<button onclick="'+k[3]+'" style="text-align:left;background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:14px;cursor:pointer"><div style="font-size:10px;color:var(--muted);font-weight:800;text-transform:uppercase">'+k[0]+'</div><div style="font-size:26px;font-weight:900;color:'+k[2]+'">'+k[1]+'</div></button>');
   });
   h.push('</div>');
@@ -16280,6 +16290,86 @@ _erpConfigModal = function(erpId) {
   h.push('<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-ghost" onclick="_erpTestConn(\''+erpId+'\')">Probar conexion</button><button class="btn btn-navy" onclick="_erpGuardarConfig(\''+erpId+'\')">Guardar y Conectar</button></div>');
   openModal(h.join(''), 'modal-lg');
 };
+
+function _sfIntegrarCatalogosDesdeItems(items) {
+  items = (items || []).filter(function(i){ return i && (i.sku || i.codigo); });
+  if (!items.length) return;
+
+  if (typeof loadProveedores === 'function' && typeof saveProveedores === 'function') {
+    var actualesProv = loadProveedores() || [];
+    var provMap = {};
+    actualesProv.forEach(function(p){
+      var key = _sfSlug(p.nit || p.nombre || p.razon_social || p.nombre_comercial || p.id);
+      if (key) provMap[key] = p;
+    });
+    items.forEach(function(i){
+      var nombre = String(i.proveedor || '').trim();
+      if (!nombre) return;
+      var key = _sfSlug(nombre);
+      if (!provMap[key]) {
+        provMap[key] = {
+          id: 'PROV-' + key,
+          nit: key,
+          razon_social: nombre,
+          nombre_comercial: nombre,
+          tipo: 'Nacional',
+          categoria: i.categoria || 'Inventario',
+          marca: i.marca || '',
+          estado: 'Activo',
+          tiempo_entrega_dias: Number(i.lead_time || 0),
+          origen: 'Plantilla oficial'
+        };
+      }
+    });
+    var provs = Object.keys(provMap).map(function(k){ return provMap[k]; });
+    saveProveedores(provs);
+    provs.forEach(function(p){
+      fetch('/api/proveedores', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p) }).catch(function(){});
+    });
+  }
+
+  if (typeof loadBodegas === 'function' && typeof saveBodegas === 'function') {
+    var bodMap = {};
+    (loadBodegas() || []).forEach(function(b){
+      var nb = _sfNormalizeBodega(b, 0);
+      bodMap[nb.codigo] = nb;
+    });
+    items.forEach(function(i){
+      var cod = _sfSlug(i.bodega || String(i.ubicacion || '').split('-')[0]);
+      if (!cod) return;
+      if (!bodMap[cod]) bodMap[cod] = { id:cod, codigo:cod, nombre:cod, estado:'Activa', ubicaciones:[], pasillos:[] };
+      if (i.ubicacion) {
+        var ubic = String(i.ubicacion).trim();
+        var exists = (bodMap[cod].ubicaciones || []).some(function(u){ return (u.codigo || u) === ubic; });
+        if (!exists) (bodMap[cod].ubicaciones || (bodMap[cod].ubicaciones=[])).push({
+          codigo: ubic, nombre: ubic, estado:'Activo', bodega: cod
+        });
+      }
+    });
+    saveBodegas(_sfDedupeBodegas(Object.keys(bodMap).map(function(k){ return bodMap[k]; })));
+  }
+
+  try { if (typeof _KPI_invalidar === 'function') _KPI_invalidar(); } catch(e) {}
+}
+
+function cargarPlantillaOficial(autoSync) {
+  if (autoSync && !confirm('Esto integrara la plantilla oficial como fuente de inventario y puede desactivar referencias que no esten en ella. Deseas continuar?')) return;
+  window._sfAutoSyncPlantilla = !!autoSync;
+  fetch('Plantilla.xlsx')
+    .then(function(r){ if (!r.ok) throw new Error('No se pudo leer Plantilla.xlsx'); return r.blob(); })
+    .then(function(blob){
+      var file;
+      try { file = new File([blob], 'Plantilla.xlsx', { type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }); }
+      catch(e) { file = blob; file.name = 'Plantilla.xlsx'; }
+      handleImportFile(file);
+      showToast(autoSync ? 'Integrando plantilla oficial...' : 'Cargando vista previa oficial...', 'green');
+    })
+    .catch(function(err){
+      window._sfAutoSyncPlantilla = false;
+      showToast('Error al cargar plantilla oficial: ' + err.message, 'red');
+    });
+}
+window.cargarPlantillaOficial = cargarPlantillaOficial;
 
 var _origDownloadPlantilla = typeof downloadPlantilla === 'function' ? downloadPlantilla : null;
 downloadPlantilla = function() {
