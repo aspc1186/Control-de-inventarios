@@ -1,5 +1,6 @@
 // api/movimientos/index.js — Movements: GET list + POST (update stock + register)
 const { getSQL, cors } = require('../_db');
+const { randomUUID } = require('crypto');
 
 function nowParts() {
   const d = new Date();
@@ -33,11 +34,138 @@ async function ensureMovimientos(sql) {
   await sql`ALTER TABLE movimientos ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
 }
 
+function text(v, fallback = null) {
+  if (v === undefined || v === null || v === '') return fallback;
+  return String(v).trim();
+}
+
+async function ensureCompras(sql) {
+  await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS compras (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      numero TEXT,
+      proveedor TEXT,
+      proveedor_id TEXT,
+      estado TEXT DEFAULT 'BORRADOR',
+      total NUMERIC(14,2) DEFAULT 0,
+      items JSONB DEFAULT '[]',
+      observaciones TEXT,
+      empresa_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+}
+
+async function ensureTraslados(sql) {
+  await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS traslados (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      sku TEXT NOT NULL,
+      nombre TEXT,
+      cantidad NUMERIC(12,2) NOT NULL,
+      origen TEXT,
+      destino TEXT,
+      usuario TEXT,
+      observacion TEXT,
+      empresa_id TEXT,
+      fecha TEXT,
+      hora TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+}
+
+function normalizeCompraItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.map((it) => ({
+    sku: text(it.sku, ''),
+    nombre: text(it.nombre, ''),
+    cantidad: Number(it.cantidad || 0),
+    costo: Number(it.costo || 0),
+    total: Number(it.total || (Number(it.cantidad || 0) * Number(it.costo || 0)))
+  })).filter((it) => it.sku && it.cantidad > 0);
+}
+
 module.exports = async (req, res) => {
   cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const sql = getSQL();
+  const recurso = req.query.recurso || req.query.resource || '';
+
+  if (recurso === 'compras') {
+    try {
+      await ensureCompras(sql);
+      if (req.method === 'GET') {
+        const { empresa_id } = req.query;
+        const rows = empresa_id && empresa_id !== '__SA__'
+          ? await sql`SELECT * FROM compras WHERE empresa_id = ${empresa_id} ORDER BY created_at DESC LIMIT 1000`
+          : await sql`SELECT * FROM compras ORDER BY created_at DESC LIMIT 1000`;
+        return res.status(200).json({ ok: true, data: rows, total: rows.length });
+      }
+      if (req.method === 'POST' || req.method === 'PUT') {
+        const body = req.body || {};
+        const items = normalizeCompraItems(body.items);
+        const total = body.total === undefined || body.total === null || body.total === ''
+          ? items.reduce((sum, it) => sum + Number(it.total || 0), 0)
+          : Number(body.total || 0);
+        const id = text(body.id) || randomUUID();
+        const numero = text(body.numero) || `OC-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${String(Date.now()).slice(-5)}`;
+        const existing = await sql`SELECT id FROM compras WHERE id = ${id} LIMIT 1`;
+        if (existing.length) {
+          await sql`
+            UPDATE compras SET numero=${numero}, proveedor=${text(body.proveedor)}, proveedor_id=${text(body.proveedor_id)},
+              estado=${text(body.estado, 'BORRADOR')}, total=${total}, items=${JSON.stringify(items)}::jsonb,
+              observaciones=${text(body.observaciones)}, empresa_id=${text(body.empresa_id)}, updated_at=NOW()
+            WHERE id=${id}`;
+          return res.status(200).json({ ok: true, id, numero, updated: true });
+        }
+        await sql`
+          INSERT INTO compras (id, numero, proveedor, proveedor_id, estado, total, items, observaciones, empresa_id, created_at, updated_at)
+          VALUES (${id}, ${numero}, ${text(body.proveedor)}, ${text(body.proveedor_id)}, ${text(body.estado, 'BORRADOR')},
+                  ${total}, ${JSON.stringify(items)}::jsonb, ${text(body.observaciones)}, ${text(body.empresa_id)}, NOW(), NOW())`;
+        return res.status(200).json({ ok: true, id, numero, inserted: true });
+      }
+      return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    } catch (err) {
+      console.error('[compras via movimientos]', err.message);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  }
+
+  if (recurso === 'traslados') {
+    try {
+      await ensureTraslados(sql);
+      if (req.method === 'GET') {
+        const { empresa_id, limit = 1000 } = req.query;
+        const lim = Math.min(Number(limit) || 1000, 5000);
+        const rows = empresa_id && empresa_id !== '__SA__'
+          ? await sql`SELECT * FROM traslados WHERE empresa_id = ${empresa_id} ORDER BY created_at DESC LIMIT ${lim}`
+          : await sql`SELECT * FROM traslados ORDER BY created_at DESC LIMIT ${lim}`;
+        return res.status(200).json({ ok: true, data: rows, total: rows.length });
+      }
+      if (req.method === 'POST') {
+        const body = req.body || {};
+        if (!body.sku) return res.status(400).json({ ok: false, error: 'sku requerido' });
+        const qty = Number(body.cantidad || 0);
+        if (!qty || qty <= 0) return res.status(400).json({ ok: false, error: 'cantidad debe ser > 0' });
+        const t = nowParts();
+        const id = text(body.id) || randomUUID();
+        const rows = await sql`
+          INSERT INTO traslados (id, sku, nombre, cantidad, origen, destino, usuario, observacion, empresa_id, fecha, hora, created_at)
+          VALUES (${id}, ${text(body.sku).toUpperCase()}, ${text(body.nombre)}, ${qty}, ${text(body.origen)}, ${text(body.destino)},
+                  ${text(body.usuario, 'Sistema')}, ${text(body.observacion)}, ${text(body.empresa_id)},
+                  ${text(body.fecha, t.fecha)}, ${text(body.hora, t.hora)}, NOW())
+          RETURNING *`;
+        return res.status(200).json({ ok: true, id: rows[0].id, data: rows[0] });
+      }
+      return res.status(405).json({ ok: false, error: 'Method not allowed' });
+    } catch (err) {
+      console.error('[traslados via movimientos]', err.message);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  }
 
   // ── GET ──────────────────────────────────────────────────────────────────
   if (req.method === 'GET') {

@@ -1339,7 +1339,7 @@ function _syncComprasFromAPI(done) {
   if (window._comprasFetching) return;
   window._comprasFetching = true;
   var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
-  var url = '/api/compras' + (eid && eid !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eid) : '');
+  var url = '/api/movimientos?recurso=compras' + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
   fetch(url)
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res){
@@ -3250,7 +3250,7 @@ function _syncTrasladosFromAPI(done) {
   if (window._trasladosFetching) return;
   window._trasladosFetching = true;
   var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
-  var url = '/api/traslados?limit=1000' + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
+  var url = '/api/movimientos?recurso=traslados&limit=1000' + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
   fetch(url)
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res){
@@ -3540,7 +3540,7 @@ function _confirmarTraslado() {
     empresa_id: typeof _getEmpresaId==='function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (art.empresa_id || null),
   });
   DB_traslados_save(hist);
-  fetch('/api/traslados', {
+  fetch('/api/movimientos?recurso=traslados', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
     body: JSON.stringify(hist[0])
@@ -15006,7 +15006,7 @@ function guardarOrdenCompra() {
   var ordenes = loadCompras();
   ordenes.unshift(orden);
   saveCompras(ordenes);
-  fetch('/api/compras', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(orden) })
+  fetch('/api/movimientos?recurso=compras', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(orden) })
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res){
       if (res && res.ok) _syncComprasFromAPI(function(){ if (currentPage === 'compras') renders.compras(); });
