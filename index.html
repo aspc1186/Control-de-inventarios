@@ -809,6 +809,9 @@ to{opacity:1;transform:translateY(0)}}
       <a onclick="goto('pedidos')" id="nav-pedidos" style="display:none">
         <svg viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></svg>Pedidos</a>
 
+      <a onclick="goto('comercial')" id="nav-comercial" style="display:none">
+        <svg viewBox="0 0 24 24"><path d="M3 7h18"/><path d="M3 12h18"/><path d="M3 17h12"/><circle cx="18" cy="17" r="3"/></svg>Comercial</a>
+
       <a onclick="goto('proveedores')" id="nav-proveedores">
         <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Proveedores</a>
 
@@ -880,6 +883,7 @@ to{opacity:1;transform:translateY(0)}}
       <div id="pg-escaner" style="display:none"></div>
       <div id="pg-compras" style="display:none"></div>
       <div id="pg-pedidos" style="display:none"></div>
+      <div id="pg-comercial" style="display:none"></div>
       <div id="pg-logistica" style="display:none"></div>
       <div id="pg-movimientos" style="display:none"></div>
       <div id="pg-proveedores" style="display:none"></div>
@@ -2212,15 +2216,16 @@ function applyRoleUI() {
 
 function togglePwd(id) {
   var el = document.getElementById(id);
-  el.type = el.type === 'password' ? 'text' : 'password';
+  if (el) el.type = el.type === 'password' ? 'text' : 'password';
 }
+function _togglePwdField(id) { togglePwd(id); }
 
 /* ══════════════════════════════════════════════
    NAVIGATION
 ══════════════════════════════════════════════ */
 var PAGE_TITLES = {
   empresas:'Empresas Cliente',
-  dashboard:'Dashboard Control', inventario:'Inventario', compras:'Compras', logistica:'Logistica', 'generar-qr':'Generar QR',
+  dashboard:'Dashboard Control', inventario:'Inventario', compras:'Compras', comercial:'Comercial', logistica:'Logistica', 'generar-qr':'Generar QR',
   escaner:'Escáner QR', movimientos:'Movimientos', importar:'Importar desde Excel',
   reportes:'Reportes', conciliacion:'Conciliación de Inventarios',
   proveedores:'Proveedores', ciclicos:'Inventarios Cíclicos', ubicaciones:'Bodegas y Ubicaciones', auditoria:'Auditoría',
@@ -6316,7 +6321,7 @@ function applyPlanUI() {
 
   // ── TODOS los IDs de nav (declarados PRIMERO) ─────────────────────
   var allNavIds = [
-    'inventario','importar','historial','proveedores','pedidos',
+    'inventario','importar','historial','proveedores','pedidos','comercial',
     'movimientos','traslados','reportes',
     'ubicaciones','generar-qr','escaner',
     'compras','logistica','gerencial',
@@ -6372,7 +6377,7 @@ function applyPlanUI() {
 
   // ── Mostrar secciones según módulos visibles ──────────────────────
   var secMap = {
-    'nav-sec-operacion':  ['inventario','importar','proveedores','pedidos','compras','logistica','movimientos','traslados'],
+    'nav-sec-operacion':  ['inventario','importar','proveedores','pedidos','comercial','compras','logistica','movimientos','traslados'],
     'nav-sec-analitica':  ['reportes'],
     'nav-sec-bodegas':    ['ubicaciones','generar-qr','escaner'],
     'nav-sec-seguridad':  ['auditoria'],
@@ -8685,6 +8690,15 @@ function _cambiarPwdEmpresa(empId) {
   h.push('<button class="btn btn-navy">💾 Guardar contraseña</button>');
   h.push('</div>');
   openModal(h.join(''), 'modal-lg');
+  setTimeout(function(){
+    var saveBtn = Array.prototype.slice.call(document.querySelectorAll('.modal button.btn-navy, .modal-content button.btn-navy')).pop();
+    if (saveBtn) saveBtn.onclick = function(){ _guardarPwdEmpresa(empId); };
+    ['cpw-new','cpw-confirm'].forEach(function(id){
+      var input = document.getElementById(id);
+      var btn = input && input.parentElement ? input.parentElement.querySelector('button[type="button"]') : null;
+      if (btn) btn.onclick = function(){ _togglePwdField(id); };
+    });
+  }, 0);
   setTimeout(function(){ _renderPwdRules('cpw-new','cpw-rules'); }, 100);
 }
 
@@ -10252,6 +10266,7 @@ function _sfConvertInventarioAProveedores(rows) {
         Departamento: '',
         Ciudad: '',
         Direccion: '',
+        Direccion_Proveedor: '',
         Codigo_Postal: '',
         Condicion_Pago: '',
         Descuento_Comercial: 0,
@@ -10279,7 +10294,7 @@ function _sfHeadersPlantillaProveedores() {
   return ['ID_Proveedor','NIT','Razon_Social','Nombre_Comercial','Tipo_Proveedor',
     'Categoria_Principal','Marca_Representada','Contacto_Principal','Cargo','Telefono','Celular',
     'WhatsApp','Correo_Compras','Correo_Cartera','Sitio_Web','Pais','Departamento','Ciudad',
-    'Direccion','Codigo_Postal','Condicion_Pago','Descuento_Comercial','Tiempo_Entrega_Dias',
+    'Direccion','Direccion_Proveedor','Codigo_Postal','Condicion_Pago','Descuento_Comercial','Tiempo_Entrega_Dias',
     'Pedido_Minimo','Banco','Tipo_Cuenta','Numero_Cuenta','Estado','Observaciones'];
 }
 
@@ -10419,7 +10434,7 @@ function _leerArchivoProveedores(file) {
           pais:             String(row['Pais']||'Colombia').trim(),
           departamento:     String(row['Departamento']||'').trim(),
           ciudad:           String(row['Ciudad']||'').trim(),
-          direccion:        String(row['Direccion']||'').trim(),
+          direccion:        String(row['Direccion']||row['Direccion_Proveedor']||row['Direccion Proveedor']||'').trim(),
           codigo_postal:    String(row['Codigo_Postal']||'').trim(),
           condicion_pago:   String(row['Condicion_Pago']||'').trim(),
           descuento:        desc,
@@ -10679,21 +10694,21 @@ function exportProveedoresExcel() {
   var headers = ['ID_Proveedor','NIT','Razon_Social','Nombre_Comercial','Tipo_Proveedor',
     'Categoria_Principal','Marca_Representada','Contacto_Principal','Cargo','Telefono','Celular',
     'WhatsApp','Correo_Compras','Correo_Cartera','Sitio_Web','Pais','Departamento','Ciudad',
-    'Direccion','Codigo_Postal','Condicion_Pago','Descuento_Comercial','Tiempo_Entrega_Dias',
+    'Direccion','Direccion_Proveedor','Codigo_Postal','Condicion_Pago','Descuento_Comercial','Tiempo_Entrega_Dias',
     'Pedido_Minimo','Banco','Tipo_Cuenta','Numero_Cuenta','Estado','Observaciones'];
 
   var data = [headers].concat(toExport.map(function(p) { return [
     p.id||'', p.nit||'', p.razon_social||p.nombre||'', p.nombre_comercial||'', p.tipo_proveedor||'',
     p.categoria||'', p.marca||'', p.contacto||'', p.cargo||'', p.telefono||'', p.celular||'',
     p.whatsapp||'', p.correo||'', p.correo_cartera||'', p.sitio_web||'', p.pais||'Colombia',
-    p.departamento||'', p.ciudad||'', p.direccion||'', p.codigo_postal||'', p.condicion_pago||'',
+    p.departamento||'', p.ciudad||'', p.direccion||'', p.direccion||'', p.codigo_postal||'', p.condicion_pago||'',
     p.descuento||0, p.tiempo_entrega||0, p.pedido_minimo||0, p.banco||'', p.tipo_cuenta||'',
     p.numero_cuenta||'', p.estado||'Activo', p.observaciones||''
   ]; }));
 
   var wb = XLSX.utils.book_new();
   var ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [6,14,28,20,16,16,18,20,14,13,12,12,24,24,22,12,16,14,24,10,16,8,8,10,16,14,16,10,24].map(function(w){ return {wch:w}; });
+  ws['!cols'] = [6,14,28,20,16,16,18,20,14,13,12,12,24,24,22,12,16,14,24,24,10,16,8,8,10,16,14,16,10,24].map(function(w){ return {wch:w}; });
   XLSX.utils.book_append_sheet(wb, ws, 'Proveedores');
   XLSX.writeFile(wb, 'proveedores_stockflow_' + new Date().toISOString().slice(0,10) + '.xlsx');
   auditLog('EXPORTAR_PROVEEDORES', toExport.length + ' registros exportados', SESSION.user&&SESSION.user.nombre);
@@ -10707,7 +10722,7 @@ function descargarPlantillaProveedores() {
   var headers = ['ID_Proveedor','NIT','Razon_Social','Nombre_Comercial','Tipo_Proveedor',
     'Categoria_Principal','Marca_Representada','Contacto_Principal','Cargo','Telefono','Celular',
     'WhatsApp','Correo_Compras','Correo_Cartera','Sitio_Web','Pais','Departamento','Ciudad',
-    'Direccion','Codigo_Postal','Condicion_Pago','Descuento_Comercial','Tiempo_Entrega_Dias',
+    'Direccion','Direccion_Proveedor','Codigo_Postal','Condicion_Pago','Descuento_Comercial','Tiempo_Entrega_Dias',
     'Pedido_Minimo','Banco','Tipo_Cuenta','Numero_Cuenta','Estado','Observaciones'];
   var example = ['PROV-001','900123456-1','Tornillos S.A.S.','TornillosFast','Nacional',
     'Tornillería','TornillosPro','Carlos López','Gerente Comercial','6014321234','3001234567',
@@ -15291,6 +15306,21 @@ function openNuevaOrdenCompra(sku) {
   openModal(h.join(''), 'modal-lg');
 }
 
+function _sfNextOCNumber() {
+  var ordenes = typeof loadCompras === 'function' ? loadCompras() : [];
+  var maxSeq = 0;
+  ordenes.forEach(function(o) {
+    var raw = String(o.numero_full || o.numero || o.id || '').replace(/\D/g, '');
+    if (!raw) return;
+    var n = Number(raw);
+    if (n > maxSeq && n < 100000000) maxSeq = n;
+  });
+  var saved = Number(localStorage.getItem('sf_oc_seq') || 0);
+  var next = Math.max(saved, maxSeq) + 1;
+  localStorage.setItem('sf_oc_seq', String(next));
+  return { full:String(next).padStart(8,'0'), display:String(next).padStart(5,'0') };
+}
+
 function guardarOrdenCompra() {
   var sku = (document.getElementById('oc-sku')||{value:''}).value;
   var items = (typeof loadItems === 'function') ? loadItems() : [];
@@ -15304,9 +15334,11 @@ function guardarOrdenCompra() {
   var obs = (document.getElementById('oc-obs')||{value:''}).value;
   var eid = typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (item.empresa_id || null);
   var ocId = (typeof _newCloudId === 'function' ? _newCloudId('oc') : 'oc_' + Date.now());
+  var ocNum = _sfNextOCNumber();
   var orden = {
     id: ocId,
-    numero: 'OC-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + String(Date.now()).slice(-5),
+    numero: ocNum.display,
+    numero_full: ocNum.full,
     proveedor: proveedor,
     estado: estado,
     empresa_id: eid,
@@ -15815,6 +15847,53 @@ renders.escaner = function() {
 ══════════════════════════════════════════════════════════════ */
 
 /* ── SISTEMA DE TEMAS ──────────────────────────────────────── */
+function _eliminarUsuarioActivo(id) {
+  var users = DB.get('usuarios') || [];
+  var u = users.find(function(x){ return x.id === id; });
+  if (!u) { showToast('Usuario no encontrado', 'red'); return; }
+  if ((SESSION.user && SESSION.user.id) === id) { showToast('No puedes eliminar tu propio usuario', 'red'); return; }
+  if (u.rol === 'ROOT' || u.rol === 'SUPER ADMINISTRADOR' || u.username === 'admin' || u.username === 'administrador') {
+    showToast('Usuario protegido del sistema', 'red');
+    return;
+  }
+  if (!confirm('Eliminar usuario ' + (u.username || u.nombre || id) + '?')) return;
+  DB.set('usuarios', users.filter(function(x){ return x.id !== id; }));
+  fetch('/api/usuarios?id=' + encodeURIComponent(id), { method:'DELETE' }).catch(function(){});
+  auditLog('ELIMINAR_USUARIO', 'Usuario: ' + (u.username || id), SESSION.user && SESSION.user.nombre);
+  showToast('Usuario eliminado', 'green');
+  if (currentPage === 'usuarios') renders.usuarios();
+}
+
+_buildUsuariosUI = function(users) {
+  var pg = document.getElementById('pg-usuarios');
+  if (!pg) return;
+  users = users || [];
+  var myRol = SESSION.user && SESSION.user.rol || '';
+  var isSA = myRol === 'ROOT' || myRol === 'SUPER ADMINISTRADOR';
+  var isAdm = isSA || myRol === 'ADMINISTRADOR';
+  var myId = SESSION.user && SESSION.user.id;
+  var esc = typeof _sfEsc === 'function' ? _sfEsc : function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); };
+  var h = [];
+  h.push('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px"><h3 style="margin:0;font-size:16px;font-weight:700">Usuarios</h3>');
+  if (isAdm) h.push('<button onclick="nuevoUsuario()" class="btn btn-navy btn-sm">+ Nuevo Usuario</button>');
+  h.push('</div><div class="card"><div class="tbl-overflow"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Ultimo acceso</th><th>Acciones</th></tr></thead><tbody>');
+  if (!users.length) h.push('<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:18px">No hay usuarios registrados</td></tr>');
+  users.forEach(function(u) {
+    if (u.es_sistema && !isSA) return;
+    var isMe = u.id === myId;
+    var protectedRow = u.rol === 'ROOT' || u.rol === 'SUPER ADMINISTRADOR' || u.username === 'admin' || u.username === 'administrador';
+    var activo = String(u.estado || 'ACTIVO').toUpperCase() === 'ACTIVO';
+    h.push('<tr><td><code>'+esc(u.username || '')+'</code>'+(isMe?' <span class="badge b-ok">Tu</span>':'')+'</td><td>'+esc(u.nombre || '')+'<br><span style="font-size:10px;color:var(--muted)">'+esc(u.correo || '')+'</span></td><td><span class="role-badge">'+esc(u.rol || '')+'</span></td><td><span class="badge '+(activo?'b-ok':'b-gray')+'">'+(activo?'ACTIVO':'INACTIVO')+'</span></td><td>'+esc(u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString('es-CO') : '')+'</td><td style="white-space:nowrap">');
+    if (isAdm && !protectedRow) h.push('<button class="btn btn-ghost btn-sm" onclick="editarUsuario(\''+u.id+'\')">Editar</button> ');
+    if (isAdm && !protectedRow && !isMe) h.push('<button class="btn btn-ghost btn-sm" onclick="cambiarEstadoUsuario(\''+u.id+'\')">'+(activo?'Desactivar':'Activar')+'</button> ');
+    if (isAdm && !protectedRow && !isMe) h.push('<button class="btn btn-ghost btn-sm" onclick="resetPasswordUsuario(\''+u.id+'\')">Clave</button> ');
+    if (isSA && !protectedRow && !isMe) h.push('<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="_eliminarUsuarioActivo(\''+u.id+'\')">Eliminar</button>');
+    h.push('</td></tr>');
+  });
+  h.push('</tbody></table></div></div>');
+  pg.innerHTML = h.join('');
+};
+
 var TEMAS = {
   dark:  { label: '🌙 Oscuro',     desc: 'Tema oscuro por defecto' },
   light: { label: '☀️ Claro',      desc: 'Tema claro para ambientes iluminados' },
@@ -16628,7 +16707,7 @@ function _sfAppendOnce(arr, values) {
 }
 
 function _sfEnsureOperationalModules() {
-  var ops = ['pedidos','compras','logistica','traslados','picking','packing','conciliacion','ubicaciones','integraciones'];
+  var ops = ['pedidos','comercial','compras','logistica','traslados','picking','packing','conciliacion','ubicaciones','integraciones'];
   ['PRO','WMS'].forEach(function(plan){
     if (PLANES[plan]) PLANES[plan].modulos = _sfAppendOnce(PLANES[plan].modulos || [], ops);
   });
@@ -16636,7 +16715,7 @@ function _sfEnsureOperationalModules() {
     if (PERMISOS[rol]) PERMISOS[rol] = _sfAppendOnce(PERMISOS[rol], ops);
   });
   if (PERMISOS.COMPRAS) PERMISOS.COMPRAS = _sfAppendOnce(PERMISOS.COMPRAS, ['pedidos','compras','proveedores','conciliacion']);
-  PERMISOS.COMERCIAL = _sfAppendOnce(PERMISOS.COMERCIAL || ['dashboard'], ['pedidos','inventario','generar-qr','escaner']);
+  PERMISOS.COMERCIAL = _sfAppendOnce(PERMISOS.COMERCIAL || ['dashboard'], ['comercial','pedidos','inventario','generar-qr','escaner']);
   PERMISOS.CARTERA = _sfAppendOnce(PERMISOS.CARTERA || ['dashboard'], ['pedidos','inventario']);
   if (PERMISOS.ALMACENISTA) PERMISOS.ALMACENISTA = _sfAppendOnce(PERMISOS.ALMACENISTA, ['logistica','traslados','picking','packing']);
 }
@@ -16722,7 +16801,7 @@ function _sfDownloadModuleTemplate(modulo) {
   if (modulo === 'proveedores') return descargarPlantillaProveedores();
   if (modulo === 'compras') return _sfAoAToBookDownload('Ordenes_Compra',
     ['Numero','Proveedor','SKU','Articulo','Cantidad','Costo_Unitario','Estado','Fecha','Observaciones'],
-    [['OC-'+today.replace(/-/g,''),'MCM','1000001','Referencia 1',10,12500,'BORRADOR',today,'Compra sugerida']],
+    [['00001','MCM','1000001','Referencia 1',10,12500,'BORRADOR',today,'Compra sugerida']],
     'plantilla_compras_stockflow.xlsx');
   if (modulo === 'ubicaciones') return _sfAoAToBookDownload('Bodegas_Ubicaciones',
     ['Bodega','Nombre_Bodega','Ubicacion','Pasillo','Modulo','Nivel','Posicion','Estado'],
@@ -16790,9 +16869,10 @@ function _sfApplyModuleRows(modulo, rows) {
   if (modulo === 'compras') {
     var compras = typeof loadCompras === 'function' ? loadCompras() : [];
     rows.forEach(function(r, idx){
-      var numero = String(_sfPick(r, ['Numero','Número']) || ('OC-' + Date.now() + '-' + idx)).trim();
+      var ocNum = _sfNextOCNumber();
+      var numero = String(_sfPick(r, ['Numero','Número']) || ocNum.display).trim();
       compras.unshift({
-        id: numero, numero: numero, proveedor: String(_sfPick(r, ['Proveedor']) || '').trim(),
+        id: numero, numero: numero, numero_full: /^\d+$/.test(numero) ? String(numero).padStart(8,'0') : ocNum.full, proveedor: String(_sfPick(r, ['Proveedor']) || '').trim(),
         sku: String(_sfPick(r, ['SKU','Codigo','Código']) || '').trim(),
         articulo: String(_sfPick(r, ['Articulo','Artículo','Nombre']) || '').trim(),
         cantidad: Number(_sfPick(r, ['Cantidad']) || 0),
@@ -16908,14 +16988,22 @@ function _sfDecodeQrCode(raw) {
   try {
     if (/^https?:\/\//i.test(s)) {
       var u = new URL(s);
-      s = u.searchParams.get('qr') || u.searchParams.get('item') || s;
+      var hash = String(u.hash || '');
+      if (hash.indexOf('/producto/') >= 0) {
+        s = decodeURIComponent(hash.split('/producto/').pop().split(/[?&]/)[0] || '');
+      } else if (hash.indexOf('item=') >= 0 || hash.indexOf('qr=') >= 0) {
+        var hp = new URLSearchParams(hash.replace(/^#\/?/, '').replace(/^.*\?/, ''));
+        s = hp.get('item') || hp.get('qr') || s;
+      } else {
+        s = u.searchParams.get('qr') || u.searchParams.get('item') || s;
+      }
     }
   } catch(e) {}
   return String(s).replace(/^SFITEM:/i,'').trim();
 }
 function _sfQrPayload(code) {
   var base = (window.location && window.location.origin ? window.location.origin : '') + (window.location && window.location.pathname ? window.location.pathname : '/');
-  return base + '?item=' + encodeURIComponent(String(code || '').trim());
+  return base + '#/producto/' + encodeURIComponent(String(code || '').trim());
 }
 
 function _guardarBorradorPacking(idx) {
@@ -17010,6 +17098,7 @@ function _sfShowPublicQrLookup() {
   try {
     var params = new URLSearchParams(window.location.search || '');
     var code = params.get('item') || params.get('qr') || '';
+    if (!code && String(window.location.hash || '').indexOf('/producto/') >= 0) code = _sfDecodeQrCode(window.location.href);
     if (!code) return;
     code = _sfDecodeQrCode(code);
     var mount = document.createElement('div');
@@ -17189,9 +17278,14 @@ function _sfClientesPedidos() {
   (typeof loadProveedores === 'function' ? loadProveedores() : []).forEach(function(p){
     var name = p.razon_social || p.nombre || p.nombre_comercial;
     var nit = p.nit || '';
+    var direccion = p.direccion || p.direccion_proveedor || p.direccion_principal || p.direccion_fiscal || p.address || '';
+    var ciudad = p.ciudad || p.municipio || p.city || p.departamento || '';
+    var telefono = p.telefono || p.telefono_principal || p.celular || p.whatsapp || p.phone || '';
+    var correo = p.correo || p.correo_compras || p.email || p.mail || p.correo_cartera || '';
+    var contacto = p.contacto || p.contacto_principal || p.representante || '';
     if (name || nit) byKey[String(nit || name).toLowerCase()] = {
-      nit:nit, razon_social:name || nit, contacto:p.contacto || '', telefono:p.telefono || p.celular || '',
-      correo:p.correo || '', ciudad:p.ciudad || '', direccion:p.direccion || ''
+      nit:nit, razon_social:name || nit, contacto:contacto, telefono:telefono,
+      correo:correo, ciudad:ciudad, direccion:direccion
     };
   });
   DB_pedidos_load().forEach(function(p){
@@ -17217,7 +17311,7 @@ function _pedidoAutofillCliente() {
     var el = document.getElementById(x[0]); if (el) el.value = x[1] || '';
   });
 }
-function _pedidoAddLine() {
+function _pedidoAddLine(skuInicial) {
   var wrap = document.getElementById('ped-lines');
   if (!wrap) return;
   var items = _sfItemsAll();
@@ -17225,14 +17319,17 @@ function _pedidoAddLine() {
   var opts = items.slice(0,1000).map(function(it){ var c=_sfItemCode(it); return '<option value="'+_sfEsc(c)+'">'+_sfEsc(c+' - '+(it.nombre||it.descripcion||''))+'</option>'; }).join('');
   wrap.insertAdjacentHTML('beforeend','<div class="ped-line" style="display:grid;grid-template-columns:1fr 100px 34px;gap:8px;margin-bottom:8px"><select class="ped-sku" onchange="_pedidoUpdateLineInfo(this)">'+opts+'</select><input class="ped-qty" type="number" min="1" value="1"><button class="btn btn-ghost btn-sm" onclick="this.closest(&quot;.ped-line&quot;).remove()">x</button><div class="ped-info" style="grid-column:1/-1;font-size:11px;color:var(--muted)"></div></div>');
   var sel = wrap.querySelectorAll('.ped-sku')[n];
-  if (sel) _pedidoUpdateLineInfo(sel);
+  if (sel) {
+    if (skuInicial) sel.value = String(skuInicial);
+    _pedidoUpdateLineInfo(sel);
+  }
 }
 function _pedidoUpdateLineInfo(sel) {
   var it = _sfFindItemByCode(sel.value);
   var info = sel.closest('.ped-line').querySelector('.ped-info');
   if (info) info.innerHTML = it ? 'Disponible: <strong>'+_sfQty(it).toLocaleString('es-CO')+'</strong> | Ubicacion: '+_sfEsc(_sfLocation(it)) : 'Producto no encontrado';
 }
-function abrirNuevoPedido() {
+function abrirNuevoPedido(skuInicial) {
   var h = [];
   h.push('<h3 style="margin-bottom:10px">Nuevo pedido comercial</h3>');
   h.push('<div class="form-row"><label>NIT o razon social</label><input id="ped-cli-buscar" list="ped-clientes-list" oninput="_pedidoAutofillCliente()" placeholder="Buscar cliente"><datalist id="ped-clientes-list">'+_sfClientesPedidos().map(function(c){return '<option value="'+_sfEsc(c.nit||c.razon_social)+'">'+_sfEsc(c.razon_social||'')+'</option>';}).join('')+'</datalist></div>');
@@ -17243,7 +17340,7 @@ function abrirNuevoPedido() {
   h.push('<div class="form-row"><label>Observaciones</label><textarea id="ped-obs" rows="2"></textarea></div>');
   h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="guardarPedido()">Crear pedido</button></div>');
   openModal(h.join(''), 'modal-lg');
-  _pedidoAddLine();
+  _pedidoAddLine(skuInicial);
 }
 function guardarPedido() {
   var lines = Array.prototype.map.call(document.querySelectorAll('#ped-lines .ped-line'), function(row){
@@ -17268,6 +17365,7 @@ function guardarPedido() {
   closeModal();
   showToast('Pedido creado y enviado a cartera', 'green');
   if (currentPage === 'pedidos') renders.pedidos();
+  if (currentPage === 'comercial') renders.comercial();
 }
 function aprobarPedidoCartera(id) {
   var pedidos = DB_pedidos_load();
@@ -17303,10 +17401,12 @@ function _pedidoCrearOC(id) {
     var faltante = Math.max(0, Number(l.cantidad||0) - (it ? _sfQty(it) : 0));
     if (faltante <= 0) return;
     var idOc = (typeof _newCloudId === 'function' ? _newCloudId('oc') : 'oc_' + Date.now() + '_' + creadas);
+    var ocNum = _sfNextOCNumber();
     var costo = Number(it && (it.costo || it.costo_unitario) || l.costo || 0);
     compras.unshift({
       id:idOc,
-      numero:'OC-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + String(Date.now()).slice(-5) + creadas,
+      numero:ocNum.display,
+      numero_full:ocNum.full,
       proveedor:_sfProveedorSugerido(it || l),
       estado:'BORRADOR',
       pedido_id:ped.id,
@@ -17328,6 +17428,44 @@ function _pedidoCrearOC(id) {
   showToast(creadas + ' OC borrador creadas para compras', 'green');
   if (currentPage === 'compras') renders.compras();
 }
+
+renders.comercial = function() {
+  var pg = document.getElementById('pg-comercial');
+  if (!pg) return;
+  var items = _sfItemsAll();
+  var pedidos = DB_pedidos_load();
+  var q = String(window._comercialSearch || '').toLowerCase();
+  var filtered = items.filter(function(it){
+    if (!q) return true;
+    return String(_sfItemCode(it)).toLowerCase().indexOf(q) >= 0 ||
+      String(it.nombre || it.descripcion || '').toLowerCase().indexOf(q) >= 0 ||
+      String(_sfLocation(it)).toLowerCase().indexOf(q) >= 0;
+  });
+  var fmt = function(n){ return (+(n||0)).toLocaleString('es-CO'); };
+  var h = [];
+  h.push('<div style="max-width:1200px;margin:0 auto;padding:16px">');
+  h.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px"><div><h2 style="font-size:18px;margin:0;color:var(--white)">Portal comercial</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Consulta inventario, crea pedidos y revisa trazabilidad comercial.</p></div><button class="btn btn-navy btn-sm" onclick="abrirNuevoPedido()">Nuevo pedido</button></div>');
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">'+[
+    ['Referencias', items.length],
+    ['Con disponible', items.filter(function(i){return _sfQty(i)>0;}).length],
+    ['Pedidos abiertos', pedidos.filter(function(p){return p.estado!=='CERRADO' && p.estado!=='CANCELADO';}).length],
+    ['En picking', pedidos.filter(function(p){return p.estado==='EN_PICKING';}).length]
+  ].map(function(k){ return '<div class="kpi"><span class="lbl">'+k[0]+'</span><span class="val">'+fmt(k[1])+'</span></div>'; }).join('')+'</div>');
+  h.push('<div class="card" style="margin-bottom:14px"><input placeholder="Buscar codigo, producto o ubicacion" value="'+_sfEsc(window._comercialSearch||'')+'" oninput="window._comercialSearch=this.value;renders.comercial()" style="width:100%;margin-bottom:10px"><div class="tbl-overflow"><table><thead><tr><th>Codigo</th><th>Producto</th><th>Disponible</th><th>Ubicacion</th><th>Estado</th><th></th></tr></thead><tbody>');
+  filtered.slice(0,80).forEach(function(it){
+    var code = _sfItemCode(it), disp = _sfQty(it), state = _sfItemState(it);
+    h.push('<tr><td><code>'+_sfEsc(code)+'</code></td><td>'+_sfEsc(it.nombre||it.descripcion||'')+'</td><td><strong>'+fmt(disp)+'</strong></td><td>'+_sfEsc(_sfLocation(it))+'</td><td><span class="badge '+(state==='DISPONIBLE'?'b-ok':'b-out')+'">'+state+'</span></td><td><button class="btn btn-ghost btn-sm" onclick="abrirNuevoPedido(&quot;'+_sfEsc(code)+'&quot;)">Pedido</button></td></tr>');
+  });
+  h.push('</tbody></table></div></div>');
+  h.push('<div class="card"><div style="font-size:13px;font-weight:800;color:var(--white);margin-bottom:10px">Seguimiento de pedidos</div><div class="tbl-overflow"><table><thead><tr><th>Pedido</th><th>Cliente</th><th>Estado</th><th>Items</th><th>Fecha</th></tr></thead><tbody>');
+  pedidos.slice(0,50).forEach(function(p){
+    h.push('<tr><td><code>'+_sfEsc(p.numero||p.id)+'</code></td><td>'+_sfEsc((p.cliente&&p.cliente.razon_social)||'')+'</td><td><span class="badge cic-prog">'+_sfEsc(String(p.estado||'').replace(/_/g,' '))+'</span></td><td>'+((p.lineas||[]).length)+'</td><td>'+_sfEsc(String(p.created_at||'').slice(0,10))+'</td></tr>');
+  });
+  if (!pedidos.length) h.push('<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">Sin pedidos registrados</td></tr>');
+  h.push('</tbody></table></div></div></div>');
+  pg.innerHTML = h.join('');
+};
+
 renders.pedidos = function() {
   var pg = document.getElementById('pg-pedidos');
   if (!pg) return;
