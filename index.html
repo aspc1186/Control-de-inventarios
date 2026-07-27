@@ -1442,7 +1442,7 @@ function _syncClientesFromAPI(done) {
   if (window._clientesFetching) return;
   window._clientesFetching = true;
   var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
-  var url = '/api/clientes' + (eid && eid !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eid) : '');
+  var url = '/api/movimientos?recurso=clientes' + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
   fetch(url)
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res){
@@ -1460,7 +1460,7 @@ function _syncClientesFromAPI(done) {
 }
 function _pushClienteCloud(c) {
   if (!c) return;
-  fetch('/api/clientes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(c) }).catch(function(){});
+  fetch('/api/movimientos?recurso=clientes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(c) }).catch(function(){});
 }
 function _syncProveedoresFromAPI(done) {
   if (window._proveedoresFetching) return;
