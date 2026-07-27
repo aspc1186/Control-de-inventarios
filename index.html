@@ -2356,7 +2356,7 @@ function _renderInventarioTab(q) {
   h.push('<div style="display:flex;gap:2px;margin-bottom:16px;border-bottom:2px solid rgba(255,255,255,.07);overflow-x:auto;scrollbar-width:none">');
   tabs.forEach(function(t){
     var active = tab === t.id;
-    h.push('<button style="padding:8px 14px;font-size:11px;font-weight:'+(active?'700':'500')+';white-space:nowrap;background:none;border:none;border-bottom:2px solid '+(active?'var(--electric)':'transparent')+';color:'+(active?'var(--electric)':'var(--muted)')+';cursor:pointer;margin-bottom:-2px;transition:all .15s">'+t.label+'</button>');
+    h.push('<button onclick="window._invTab=\''+t.id+'\';renders.inventario()" style="padding:8px 14px;font-size:11px;font-weight:'+(active?'700':'500')+';white-space:nowrap;background:none;border:none;border-bottom:2px solid '+(active?'var(--electric)':'transparent')+';color:'+(active?'var(--electric)':'var(--muted)')+';cursor:pointer;margin-bottom:-2px;transition:all .15s">'+t.label+'</button>');
   });
   h.push('</div>');
   pg.innerHTML = h.join('');
@@ -13359,7 +13359,11 @@ function _buildInventarioUI(allItems) {
     var cats  = Array.from(new Set(allItems.map(function(i){ return i.categoria||''; }).filter(Boolean))).sort();
 
     var rows = filtered.map(function(item){ return _buildInvRow(item); }).join('');
-    var h = [];
+  var h = [];
+
+    if (typeof _sfModuleTemplateBar === 'function') {
+      h.push(_sfModuleTemplateBar('inventario', 'Inventario'));
+    }
 
     h.push('<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">');
     h.push('<div style="position:relative;flex:1;min-width:200px;max-width:500px">');
@@ -16658,6 +16662,7 @@ function _sfModuleTemplateBar(modulo, titulo) {
     '<p style="font-size:11px;color:var(--muted);margin:3px 0 0">Descarga el formato del modulo o importa el archivo diligenciado para que los datos se reflejen en la app.</p></div>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
       '<button class="btn btn-ghost btn-sm" onclick="_sfDownloadModuleTemplate(\''+modulo+'\')">Descargar plantilla</button>' +
+      (modulo === 'inventario' ? '<button class="btn btn-ghost btn-sm" onclick="cargarPlantillaOficial(true)">Cargar plantilla oficial</button>' : '') +
       '<button class="btn btn-navy btn-sm" onclick="_sfOpenModuleImport(\''+modulo+'\')">Importar</button>' +
     '</div></div>';
 }
