@@ -19,6 +19,7 @@ module.exports = async (req, res) => {
       '/api/movimientos',
       '/api/movimientos?recurso=compras',
       '/api/movimientos?recurso=pedidos',
+      '/api/movimientos?recurso=clientes',
       '/api/movimientos?recurso=traslados',
       '/api/movimientos?recurso=picking',
       '/api/movimientos?recurso=packing',

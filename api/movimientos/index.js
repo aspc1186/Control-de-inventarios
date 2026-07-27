@@ -187,7 +187,7 @@ module.exports = async (req, res) => {
   }
 
   // ── GET ──────────────────────────────────────────────────────────────────
-  if (['pedidos','picking','packing','guias','despachos','remisiones','auditoria','seguridad'].includes(recurso)) {
+  if (['pedidos','clientes','picking','packing','guias','despachos','remisiones','auditoria','seguridad'].includes(recurso)) {
     try {
       await ensureWmsOperaciones(sql);
       if (req.method === 'GET') {
