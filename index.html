@@ -6316,7 +6316,7 @@ function applyPlanUI() {
 
   // ── TODOS los IDs de nav (declarados PRIMERO) ─────────────────────
   var allNavIds = [
-    'inventario','importar','historial','proveedores',
+    'inventario','importar','historial','proveedores','pedidos',
     'movimientos','traslados','reportes',
     'ubicaciones','generar-qr','escaner',
     'compras','logistica','gerencial',
@@ -13290,7 +13290,7 @@ function _buildInvRow(item) {
   // 18. COMPRA SUG (72px)
   r += '<td style="padding:6px 4px;width:72px;min-width:72px;text-align:center">';
   if (compra > 0) {
-    var compraLabel = ocInfo && Number(ocInfo.compra || 0) > 0 ? 'OC '+compra : '+'+compra;
+    var compraLabel = ocInfo && ocInfo.numero ? ocInfo.numero : '+'+compra;
     r += '<span style="font-size:11px;font-weight:700;color:#60a5fa;background:rgba(59,130,246,.12);padding:2px 6px;border-radius:10px">'+compraLabel+'</span>';
   } else {
     r += '<span style="color:#1e293b;font-size:11px">—</span>';
@@ -13306,7 +13306,7 @@ function _buildInvRow(item) {
   }
   r += '</td>';
 
-  // 19b. #RESERVA (70px) — muestra OTs activas para este producto
+  // 19. #RESERVA (70px) — muestra reservas activas para este producto
   var nRes = Number(item.stock_reservado||0);
   r += '<td style="padding:6px 6px;width:70px;min-width:70px;text-align:center;white-space:nowrap">';
   if (nRes > 0) {
@@ -13323,7 +13323,7 @@ function _buildInvRow(item) {
       : nRes + ' unidades reservadas';
     r += '<span onclick="abrirGestionReservas(\''+item.sku+'\')" style="cursor:pointer;font-size:9px;font-weight:700;padding:2px 5px;border-radius:20px;background:rgba(139,92,246,.2);color:#c4b5fd;border:1px solid rgba(139,92,246,.3);display:inline-block;max-width:66px;overflow:hidden;text-overflow:ellipsis" title="'+tooltip+'">🔒 '+otLabel+'</span>';
   } else {
-    r += '<span style="font-size:11px;color:rgba(255,255,255,.15)">—</span>';
+    r += '';
   }
   r += '</td>';
 
@@ -13475,8 +13475,8 @@ function _buildInventarioUI(allItems) {
       {w:76,  align:'center', label:'Consumo/d'},
       {w:70,  align:'center', label:'Lead Time'},
       {w:72,  align:'center', label:'Compra'},
-      {w:70,  align:'center', label:'<span style="color:#a78bfa">#Reserva</span>'},
-      {w:96,  align:'center', label:'Estado'},
+      {w:70,  align:'center', label:'Estado'},
+      {w:96,  align:'center', label:'<span style="color:#a78bfa">#Reserva</span>'},
       {w:84,  align:'right',  label:'Acciones'},
     ];
     ths.forEach(function(th){
@@ -16914,9 +16914,8 @@ function _sfDecodeQrCode(raw) {
   return String(s).replace(/^SFITEM:/i,'').trim();
 }
 function _sfQrPayload(code) {
-  var id = _sfQrId(code);
   var base = (window.location && window.location.origin ? window.location.origin : '') + (window.location && window.location.pathname ? window.location.pathname : '/');
-  return base + '?qr=' + encodeURIComponent(id);
+  return base + '?item=' + encodeURIComponent(String(code || '').trim());
 }
 
 function _guardarBorradorPacking(idx) {
@@ -17099,7 +17098,7 @@ function _sfEstadoCompraProducto(code) {
   var hits = ocs.filter(function(o){ return _sfOcItems(o).some(function(l){ return String(l.sku) === String(code); }); });
   if (!hits.length) return { compra:0, reserva:0, estado:'Sin OC' };
   var compra = hits.reduce(function(s,o){ return s + _sfOcItems(o).filter(function(l){ return String(l.sku) === String(code); }).reduce(function(a,l){ return a+Number(l.cantidad||0); },0); },0);
-  return { compra:compra, reserva:_sfReserved(_sfFindItemByCode(code)), estado:String(hits[0].estado || 'BORRADOR') };
+  return { compra:compra, numero:String(hits[0].numero || hits[0].id || ''), reserva:_sfReserved(_sfFindItemByCode(code)), estado:String(hits[0].estado || 'BORRADOR') };
 }
 function _sfProveedorSugerido(it) {
   var name = it && (it.proveedor || it.proveedor_principal || it.marca_proveedor || '');
@@ -17279,7 +17278,6 @@ function aprobarPedidoCartera(id) {
   pedidos[idx].aprobado_at = new Date().toISOString();
   DB_pedidos_save(pedidos);
   _pedidoCrearPicking(pedidos[idx]);
-  _pedidoCrearOC(id);
   showToast('Pedido aprobado y enviado a picking', 'green');
   if (currentPage === 'pedidos') renders.pedidos();
 }
