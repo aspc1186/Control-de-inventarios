@@ -18,6 +18,7 @@ module.exports = async (req, res) => {
       '/api/empresas',
       '/api/movimientos',
       '/api/movimientos?recurso=compras',
+      '/api/movimientos?recurso=pedidos',
       '/api/movimientos?recurso=traslados',
       '/api/movimientos?recurso=picking',
       '/api/movimientos?recurso=packing',
