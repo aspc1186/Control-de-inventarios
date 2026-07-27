@@ -12856,6 +12856,20 @@ function executeSync(parsed) {
         imagen:         i.imagen,
       };
     });
+    var upsertMap = {};
+    localBefore.forEach(function(i){ upsertMap[i.sku || i.codigo || i.id] = i; });
+    valid.forEach(function(item){
+      var key = item.sku || item.codigo || item.id;
+      if (!key) return;
+      var prev = upsertMap[key] || {};
+      var clean = Object.assign({}, prev, item);
+      delete clean._row; delete clean._errors;
+      clean.id = clean.id || prev.id || key;
+      upsertMap[key] = clean;
+    });
+    var visibleNow = Object.keys(upsertMap).map(function(k){ return upsertMap[k]; });
+    _invItems = visibleNow;
+    saveItems(visibleNow);
     fetch('/api/articulos?limit=5000')
       .then(function(r){ return r.ok ? r.json() : null; })
       .then(function(res){
@@ -16566,6 +16580,190 @@ function _sfEnsureOperationalModules() {
   if (PERMISOS.ALMACENISTA) PERMISOS.ALMACENISTA = _sfAppendOnce(PERMISOS.ALMACENISTA, ['logistica','traslados','picking','packing']);
 }
 
+function _sfInstallThemeReadabilityFixes() {
+  if (document.getElementById('sf-theme-readability-fixes')) return;
+  var css = document.createElement('style');
+  css.id = 'sf-theme-readability-fixes';
+  css.textContent = [
+    'html[data-theme] body, html[data-theme] .app, html[data-theme] main{background:var(--bg-deep)!important;color:var(--text)!important}',
+    'html[data-theme] .card, html[data-theme] .modal, html[data-theme] .modal-content, html[data-theme] .tbl-wrap, html[data-theme] .dash-u-band{background:var(--bg-card)!important;color:var(--text)!important;border-color:var(--border2)!important}',
+    'html[data-theme] input, html[data-theme] select, html[data-theme] textarea{background:var(--card2)!important;color:var(--white)!important;border-color:var(--border2)!important}',
+    'html[data-theme] table, html[data-theme] th, html[data-theme] td{color:var(--text)!important;border-color:var(--border2)!important}',
+    'html[data-theme] th{background:var(--card2)!important;color:var(--white)!important}',
+    'html[data-theme] label, html[data-theme] p, html[data-theme] span, html[data-theme] div{border-color:var(--border2)}',
+    'html[data-theme] .btn-ghost{background:var(--card2)!important;color:var(--white)!important;border-color:var(--border2)!important}',
+    'html[data-theme] .btn-navy, html[data-theme] .btn-blue{background:var(--electric)!important;color:#06111f!important;border-color:var(--electric)!important}',
+    'html[data-theme="light"] .btn-navy, html[data-theme="light"] .btn-blue{color:#ffffff!important}',
+    'html[data-theme="light"] .dropzone, html[data-theme="light"] .alert-bar{background:#ffffff!important;color:#0f172a!important}',
+    'html[data-theme="light"] .kpi, html[data-theme="light"] .dash-kpi{background:#ffffff!important;color:#0f172a!important;border:1px solid rgba(15,23,42,.12)!important}',
+    'html[data-theme] [style*="background:#"], html[data-theme] [style*="background:rgba"]{background:var(--card2)!important}',
+    'html[data-theme] [style*="color:#0"], html[data-theme] [style*="color:#1"], html[data-theme] [style*="color:#2"], html[data-theme] [style*="color:#3"], html[data-theme] [style*="color:#4"], html[data-theme] [style*="color:#5"], html[data-theme] [style*="color:#6"], html[data-theme] [style*="color:#7"], html[data-theme] [style*="color:#8"], html[data-theme] [style*="color:#9"]{color:var(--text)!important}',
+    'html[data-theme] .section-title, html[data-theme] h1, html[data-theme] h2, html[data-theme] h3, html[data-theme] strong{color:var(--white)!important}',
+    'html[data-theme] .lbl, html[data-theme] small{color:var(--muted)!important}',
+    'html[data-theme] .val{color:var(--electric)!important}',
+    'html[data-theme] button.btn-navy, html[data-theme] button.btn-blue{background:var(--electric)!important;color:#06111f!important;border-color:var(--electric)!important}',
+    'html[data-theme] button.btn-ghost{background:var(--card2)!important;color:var(--white)!important;border-color:var(--border2)!important}',
+    'html[data-theme="navy"] a, html[data-theme="navy"] .sku, html[data-theme="navy"] code{color:#64ffda!important}',
+    'html[data-theme="green"] a, html[data-theme="green"] .sku, html[data-theme="green"] code{color:#86efac!important}'
+  ].join('\n');
+  document.head.appendChild(css);
+}
+
+var _sfApplyThemeOriginal = typeof _aplicarTema === 'function' ? _aplicarTema : null;
+_aplicarTema = function(tema) {
+  if (_sfApplyThemeOriginal) _sfApplyThemeOriginal(tema || 'dark');
+  else {
+    document.documentElement.setAttribute('data-theme', tema || 'dark');
+    try { DB.set('sf_tema', tema || 'dark'); } catch(e) {}
+  }
+  _sfInstallThemeReadabilityFixes();
+};
+_sfInstallThemeReadabilityFixes();
+
+function _sfAoAToBookDownload(sheetName, headers, rows, fileName) {
+  if (typeof XLSX === 'undefined') { showToast('XLSX no disponible', 'red'); return; }
+  var wb = XLSX.utils.book_new();
+  var data = [headers].concat(rows || []);
+  var ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = headers.map(function(h){ return { wch: Math.max(12, Math.min(28, String(h).length + 4)) }; });
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  XLSX.writeFile(wb, fileName);
+}
+
+function _sfDownloadModuleTemplate(modulo) {
+  var today = new Date().toISOString().slice(0,10);
+  if (modulo === 'inventario') return downloadPlantilla();
+  if (modulo === 'proveedores') return descargarPlantillaProveedores();
+  if (modulo === 'compras') return _sfAoAToBookDownload('Ordenes_Compra',
+    ['Numero','Proveedor','SKU','Articulo','Cantidad','Costo_Unitario','Estado','Fecha','Observaciones'],
+    [['OC-'+today.replace(/-/g,''),'MCM','1000001','Referencia 1',10,12500,'BORRADOR',today,'Compra sugerida']],
+    'plantilla_compras_stockflow.xlsx');
+  if (modulo === 'ubicaciones') return _sfAoAToBookDownload('Bodegas_Ubicaciones',
+    ['Bodega','Nombre_Bodega','Ubicacion','Pasillo','Modulo','Nivel','Posicion','Estado'],
+    [['BPT','Bodega Producto Terminado','B01-A-02-02-02','A','02','02','02','Activo']],
+    'plantilla_bodegas_ubicaciones_stockflow.xlsx');
+  if (modulo === 'logistica') return _sfAoAToBookDownload('Remisiones_WMS',
+    ['Numero','Cliente','SKU','Articulo','Cantidad','Transportadora','Fecha','Estado','Observacion'],
+    [['REM-'+today.replace(/-/g,''),'Cliente ejemplo','1000001','Referencia 1',1,'Propia',today,'EMITIDA','Despacho WMS']],
+    'plantilla_logistica_wms_stockflow.xlsx');
+  if (modulo === 'conciliacion') return _sfAoAToBookDownload('Conciliacion',
+    ['Codigo','Nombre','Bodega','Ubicacion','Stock_Sistema','Conteo_Fisico','Responsable','Fecha','Observacion'],
+    [['1000001','Referencia 1','BPT','B01-A-02-02-02',0,0,'Auditor',today,'']],
+    'plantilla_conciliacion_stockflow.xlsx');
+}
+
+function _sfModuleTemplateBar(modulo, titulo) {
+  return '<div class="card sf-template-bar" style="margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
+    '<div><p style="font-size:12px;font-weight:800;color:var(--white);margin:0">Plantilla de ' + titulo + '</p>' +
+    '<p style="font-size:11px;color:var(--muted);margin:3px 0 0">Descarga el formato del modulo o importa el archivo diligenciado para que los datos se reflejen en la app.</p></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn btn-ghost btn-sm" onclick="_sfDownloadModuleTemplate(\''+modulo+'\')">Descargar plantilla</button>' +
+      '<button class="btn btn-navy btn-sm" onclick="_sfOpenModuleImport(\''+modulo+'\')">Importar</button>' +
+    '</div></div>';
+}
+
+function _sfOpenModuleImport(modulo) {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls,.csv';
+  input.onchange = function(e){ _sfReadModuleImport(modulo, e.target.files && e.target.files[0]); };
+  input.click();
+}
+
+function _sfReadModuleImport(modulo, file) {
+  if (!file) return;
+  if (typeof XLSX === 'undefined') { showToast('XLSX no disponible', 'red'); return; }
+  if (modulo === 'inventario') return handleImportFile(file);
+  if (modulo === 'proveedores') return _leerArchivoProveedores(file);
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(new Uint8Array(e.target.result), { type:'array', cellDates:true });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+      _sfApplyModuleRows(modulo, rows);
+    } catch(err) {
+      showToast('Error al importar plantilla: ' + err.message, 'red');
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function _sfPick(row, names) {
+  for (var i=0; i<names.length; i++) {
+    var n = names[i], keys = Object.keys(row || {});
+    for (var j=0; j<keys.length; j++) if (_sfNormHeader(keys[j]) === _sfNormHeader(n)) return row[keys[j]];
+  }
+  return '';
+}
+
+function _sfApplyModuleRows(modulo, rows) {
+  rows = rows || [];
+  if (!rows.length) { showToast('La plantilla no tiene registros', 'red'); return; }
+  if (modulo === 'compras') {
+    var compras = typeof loadCompras === 'function' ? loadCompras() : [];
+    rows.forEach(function(r, idx){
+      var numero = String(_sfPick(r, ['Numero','Número']) || ('OC-' + Date.now() + '-' + idx)).trim();
+      compras.unshift({
+        id: numero, numero: numero, proveedor: String(_sfPick(r, ['Proveedor']) || '').trim(),
+        sku: String(_sfPick(r, ['SKU','Codigo','Código']) || '').trim(),
+        articulo: String(_sfPick(r, ['Articulo','Artículo','Nombre']) || '').trim(),
+        cantidad: Number(_sfPick(r, ['Cantidad']) || 0),
+        costo: Number(_sfPick(r, ['Costo_Unitario','Costo Unitario','Costo']) || 0),
+        total: Number(_sfPick(r, ['Cantidad']) || 0) * Number(_sfPick(r, ['Costo_Unitario','Costo Unitario','Costo']) || 0),
+        estado: String(_sfPick(r, ['Estado']) || 'BORRADOR').trim(),
+        fecha: String(_sfPick(r, ['Fecha']) || new Date().toISOString().slice(0,10)),
+        observacion: String(_sfPick(r, ['Observaciones','Observacion']) || '')
+      });
+    });
+    if (typeof saveCompras === 'function') saveCompras(compras);
+  }
+  if (modulo === 'ubicaciones') {
+    var bodegas = typeof loadBodegas === 'function' ? loadBodegas() : [];
+    rows.forEach(function(r){
+      var cod = _sfSlug(_sfPick(r, ['Bodega','Codigo_Bodega','Codigo']));
+      if (!cod) return;
+      var ubic = String(_sfPick(r, ['Ubicacion','Ubicación']) || '').trim();
+      var b = bodegas.find(function(x){ return _sfSlug(x.codigo || x.nombre || x.id) === cod; });
+      if (!b) { b = { id:cod, codigo:cod, nombre:String(_sfPick(r, ['Nombre_Bodega','Nombre']) || cod), estado:'Activa', ubicaciones:[] }; bodegas.push(b); }
+      if (ubic && !(b.ubicaciones || []).some(function(u){ return (u.codigo || u) === ubic; })) (b.ubicaciones || (b.ubicaciones=[])).push({ codigo:ubic, nombre:ubic, estado:String(_sfPick(r, ['Estado']) || 'Activo') });
+    });
+    if (typeof saveBodegas === 'function') saveBodegas(_sfDedupeBodegas(bodegas));
+  }
+  if (modulo === 'logistica') {
+    var rems = typeof DB_remisiones_load === 'function' ? DB_remisiones_load() : [];
+    rows.forEach(function(r, idx){
+      rems.unshift({
+        id: uid(), numero:String(_sfPick(r, ['Numero','Número']) || ('REM-' + Date.now() + '-' + idx)),
+        cliente:String(_sfPick(r, ['Cliente','Destino']) || ''), sku:String(_sfPick(r, ['SKU','Codigo','Código']) || ''),
+        articulo:String(_sfPick(r, ['Articulo','Artículo']) || ''), cantidad:Number(_sfPick(r, ['Cantidad']) || 0),
+        transportadora:String(_sfPick(r, ['Transportadora']) || ''), fecha:String(_sfPick(r, ['Fecha']) || new Date().toISOString().slice(0,10)),
+        estado:String(_sfPick(r, ['Estado']) || 'EMITIDA'), observacion:String(_sfPick(r, ['Observacion','Observaciones']) || '')
+      });
+    });
+    if (typeof DB_remisiones_save === 'function') DB_remisiones_save(rems);
+  }
+  showToast(rows.length + ' registros importados en ' + modulo, 'green');
+  if (typeof _KPI_invalidar === 'function') _KPI_invalidar();
+  if (currentPage && renders[currentPage]) renders[currentPage]();
+}
+
+function _sfAttachTemplateBar(page, modulo, titulo) {
+  var pg = document.getElementById('pg-' + page);
+  if (!pg || pg.querySelector('.sf-template-bar')) return;
+  pg.insertAdjacentHTML('afterbegin', _sfModuleTemplateBar(modulo, titulo));
+}
+
+function _sfWrapRenderTemplate(page, modulo, titulo) {
+  if (!renders || !renders[page] || renders[page]._sfTplWrapped) return;
+  var original = renders[page];
+  renders[page] = function() {
+    original.apply(this, arguments);
+    _sfAttachTemplateBar(page, modulo, titulo);
+  };
+  renders[page]._sfTplWrapped = true;
+}
+
 _renderBodegaCard = function(b, i, canEdit) {
   b = _sfNormalizeBodega(b, i);
   var isActive = b.estado !== 'Inactiva';
@@ -16599,6 +16797,12 @@ applyPlanUI = function() {
   if (principal) principal.style.display = '';
 };
 _sfEnsureOperationalModules();
+_sfWrapRenderTemplate('importar', 'inventario', 'Inventario');
+_sfWrapRenderTemplate('proveedores', 'proveedores', 'Proveedores');
+_sfWrapRenderTemplate('compras', 'compras', 'Compras');
+_sfWrapRenderTemplate('ubicaciones', 'ubicaciones', 'Bodegas y ubicaciones');
+_sfWrapRenderTemplate('logistica', 'logistica', 'Logistica WMS');
+_sfWrapRenderTemplate('conciliacion', 'conciliacion', 'Conciliacion');
 
 var _sfGetModulosDisponiblesFinal = typeof getModulosDisponibles === 'function' ? getModulosDisponibles : null;
 getModulosDisponibles = function() {
