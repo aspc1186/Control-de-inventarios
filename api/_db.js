@@ -127,6 +127,36 @@ async function setupTables(sql) {
     )`;
 
   await sql`
+    CREATE TABLE IF NOT EXISTS clientes (
+      id TEXT PRIMARY KEY,
+      nit TEXT,
+      nombre TEXT,
+      razon_social TEXT,
+      nombre_comercial TEXT,
+      tipo_cliente TEXT,
+      contacto TEXT,
+      cargo TEXT,
+      telefono TEXT,
+      celular TEXT,
+      whatsapp TEXT,
+      correo TEXT,
+      correo_facturacion TEXT,
+      pais TEXT DEFAULT 'Colombia',
+      departamento TEXT,
+      ciudad TEXT,
+      direccion TEXT,
+      condicion_pago TEXT,
+      cupo_credito NUMERIC,
+      vendedor TEXT,
+      estado TEXT DEFAULT 'ACTIVO',
+      observaciones TEXT,
+      origen_registro TEXT,
+      empresa_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+
+  await sql`
     CREATE TABLE IF NOT EXISTS compras (
       id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
       numero TEXT,
@@ -204,6 +234,31 @@ async function setupTables(sql) {
   await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS observaciones TEXT`;
   await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
   await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
+
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nit TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nombre TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS razon_social TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nombre_comercial TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS tipo_cliente TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS contacto TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cargo TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS telefono TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS celular TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS whatsapp TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS correo TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS correo_facturacion TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS pais TEXT DEFAULT 'Colombia'`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS departamento TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS ciudad TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS direccion TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS condicion_pago TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cupo_credito NUMERIC`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS vendedor TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'ACTIVO'`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS observaciones TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS origen_registro TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE clientes ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
 
   await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS nombre TEXT`;
   await sql`ALTER TABLE traslados ADD COLUMN IF NOT EXISTS origen TEXT`;

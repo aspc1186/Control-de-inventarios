@@ -815,6 +815,9 @@ to{opacity:1;transform:translateY(0)}}
       <a onclick="goto('proveedores')" id="nav-proveedores">
         <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Proveedores</a>
 
+      <a onclick="goto('clientes')" id="nav-clientes" style="display:none">
+        <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a3 3 0 0 0-2-2.83"/><path d="M16 3.13a3 3 0 0 1 0 5.74"/></svg>Clientes</a>
+
       <a onclick="goto('logistica')" id="nav-logistica" style="display:none">
         <svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>Logística WMS</a>
 
@@ -887,6 +890,7 @@ to{opacity:1;transform:translateY(0)}}
       <div id="pg-logistica" style="display:none"></div>
       <div id="pg-movimientos" style="display:none"></div>
       <div id="pg-proveedores" style="display:none"></div>
+      <div id="pg-clientes" style="display:none"></div>
       <div id="pg-importar" style="display:none"></div>
       <div id="pg-reportes" style="display:none"></div>
       <div id="pg-historial" style="display:none"></div>
@@ -1131,6 +1135,7 @@ function seed() {
   if (!DB.get('articulos'))   DB.set('articulos', []);
   if (!DB.get('movimientos')) DB.set('movimientos', []);
   if (!DB.get('proveedores')) DB.set('proveedores', []);
+  if (!DB.get('clientes'))    DB.set('clientes', []);
   if (!DB.get('empresas'))    DB.set('empresas', []);
   if (!DB.get('bodegas'))     DB.set('bodegas', []);
   if (!DB.get('ciclicos'))    DB.set('ciclicos', []);
@@ -1338,6 +1343,21 @@ function loadProveedores() {
   if (eid) return all.filter(function(p){ return p.empresa_id === eid; });
   return [];
 }
+function loadClientes() {
+  var all = DB.get('clientes') || [];
+  var eid = _getEmpresaId();
+  if (eid === '__SA__') return all;
+  if (eid) return all.filter(function(c){ return c.empresa_id === eid; });
+  return [];
+}
+function saveClientes(arr) {
+  var eid = _getEmpresaId();
+  if (eid === '__SA__') { DB.set('clientes', arr || []); return; }
+  var all = DB.get('clientes') || [];
+  var other = all.filter(function(c){ return c.empresa_id !== eid; });
+  var mine = (arr || []).map(function(c){ return Object.assign({}, c, { empresa_id:eid }); });
+  DB.set('clientes', other.concat(mine));
+}
 
 function loadCiclicos() {
   var all = DB.get('ciclicos') || [];
@@ -1418,6 +1438,30 @@ function _pushUsuarioCloud(u, plainPassword) {
   fetch('/api/usuarios', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(function(){});
 }
 function saveProveedores(v){ DB.set('proveedores', v); }  // API sync done in guardarProveedor
+function _syncClientesFromAPI(done) {
+  if (window._clientesFetching) return;
+  window._clientesFetching = true;
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var url = '/api/clientes' + (eid && eid !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eid) : '');
+  fetch(url)
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){
+      if (res && Array.isArray(res.data)) {
+        saveClientes(res.data.map(function(c){
+          if (!c.razon_social && c.nombre) c.razon_social = c.nombre;
+          return c;
+        }));
+        window._clientesCloudLoaded = true;
+        if (typeof done === 'function') done(loadClientes());
+      }
+    })
+    .catch(function(){})
+    .finally(function(){ window._clientesFetching = false; });
+}
+function _pushClienteCloud(c) {
+  if (!c) return;
+  fetch('/api/clientes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(c) }).catch(function(){});
+}
 function _syncProveedoresFromAPI(done) {
   if (window._proveedoresFetching) return;
   window._proveedoresFetching = true;
@@ -1624,20 +1668,20 @@ var SESSION = { user: null, empresa: null, plan: null };
 var PLANES = {
   FREE: {
     nombre: 'Free',
-    modulos: ['dashboard','inventario','importar','movimientos','reportes','proveedores'],
+    modulos: ['dashboard','inventario','importar','movimientos','reportes','proveedores','clientes'],
     limites:  { bodegas: 1, referencias: 500, usuarios: 3 },
     trialDias: 30,
   },
   LITE: {
     nombre: 'Lite',
     modulos: ['dashboard','inventario','importar','movimientos','reportes',
-              'proveedores','historial','ubicaciones'],
+              'proveedores','clientes','historial','ubicaciones'],
     limites:  { bodegas: 3, referencias: 5000, usuarios: 10 },
   },
   PRO: {
     nombre: 'Pro',
     modulos: ['dashboard','inventario','importar','movimientos','reportes',
-              'proveedores','compras','historial','ubicaciones',
+              'proveedores','clientes','compras','historial','ubicaciones',
               'gerencial','ciclicos','conciliacion','auditoria',
               'usuarios','respaldos'],
     limites:  { bodegas: -1, referencias: -1, usuarios: -1 },
@@ -1645,7 +1689,7 @@ var PLANES = {
   WMS: {
     nombre: 'WMS',
     modulos: ['dashboard','inventario','importar','movimientos','reportes',
-              'proveedores','compras','logistica','historial','ubicaciones',
+              'proveedores','clientes','compras','logistica','historial','ubicaciones',
               'gerencial','ciclicos','conciliacion','auditoria',
               'usuarios','respaldos',
               'generar-qr','escaner','traslados','picking','packing',
@@ -1658,7 +1702,7 @@ var PERMISOS = {
   // SA — acceso total a la plataforma, sin restricciones
   'SUPER ADMINISTRADOR': [
     'dashboard','inventario','importar','movimientos','reportes',
-    'proveedores','compras','logistica','historial','ubicaciones',
+    'proveedores','clientes','compras','logistica','historial','ubicaciones',
     'gerencial','ciclicos','conciliacion','auditoria',
     'usuarios','respaldos',
     'generar-qr','escaner','traslados','picking','packing','mis-inventarios','integraciones',
@@ -1667,7 +1711,7 @@ var PERMISOS = {
   // ADMINISTRADOR — todos los módulos del plan contratado
   'ADMINISTRADOR': [
     'dashboard','inventario','importar','movimientos','reportes',
-    'proveedores','compras','logistica','historial','ubicaciones',
+    'proveedores','clientes','compras','logistica','historial','ubicaciones',
     'gerencial','ciclicos','conciliacion','auditoria',
     'usuarios','respaldos',
     'generar-qr','escaner','traslados','picking','packing','mis-inventarios','integraciones',
@@ -1681,7 +1725,10 @@ var PERMISOS = {
   ],
   // COMPRAS — proveedores e inventario solo lectura
   'COMPRAS': [
-    'dashboard','inventario','proveedores','compras','importar','reportes','historial',
+    'dashboard','inventario','proveedores','clientes','compras','importar','reportes','historial',
+  ],
+  'COMERCIAL': [
+    'dashboard','comercial','clientes','pedidos','inventario','generar-qr','escaner',
   ],
   // ALMACENISTA — entradas, salidas, traslados, QR
   'ALMACENISTA': [
@@ -1711,7 +1758,7 @@ var ACCIONES = {
   'ROOT': {
     modulos: ['dashboard','inventario','compras','logistica','gerencial','ubicaciones',
               'generar-qr','escaner','auditoria','empresas','usuarios','integraciones',
-              'respaldos','centro-pruebas','salud-sistema','proveedores','importar',
+              'respaldos','centro-pruebas','salud-sistema','proveedores','clientes','importar',
               'historial','movimientos','traslados','reportes','ciclicos','conciliacion',
               'picking','packing'],
     acciones: ['crear','editar','eliminar','ver','exportar','importar','configurar','administrar'],
@@ -1726,6 +1773,7 @@ var ACCIONES = {
     inventario:   ['ver','crear','editar','eliminar','exportar','importar','ajustar'],
     movimientos:  ['ver','crear_entrada','crear_salida','ajuste','exportar'],
     proveedores:  ['ver','crear','editar','eliminar','exportar','importar'],
+    clientes:     ['ver','crear','editar','eliminar','exportar','importar'],
     usuarios:     ['ver','crear','editar','eliminar'],
     ubicaciones:  ['ver','crear','editar','eliminar'],
     ciclicos:     ['ver','crear','iniciar','finalizar','cancelar','reabrir'],
@@ -1752,8 +1800,16 @@ var ACCIONES = {
   'COMPRAS': {
     inventario:   ['ver','exportar'],
     proveedores:  ['ver','crear','editar','eliminar','exportar','importar'],
+    clientes:     ['ver','crear','editar','eliminar','exportar','importar'],
     reportes:     ['ver','exportar'],
     historial:    ['ver','exportar'],
+    '*':          ['ver'],
+  },
+  'COMERCIAL': {
+    comercial:    ['ver','crear'],
+    pedidos:      ['ver','crear','editar'],
+    clientes:     ['ver','crear','editar','exportar','importar'],
+    inventario:   ['ver','exportar'],
     '*':          ['ver'],
   },
   // ALMACENISTA: entradas, salidas, traslados
@@ -1931,6 +1987,9 @@ function canDo(action) {
     'crear_proveedor':    {r:'proveedores',a:'crear'},
     'editar_proveedor':   {r:'proveedores',a:'editar'},
     'eliminar_proveedor': {r:'proveedores',a:'eliminar'},
+    'crear_cliente':      {r:'clientes',a:'crear'},
+    'editar_cliente':     {r:'clientes',a:'editar'},
+    'eliminar_cliente':   {r:'clientes',a:'eliminar'},
   };
   var m = legacyMap[action];
   if (m) return canDoAction(m.r, m.a);
@@ -2228,7 +2287,7 @@ var PAGE_TITLES = {
   dashboard:'Dashboard Control', inventario:'Inventario', compras:'Compras', comercial:'Comercial', logistica:'Logistica', 'generar-qr':'Generar QR',
   escaner:'Escáner QR', movimientos:'Movimientos', importar:'Importar desde Excel',
   reportes:'Reportes', conciliacion:'Conciliación de Inventarios',
-  proveedores:'Proveedores', ciclicos:'Inventarios Cíclicos', ubicaciones:'Bodegas y Ubicaciones', auditoria:'Auditoría',
+  proveedores:'Proveedores', clientes:'Clientes', ciclicos:'Inventarios Cíclicos', ubicaciones:'Bodegas y Ubicaciones', auditoria:'Auditoría',
   usuarios:'Usuarios', detalle:'Detalle Artículo',
   'centro-pruebas': '🧪 Centro de Pruebas Automáticas',
 };
@@ -6321,7 +6380,7 @@ function applyPlanUI() {
 
   // ── TODOS los IDs de nav (declarados PRIMERO) ─────────────────────
   var allNavIds = [
-    'inventario','importar','historial','proveedores','pedidos','comercial',
+    'inventario','importar','historial','proveedores','clientes','pedidos','comercial',
     'movimientos','traslados','reportes',
     'ubicaciones','generar-qr','escaner',
     'compras','logistica','gerencial',
@@ -6377,7 +6436,7 @@ function applyPlanUI() {
 
   // ── Mostrar secciones según módulos visibles ──────────────────────
   var secMap = {
-    'nav-sec-operacion':  ['inventario','importar','proveedores','pedidos','comercial','compras','logistica','movimientos','traslados'],
+    'nav-sec-operacion':  ['inventario','importar','proveedores','clientes','pedidos','comercial','compras','logistica','movimientos','traslados'],
     'nav-sec-analitica':  ['reportes'],
     'nav-sec-bodegas':    ['ubicaciones','generar-qr','escaner'],
     'nav-sec-seguridad':  ['auditoria'],
@@ -8705,6 +8764,8 @@ function _cambiarPwdEmpresa(empId) {
 function _guardarPwdEmpresa(empId) {
   var pwd     = (document.getElementById('cpw-new')    ||{value:''}).value;
   var confirm = (document.getElementById('cpw-confirm')||{value:''}).value;
+  var val = _validatePwdAdvanced(pwd);
+  if (!val.ok) { showToast('La contraseña no cumple la política: '+val.fails.map(function(f){return f.msg;}).join(', '),'red'); return; }
   if (!pwd || pwd.length < 8) { showToast('La contraseña debe tener al menos 8 caracteres','red'); return; }
   if (pwd !== confirm)         { showToast('Las contraseñas no coinciden','red'); return; }
 
@@ -12139,6 +12200,14 @@ function nuevoUsuario() {
   h.push('<button class="btn btn-navy" onclick="guardarUsuario()">➕ Crear Usuario</button>');
   h.push('</div>');
   openModal(h.join(''), true);
+  setTimeout(function(){
+    var pwd = document.getElementById('u-pwd');
+    if (pwd) {
+      pwd.placeholder = 'Minimo 12 caracteres';
+      pwd.oninput = function(){ _renderPwdRules('u-pwd','u-reqs'); };
+      _renderPwdRules('u-pwd','u-reqs');
+    }
+  }, 0);
 }
 
 function checkPwdReqs(inputId, reqsId) {
@@ -12160,6 +12229,11 @@ function guardarUsuario() {
   var tel  = (document.getElementById('u-tel')||{}).value || '';
   var cargo= (document.getElementById('u-cargo')||{}).value || '';
   var area = (document.getElementById('u-area')||{}).value || '';
+  var pwdCheck = _validatePwdAdvanced(pwd);
+  if (!pwdCheck.ok) {
+    alert('La contraseña no cumple la política: ' + pwdCheck.fails.map(function(f){ return f.msg; }).join(', '));
+    return;
+  }
 
   if (!nom||!user||!pwd) { alert('Nombre, usuario y contraseña son obligatorios'); return; }
   if (!/(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(pwd)) {
@@ -13953,6 +14027,8 @@ function resetPasswordUsuario(userId) {
 
 function _confirmarResetPwd(userId) {
   var pwd = document.getElementById('rp-pwd').value.trim();
+  var val = _validatePwdAdvanced(pwd);
+  if (!val.ok) { showToast('La contraseña no cumple la política: '+val.fails.map(function(f){return f.msg;}).join(', '),'red'); return; }
   if (!pwd || pwd.length < 8) { showToast('Mínimo 8 caracteres','red'); return; }
   var users = DB.get('usuarios') || [];
   var idx   = users.findIndex(function(u){ return u.id===userId; });
@@ -16709,16 +16785,16 @@ function _sfAppendOnce(arr, values) {
 }
 
 function _sfEnsureOperationalModules() {
-  var ops = ['pedidos','comercial','compras','logistica','traslados','picking','packing','conciliacion','ubicaciones','integraciones'];
+  var ops = ['pedidos','comercial','clientes','proveedores','compras','logistica','traslados','picking','packing','conciliacion','ubicaciones','integraciones'];
   ['PRO','WMS'].forEach(function(plan){
     if (PLANES[plan]) PLANES[plan].modulos = _sfAppendOnce(PLANES[plan].modulos || [], ops);
   });
   ['SUPER ADMINISTRADOR','ADMINISTRADOR','JEFE INVENTARIOS'].forEach(function(rol){
     if (PERMISOS[rol]) PERMISOS[rol] = _sfAppendOnce(PERMISOS[rol], ops);
   });
-  if (PERMISOS.COMPRAS) PERMISOS.COMPRAS = _sfAppendOnce(PERMISOS.COMPRAS, ['pedidos','compras','proveedores','conciliacion']);
-  PERMISOS.COMERCIAL = _sfAppendOnce(PERMISOS.COMERCIAL || ['dashboard'], ['comercial','pedidos','inventario','generar-qr','escaner']);
-  PERMISOS.CARTERA = _sfAppendOnce(PERMISOS.CARTERA || ['dashboard'], ['pedidos','inventario']);
+  if (PERMISOS.COMPRAS) PERMISOS.COMPRAS = _sfAppendOnce(PERMISOS.COMPRAS, ['pedidos','compras','proveedores','clientes','conciliacion']);
+  PERMISOS.COMERCIAL = _sfAppendOnce(PERMISOS.COMERCIAL || ['dashboard'], ['comercial','clientes','pedidos','inventario','generar-qr','escaner']);
+  PERMISOS.CARTERA = _sfAppendOnce(PERMISOS.CARTERA || ['dashboard'], ['pedidos','clientes','inventario']);
   if (PERMISOS.ALMACENISTA) PERMISOS.ALMACENISTA = _sfAppendOnce(PERMISOS.ALMACENISTA, ['logistica','traslados','picking','packing']);
 }
 
@@ -17278,6 +17354,141 @@ function _sfGuardarRecepcionOC(id) {
   if (currentPage === 'compras') renders.compras();
 }
 
+function _sfClienteHeaders() {
+  return ['ID_Cliente','NIT','Razon_Social','Nombre_Comercial','Tipo_Cliente','Contacto_Principal','Cargo','Telefono','Celular','WhatsApp','Correo','Correo_Facturacion','Pais','Departamento','Ciudad','Direccion','Condicion_Pago','Cupo_Credito','Vendedor','Estado','Observaciones'];
+}
+function descargarPlantillaClientes() {
+  return _sfAoAToBookDownload('Clientes', _sfClienteHeaders(), [['CLI-001','900123456-1','Cliente ejemplo S.A.S.','Cliente ejemplo','Empresa','Ana Perez','Compras','6011234567','3001234567','3001234567','compras@cliente.com','facturacion@cliente.com','Colombia','Cundinamarca','Bogota','Calle 100 # 20-30','30 dias',5000000,'Comercial principal','ACTIVO','Cliente de prueba']], 'plantilla_clientes_stockflow.xlsx');
+}
+function _sfClienteFromRow(row, idx, existing) {
+  var pick = function(names){ return _sfPick(row, names); };
+  var nit = String(pick(['NIT','Nit','Documento']) || '').trim();
+  var rs = String(pick(['Razon_Social','Razon Social','Razón Social','Nombre','Cliente']) || '').trim();
+  return {
+    id: existing && existing.id || String(pick(['ID_Cliente','ID Cliente','Id']) || ('cli-' + Date.now() + '-' + idx)).trim(),
+    nit:nit, razon_social:rs, nombre:rs,
+    nombre_comercial:String(pick(['Nombre_Comercial','Nombre Comercial']) || '').trim(),
+    tipo_cliente:String(pick(['Tipo_Cliente','Tipo Cliente']) || '').trim(),
+    contacto:String(pick(['Contacto_Principal','Contacto Principal','Contacto']) || '').trim(),
+    cargo:String(pick(['Cargo']) || '').trim(),
+    telefono:String(pick(['Telefono','Teléfono']) || '').trim(),
+    celular:String(pick(['Celular']) || '').trim(),
+    whatsapp:String(pick(['WhatsApp','Whatsapp']) || '').trim(),
+    correo:String(pick(['Correo','Email','Correo_Compras']) || '').trim(),
+    correo_facturacion:String(pick(['Correo_Facturacion','Correo Facturacion']) || '').trim(),
+    pais:String(pick(['Pais','País']) || 'Colombia').trim(),
+    departamento:String(pick(['Departamento']) || '').trim(),
+    ciudad:String(pick(['Ciudad','Municipio']) || '').trim(),
+    direccion:String(pick(['Direccion','Dirección','Direccion_Cliente']) || '').trim(),
+    condicion_pago:String(pick(['Condicion_Pago','Condicion Pago']) || '').trim(),
+    cupo_credito:Number(pick(['Cupo_Credito','Cupo Credito']) || 0),
+    vendedor:String(pick(['Vendedor','Comercial']) || '').trim(),
+    estado:String(pick(['Estado']) || 'ACTIVO').trim().toUpperCase(),
+    observaciones:String(pick(['Observaciones','Observacion']) || '').trim(),
+    empresa_id: typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (existing && existing.empresa_id || null),
+    origen_registro: existing && existing.origen_registro || 'MANUAL',
+    updated_at:new Date().toISOString()
+  };
+}
+function importarClientesArchivo(file) {
+  if (!file) return;
+  if (typeof XLSX === 'undefined') { showToast('XLSX no disponible', 'red'); return; }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(new Uint8Array(e.target.result), { type:'array' });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, { defval:'' });
+      var clientes = loadClientes();
+      var valid = [];
+      rows.forEach(function(r, idx){
+        var nit = String(_sfPick(r, ['NIT','Nit','Documento']) || '').trim();
+        var rs = String(_sfPick(r, ['Razon_Social','Razon Social','Razón Social','Nombre','Cliente']) || '').trim();
+        if (!nit && !rs) return;
+        var exist = clientes.find(function(c){ return (nit && c.nit === nit) || (rs && String(c.razon_social||c.nombre||'').toLowerCase() === rs.toLowerCase()); });
+        var c = _sfClienteFromRow(r, idx, exist);
+        if (exist) Object.assign(exist, c); else clientes.push(c);
+        valid.push(c);
+      });
+      saveClientes(clientes);
+      valid.forEach(_pushClienteCloud);
+      showToast(valid.length + ' clientes importados', 'green');
+      if (currentPage === 'clientes') renders.clientes();
+    } catch(err) { showToast('Error importando clientes: ' + err.message, 'red'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function abrirImportarClientes() {
+  var input = document.createElement('input');
+  input.type = 'file'; input.accept = '.xlsx,.xls,.csv';
+  input.onchange = function(e){ importarClientesArchivo(e.target.files && e.target.files[0]); };
+  input.click();
+}
+function exportarClientesExcel() {
+  var rows = loadClientes().map(function(c){ return [c.id||'', c.nit||'', c.razon_social||c.nombre||'', c.nombre_comercial||'', c.tipo_cliente||'', c.contacto||'', c.cargo||'', c.telefono||'', c.celular||'', c.whatsapp||'', c.correo||'', c.correo_facturacion||'', c.pais||'Colombia', c.departamento||'', c.ciudad||'', c.direccion||'', c.condicion_pago||'', c.cupo_credito||0, c.vendedor||'', c.estado||'ACTIVO', c.observaciones||'']; });
+  _sfAoAToBookDownload('Clientes', _sfClienteHeaders(), rows, 'clientes_stockflow_' + new Date().toISOString().slice(0,10) + '.xlsx');
+}
+function abrirCliente(id) {
+  var clientes = loadClientes();
+  var c = id ? clientes.find(function(x){ return x.id === id; }) : null;
+  var h = [];
+  h.push('<h3 style="margin-bottom:10px">'+(c?'Editar cliente':'Nuevo cliente')+'</h3>');
+  h.push('<div class="form-grid"><div class="form-row"><label>NIT *</label><input id="cli-nit" value="'+_sfEsc(c&&c.nit||'')+'"></div><div class="form-row"><label>Razon social *</label><input id="cli-rs" value="'+_sfEsc(c&&(c.razon_social||c.nombre)||'')+'"></div></div>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Nombre comercial</label><input id="cli-nc" value="'+_sfEsc(c&&c.nombre_comercial||'')+'"></div><div class="form-row"><label>Tipo cliente</label><select id="cli-tipo"><option value="Empresa">Empresa</option><option value="Persona Natural">Persona Natural</option><option value="Distribuidor">Distribuidor</option><option value="Mayorista">Mayorista</option></select></div></div>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Contacto</label><input id="cli-contacto" value="'+_sfEsc(c&&c.contacto||'')+'"></div><div class="form-row"><label>Cargo</label><input id="cli-cargo" value="'+_sfEsc(c&&c.cargo||'')+'"></div></div>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Telefono</label><input id="cli-tel" value="'+_sfEsc(c&&c.telefono||'')+'"></div><div class="form-row"><label>Celular / WhatsApp</label><input id="cli-cel" value="'+_sfEsc(c&&(c.celular||c.whatsapp)||'')+'"></div></div>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Correo</label><input id="cli-mail" value="'+_sfEsc(c&&c.correo||'')+'"></div><div class="form-row"><label>Correo facturacion</label><input id="cli-mail-fac" value="'+_sfEsc(c&&c.correo_facturacion||'')+'"></div></div>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Departamento</label><input id="cli-depto" value="'+_sfEsc(c&&c.departamento||'')+'"></div><div class="form-row"><label>Ciudad</label><input id="cli-ciudad" value="'+_sfEsc(c&&c.ciudad||'')+'"></div></div>');
+  h.push('<div class="form-row"><label>Direccion</label><input id="cli-dir" value="'+_sfEsc(c&&c.direccion||'')+'"></div>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Condicion pago</label><input id="cli-pago" value="'+_sfEsc(c&&c.condicion_pago||'')+'"></div><div class="form-row"><label>Cupo credito</label><input id="cli-cupo" type="number" value="'+Number(c&&c.cupo_credito||0)+'"></div></div>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Vendedor</label><input id="cli-vendedor" value="'+_sfEsc(c&&c.vendedor||'')+'"></div><div class="form-row"><label>Estado</label><select id="cli-estado"><option value="ACTIVO">ACTIVO</option><option value="INACTIVO">INACTIVO</option><option value="BLOQUEADO">BLOQUEADO</option></select></div></div>');
+  h.push('<div class="form-row"><label>Observaciones</label><textarea id="cli-obs" rows="2">'+_sfEsc(c&&c.observaciones||'')+'</textarea></div>');
+  h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="guardarCliente(\''+(id||'')+'\')">Guardar cliente</button></div>');
+  openModal(h.join(''), 'modal-lg');
+  setTimeout(function(){ if (c) { var t=document.getElementById('cli-tipo'); if(t)t.value=c.tipo_cliente||'Empresa'; var e=document.getElementById('cli-estado'); if(e)e.value=c.estado||'ACTIVO'; } }, 0);
+}
+function guardarCliente(id) {
+  var clientes = loadClientes();
+  var idx = id ? clientes.findIndex(function(c){ return c.id === id; }) : -1;
+  var c = idx >= 0 ? clientes[idx] : { id:'cli-' + Date.now(), created_at:new Date().toISOString() };
+  c.nit = (document.getElementById('cli-nit')||{value:''}).value.trim();
+  c.razon_social = (document.getElementById('cli-rs')||{value:''}).value.trim();
+  if (!c.nit || !c.razon_social) { showToast('NIT y razon social son obligatorios', 'red'); return; }
+  Object.assign(c, { nombre:c.razon_social, nombre_comercial:(document.getElementById('cli-nc')||{value:''}).value.trim(), tipo_cliente:(document.getElementById('cli-tipo')||{value:'Empresa'}).value, contacto:(document.getElementById('cli-contacto')||{value:''}).value.trim(), cargo:(document.getElementById('cli-cargo')||{value:''}).value.trim(), telefono:(document.getElementById('cli-tel')||{value:''}).value.trim(), celular:(document.getElementById('cli-cel')||{value:''}).value.trim(), whatsapp:(document.getElementById('cli-cel')||{value:''}).value.trim(), correo:(document.getElementById('cli-mail')||{value:''}).value.trim(), correo_facturacion:(document.getElementById('cli-mail-fac')||{value:''}).value.trim(), departamento:(document.getElementById('cli-depto')||{value:''}).value.trim(), ciudad:(document.getElementById('cli-ciudad')||{value:''}).value.trim(), direccion:(document.getElementById('cli-dir')||{value:''}).value.trim(), condicion_pago:(document.getElementById('cli-pago')||{value:''}).value.trim(), cupo_credito:Number((document.getElementById('cli-cupo')||{value:0}).value||0), vendedor:(document.getElementById('cli-vendedor')||{value:''}).value.trim(), estado:(document.getElementById('cli-estado')||{value:'ACTIVO'}).value, observaciones:(document.getElementById('cli-obs')||{value:''}).value.trim(), empresa_id: typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (c.empresa_id || null), updated_at:new Date().toISOString() });
+  if (clientes.find(function(x){ return x.id !== c.id && c.nit && x.nit === c.nit; })) { showToast('Ya existe un cliente con ese NIT', 'red'); return; }
+  if (idx >= 0) clientes[idx] = c; else clientes.unshift(c);
+  saveClientes(clientes);
+  _pushClienteCloud(c);
+  closeModal();
+  showToast('Cliente guardado', 'green');
+  if (currentPage === 'clientes') renders.clientes();
+}
+function cambiarEstadoCliente(id) {
+  var clientes = loadClientes();
+  var idx = clientes.findIndex(function(c){ return c.id === id; });
+  if (idx < 0) return;
+  clientes[idx].estado = String(clientes[idx].estado || 'ACTIVO').toUpperCase() === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO';
+  saveClientes(clientes);
+  _pushClienteCloud(clientes[idx]);
+  renders.clientes();
+}
+renders.clientes = function() {
+  var pg = document.getElementById('pg-clientes');
+  if (!pg) return;
+  if (!window._clientesCloudLoaded) _syncClientesFromAPI(function(){ if (currentPage === 'clientes') renders.clientes(); });
+  var clientes = loadClientes();
+  var q = String(window._clientesSearch || '').toLowerCase();
+  var rows = clientes.filter(function(c){ return !q || String(c.nit||'').toLowerCase().indexOf(q) >= 0 || String(c.razon_social||c.nombre||'').toLowerCase().indexOf(q) >= 0 || String(c.ciudad||'').toLowerCase().indexOf(q) >= 0; });
+  var h = [];
+  h.push('<div style="max-width:1200px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px"><div><h2 style="font-size:18px;margin:0;color:var(--white)">Clientes</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Maestro comercial usado para autollenar pedidos.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="descargarPlantillaClientes()">Plantilla</button><button class="btn btn-ghost btn-sm" onclick="abrirImportarClientes()">Importar</button><button class="btn btn-ghost btn-sm" onclick="exportarClientesExcel()">Exportar</button><button class="btn btn-navy btn-sm" onclick="abrirCliente()">+ Nuevo</button></div></div>');
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px">'+[['Total', clientes.length], ['Activos', clientes.filter(function(c){return String(c.estado||'ACTIVO').toUpperCase()==='ACTIVO';}).length], ['Bloqueados', clientes.filter(function(c){return String(c.estado||'').toUpperCase()==='BLOQUEADO';}).length]].map(function(k){ return '<div class="kpi"><span class="lbl">'+k[0]+'</span><span class="val">'+k[1]+'</span></div>'; }).join('')+'</div>');
+  h.push('<div class="card"><input placeholder="Buscar NIT, razon social o ciudad" value="'+_sfEsc(window._clientesSearch||'')+'" oninput="window._clientesSearch=this.value;renders.clientes()" style="width:100%;margin-bottom:10px"><div class="tbl-overflow"><table><thead><tr><th>NIT</th><th>Razon social</th><th>Contacto</th><th>Telefono</th><th>Correo</th><th>Ciudad</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>');
+  rows.forEach(function(c){ h.push('<tr><td><code>'+_sfEsc(c.nit||'')+'</code></td><td>'+_sfEsc(c.razon_social||c.nombre||'')+'<br><span style="font-size:10px;color:var(--muted)">'+_sfEsc(c.direccion||'')+'</span></td><td>'+_sfEsc(c.contacto||'')+'</td><td>'+_sfEsc(c.telefono||c.celular||'')+'</td><td>'+_sfEsc(c.correo||c.correo_facturacion||'')+'</td><td>'+_sfEsc(c.ciudad||'')+'</td><td><span class="badge '+(String(c.estado||'ACTIVO').toUpperCase()==='ACTIVO'?'b-ok':'b-gray')+'">'+_sfEsc(c.estado||'ACTIVO')+'</span></td><td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="abrirCliente(\''+c.id+'\')">Editar</button> <button class="btn btn-ghost btn-sm" onclick="cambiarEstadoCliente(\''+c.id+'\')">'+(String(c.estado||'ACTIVO').toUpperCase()==='ACTIVO'?'Inactivar':'Activar')+'</button></td></tr>'); });
+  if (!rows.length) h.push('<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:18px">No hay clientes registrados</td></tr>');
+  h.push('</tbody></table></div></div></div>');
+  pg.innerHTML = h.join('');
+};
+
 function DB_pedidos_load() { try { return JSON.parse(localStorage.getItem('erp_pedidos') || '[]'); } catch(e){ return []; } }
 function DB_pedidos_save(rows) {
   rows = rows || [];
@@ -17289,6 +17500,20 @@ function _syncPedidos(done) {
 }
 function _sfClientesPedidos() {
   var byKey = {};
+  (typeof loadClientes === 'function' ? loadClientes() : []).forEach(function(c){
+    var name = c.razon_social || c.nombre || c.nombre_comercial;
+    var nit = c.nit || '';
+    if (name || nit) {
+      var cliente = {
+        nit:nit, razon_social:name || nit, contacto:c.contacto || '', telefono:c.telefono || c.celular || c.whatsapp || '',
+        correo:c.correo || c.correo_facturacion || '', ciudad:c.ciudad || c.municipio || '', direccion:c.direccion || '',
+        departamento:c.departamento || '', condicion_pago:c.condicion_pago || '', cupo_credito:c.cupo_credito || 0,
+        origen:'CLIENTE'
+      };
+      byKey[String(nit || name).toLowerCase()] = cliente;
+      if (name) byKey[String(name).toLowerCase()] = cliente;
+    }
+  });
   (typeof loadProveedores === 'function' ? loadProveedores() : []).forEach(function(p){
     var name = p.razon_social || p.nombre || p.nombre_comercial;
     var nit = p.nit || '';
@@ -17297,9 +17522,10 @@ function _sfClientesPedidos() {
     var telefono = p.telefono || p.telefono_principal || p.celular || p.whatsapp || p.phone || '';
     var correo = p.correo || p.correo_compras || p.email || p.mail || p.correo_cartera || '';
     var contacto = p.contacto || p.contacto_principal || p.representante || '';
-    if (name || nit) byKey[String(nit || name).toLowerCase()] = {
+    var key = String(nit || name).toLowerCase();
+    if ((name || nit) && !byKey[key]) byKey[key] = {
       nit:nit, razon_social:name || nit, contacto:contacto, telefono:telefono,
-      correo:correo, ciudad:ciudad, direccion:direccion
+      correo:correo, ciudad:ciudad, direccion:direccion, origen:'PROVEEDOR'
     };
   });
   DB_pedidos_load().forEach(function(p){
