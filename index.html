@@ -15927,16 +15927,20 @@ function _eliminarUsuarioActivo(id) {
   var users = DB.get('usuarios') || [];
   var u = users.find(function(x){ return x.id === id; });
   if (!u) { showToast('Usuario no encontrado', 'red'); return; }
-  if ((SESSION.user && SESSION.user.id) === id) { showToast('No puedes eliminar tu propio usuario', 'red'); return; }
-  if (u.rol === 'ROOT' || u.rol === 'SUPER ADMINISTRADOR' || u.username === 'admin' || u.username === 'administrador') {
-    showToast('Usuario protegido del sistema', 'red');
+  if (u.rol === 'SUPER ADMINISTRADOR') {
+    showToast('El superadministrador no se puede eliminar', 'red');
     return;
   }
+  var deletingSelf = (SESSION.user && SESSION.user.id) === id;
   if (!confirm('Eliminar usuario ' + (u.username || u.nombre || id) + '?')) return;
   DB.set('usuarios', users.filter(function(x){ return x.id !== id; }));
   fetch('/api/usuarios?id=' + encodeURIComponent(id), { method:'DELETE' }).catch(function(){});
   auditLog('ELIMINAR_USUARIO', 'Usuario: ' + (u.username || id), SESSION.user && SESSION.user.nombre);
   showToast('Usuario eliminado', 'green');
+  if (deletingSelf) {
+    setTimeout(function(){ if (typeof doLogout === 'function') doLogout(); }, 500);
+    return;
+  }
   if (currentPage === 'usuarios') renders.usuarios();
 }
 
@@ -15957,15 +15961,16 @@ _buildUsuariosUI = function(users) {
   users.forEach(function(u) {
     if (u.es_sistema && !isSA) return;
     var isMe = u.id === myId;
-    var protectedRow = u.rol === 'ROOT';
-    var canEditRow = isAdm && !protectedRow && (isSA || !u.es_sistema || isMe);
-    var canOperateRow = isAdm && !protectedRow && !isMe && (isSA || !u.es_sistema);
+    var isSuperAdminRow = u.rol === 'SUPER ADMINISTRADOR';
+    var canEditRow = isAdm;
+    var canOperateRow = isAdm;
+    var canDeleteRow = isAdm && !isSuperAdminRow;
     var activo = String(u.estado || 'ACTIVO').toUpperCase() === 'ACTIVO';
     h.push('<tr><td><code>'+esc(u.username || '')+'</code>'+(isMe?' <span class="badge b-ok">Tu</span>':'')+'</td><td>'+esc(u.nombre || '')+'<br><span style="font-size:10px;color:var(--muted)">'+esc(u.correo || '')+'</span></td><td><span class="role-badge">'+esc(u.rol || '')+'</span></td><td><span class="badge '+(activo?'b-ok':'b-gray')+'">'+(activo?'ACTIVO':'INACTIVO')+'</span></td><td>'+esc(u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString('es-CO') : '')+'</td><td style="white-space:nowrap">');
     if (canEditRow) h.push('<button class="btn btn-ghost btn-sm" onclick="editarUsuario(\''+u.id+'\')">Editar</button> ');
     if (canOperateRow) h.push('<button class="btn btn-ghost btn-sm" onclick="cambiarEstadoUsuario(\''+u.id+'\')">'+(activo?'Desactivar':'Activar')+'</button> ');
     if (canOperateRow) h.push('<button class="btn btn-ghost btn-sm" onclick="resetPasswordUsuario(\''+u.id+'\')">Clave</button> ');
-    if (isSA && !protectedRow && !isMe && u.username !== 'admin' && u.username !== 'administrador') h.push('<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="_eliminarUsuarioActivo(\''+u.id+'\')">Eliminar</button>');
+    if (canDeleteRow) h.push('<button class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="_eliminarUsuarioActivo(\''+u.id+'\')">Eliminar</button>');
     h.push('</td></tr>');
   });
   h.push('</tbody></table></div></div>');
