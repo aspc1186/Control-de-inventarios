@@ -636,6 +636,76 @@ mark{background:rgba(255,184,0,.3);color:var(--amber);border-radius:3px;padding:
   box-shadow:var(--shadow-lg),0 0 40px rgba(0,168,255,.08);
 }
 /* ── ANIMATIONS ──────────────────────────────────────── */
+/* Login layout: isolated from app themes */
+#login-view{
+  background:#edf3f8;
+  color:#0f172a;
+  min-height:100dvh;
+}
+#login-view .login-left{
+  display:flex;
+  width:50%;
+  min-width:460px;
+  height:100dvh;
+  padding:0;
+  flex:0 0 50%;
+}
+#login-view .login-left img{
+  width:100%;
+  height:100%;
+  object-fit:cover!important;
+  object-position:center!important;
+}
+#login-view .login-right{
+  width:50%;
+  min-height:100dvh;
+  flex:1;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:32px;
+  background:#edf3f8;
+}
+#login-view .login-right .card{
+  width:100%;
+  max-width:390px;
+  background:#ffffff!important;
+  color:#0f172a!important;
+  border:1px solid rgba(15,23,42,.08)!important;
+  border-radius:14px;
+  box-shadow:0 20px 50px rgba(15,23,42,.12);
+}
+#login-view .login-right h2{color:#0f172a!important}
+#login-view .login-right p,
+#login-view .login-right label,
+#login-view .login-right span{color:#64748b!important}
+#login-view .login-right input{
+  background:#f8fafc!important;
+  color:#0f172a!important;
+  border-color:#dbe5ef!important;
+}
+#login-view .login-right input::placeholder{color:#94a3b8}
+#login-view .login-right input:focus{
+  border-color:#0ea5e9!important;
+  box-shadow:0 0 0 3px rgba(14,165,233,.16)!important;
+}
+
+@media(max-width:900px){
+  #login-view{display:block;overflow:auto}
+  #login-view .login-left{
+    width:100%;
+    min-width:0;
+    height:38dvh;
+    min-height:220px;
+    flex:none;
+  }
+  #login-view .login-right{
+    width:100%;
+    min-height:auto;
+    padding:20px;
+  }
+  #login-view .login-right .card{max-width:440px}
+}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}
 to{opacity:1;transform:translateY(0)}}
@@ -645,10 +715,6 @@ to{opacity:1;transform:translateY(0)}}
 .glow-pulse{animation:glow-pulse 2s infinite}
 /* ── RESPONSIVE ──────────────────────────────────────── */
 
-.login-left{display:none}
-.login-right{width:100%}
-  
-}
 @media(max-width:480px){
   .kpi-row{grid-template-columns:1fr 1fr}
 .form-grid{grid-template-columns:1fr}
@@ -703,7 +769,6 @@ to{opacity:1;transform:translateY(0)}}
 
 /* app-view rule consolidated above */
 #hamburger-btn { display: none; }
- }
 
 @media (max-width: 768px) {
   #hamburger-btn { display: flex !important; }
@@ -771,9 +836,6 @@ to{opacity:1;transform:translateY(0)}}
         Ingresar al sistema
       </button>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:11px;color:var(--muted)">¿Cuenta bloqueada?</span><button onclick="abrirRecuperarPwd()" style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--electric);padding:0;text-decoration:underline">Recuperar acceso →</button></div>
-      <div style="background:rgba(0,168,255,.07);border:1px solid rgba(0,168,255,.2);border-radius:var(--r);padding:10px 12px;text-align:center">
-        <!-- credentials removed for security -->
-      </div>
     </div>
   </div>
 </div>
