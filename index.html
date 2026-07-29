@@ -1176,8 +1176,19 @@ function seed() {
     return !SYSTEM_IDS.includes(u.id) && u.es_sistema !== true;
   });
 
-  // Los usuarios del sistema SIEMPRE se recrean desde cero con datos correctos
-  var allUsers = SYSTEM_USERS.concat(customUsers);
+  // Los usuarios del sistema eliminables no deben reaparecer si el SA los borro.
+  var deletedUsersSeed = DB.get('usuarios_eliminados') || [];
+  var isDeletedSeed = function(u) {
+    return deletedUsersSeed.some(function(d){
+      return d && ((d.id && d.id === u.id) || (d.username && d.username === u.username));
+    });
+  };
+  var systemUsersToSeed = SYSTEM_USERS.filter(function(u) {
+    return u.rol === 'SUPER ADMINISTRADOR' || u.rol === 'ROOT' || !isDeletedSeed(u);
+  });
+
+  // Re-crear solo los usuarios sistema no eliminados; mantener usuarios creados por administradores.
+  var allUsers = systemUsersToSeed.concat(customUsers);
   DB.set('usuarios', allUsers);
 
   // Limpiar sesión si existe (puede estar corrupta)
@@ -1454,10 +1465,18 @@ function saveUsers(arr) {
 }
 function _mergeUsuariosFromAPI(rows) {
   var all = DB.get('usuarios') || [];
+  var deleted = DB.get('usuarios_eliminados') || [];
+  var isDeleted = function(u) {
+    if (!u) return false;
+    return deleted.some(function(d){
+      return d && ((d.id && u.id && d.id === u.id) || (d.username && u.username && d.username === u.username));
+    });
+  };
   var map = {};
-  all.forEach(function(u){ if (u && (u.username || u.id)) map[u.username || u.id] = u; });
+  all.forEach(function(u){ if (u && !isDeleted(u) && (u.username || u.id)) map[u.username || u.id] = u; });
   (rows || []).forEach(function(apiU){
     if (!apiU) return;
+    if (isDeleted(apiU) && apiU.rol !== 'SUPER ADMINISTRADOR') return;
     var key = apiU.username || apiU.id;
     var local = map[key] || {};
     map[key] = Object.assign({}, local, apiU, {
@@ -15995,6 +16014,15 @@ function _eliminarUsuarioActivo(id) {
   }
   var deletingSelf = (SESSION.user && SESSION.user.id) === id;
   if (!confirm('Eliminar usuario ' + (u.username || u.nombre || id) + '?')) return;
+  var deletedUsers = DB.get('usuarios_eliminados') || [];
+  deletedUsers.push({
+    id: u.id || id,
+    username: u.username || '',
+    rol: u.rol || '',
+    deleted_at: new Date().toISOString(),
+    deleted_by: SESSION.user && SESSION.user.username || ''
+  });
+  DB.set('usuarios_eliminados', deletedUsers);
   DB.set('usuarios', users.filter(function(x){ return x.id !== id; }));
   fetch('/api/usuarios?id=' + encodeURIComponent(id), { method:'DELETE' }).catch(function(){});
   auditLog('ELIMINAR_USUARIO', 'Usuario: ' + (u.username || id), SESSION.user && SESSION.user.nombre);
@@ -17370,7 +17398,7 @@ renders.compras = function() {
   var money = function(n){ return '$' + fmt(Math.round(Number(n||0))); };
   var h = [];
   h.push('<div style="max-width:1200px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px"><div><h2 style="font-size:18px;margin:0;color:var(--white)">Compras</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Reposicion, ordenes de compra, recepciones y soportes.</p></div><button class="btn btn-navy btn-sm" onclick="openNuevaOrdenCompra()">Nueva orden</button></div>');
-  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'+[['Para comprar',needBuy.length],['OC abiertas',ordenes.filter(function(o){return !/RECIBIDA|CERRADA|ANULADA/.test(String(o.estado||''));}).length],['Proveedores',provs.length],['Valor OC',money(ordenes.reduce(function(s,o){return s+_sfOcTotal(o);},0))]].map(function(k){ return '<div class="kpi"><span class="lbl">'+k[0]+'</span><span class="val">'+k[1]+'</span></div>'; }).join('')+'</div>');
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'+[['Para comprar',needBuy.length],['OC abiertas',ordenes.filter(function(o){return !/INGRESO|RECIBIDA|CERRADA|ANULADA/.test(String(o.estado||''));}).length],['Proveedores',provs.length],['Valor OC',money(ordenes.reduce(function(s,o){return s+_sfOcTotal(o);},0))]].map(function(k){ return '<div class="kpi"><span class="lbl">'+k[0]+'</span><span class="val">'+k[1]+'</span></div>'; }).join('')+'</div>');
   h.push('<div class="card" style="margin-bottom:14px"><p style="font-size:13px;font-weight:800;color:var(--white);margin-bottom:10px">Cantidades sugeridas para comprar</p><div class="tbl-overflow"><table><thead><tr><th>Codigo</th><th>Producto</th><th>Proveedor sugerido</th><th>Stock</th><th>Minimo</th><th>Compra</th><th>Reserva</th><th>Estado OC</th><th>Total estimado</th><th></th></tr></thead><tbody>');
   needBuy.slice(0,80).forEach(function(it){ var c=_sfItemCode(it), oc=_sfEstadoCompraProducto(c), q=_sfBuyQty(it), costo=Number(it.costo||it.costo_unitario||0); h.push('<tr><td><code>'+_sfEsc(c)+'</code></td><td>'+_sfEsc(it.nombre||it.descripcion||'')+'</td><td>'+_sfEsc(_sfProveedorSugerido(it))+'</td><td>'+fmt(_sfQty(it))+'</td><td>'+fmt(it.smin||it.stock_minimo||0)+'</td><td><strong>'+fmt(oc.compra||q)+'</strong></td><td>'+fmt(oc.reserva)+'</td><td>'+_sfEsc(oc.estado)+'</td><td>'+money((oc.compra||q)*costo)+'</td><td><button class="btn btn-ghost btn-sm" onclick="openNuevaOrdenCompra(&quot;'+_sfEsc(c)+'&quot;)">Crear OC</button></td></tr>'); });
   h.push('</tbody></table></div></div>');
@@ -17394,14 +17422,15 @@ function _sfPdfOC(id) {
 function _sfRecibirOC(id) {
   var o = _sfOrdenCompraPorId(id);
   if (!o) return showToast('Orden no encontrada', 'red');
-  openModal('<h3 style="margin-bottom:10px">Registrar entrada de compra</h3><p style="font-size:12px;color:var(--muted);margin-bottom:12px">OC '+_sfEsc(_sfOcDisplayNumber(o))+' - '+_sfEsc(o.proveedor||'')+'</p><div class="form-row"><label>Foto de factura/remision recibida</label><button class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-factura-oc&quot;).click()">Tomar foto / adjuntar</button><span id="sf-factura-label" style="font-size:11px;color:var(--muted);margin-left:8px">Sin soporte</span><input id="sf-factura-oc" type="file" accept="image/*" capture="environment" style="display:none" onchange="_sfReadFacturaOC(event)"><input id="sf-factura-data" type="hidden"></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_sfGuardarRecepcionOC(&quot;'+_sfEsc(o.id||o.numero)+'&quot;)">Confirmar entrada</button></div>', 'modal-lg');
+  openModal('<h3 style="margin-bottom:10px">Registrar entrada de compra</h3><p style="font-size:12px;color:var(--muted);margin-bottom:12px">OC '+_sfEsc(_sfOcDisplayNumber(o))+' - '+_sfEsc(o.proveedor||'')+'</p><div class="form-grid"><div class="form-row"><label>Foto de factura/remision recibida</label><button class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-factura-oc&quot;).click()">Tomar foto / adjuntar factura</button><span id="sf-factura-label" style="font-size:11px;color:var(--muted);margin-left:8px">Sin soporte</span><input id="sf-factura-oc" type="file" accept="image/*" capture="environment" style="display:none" onchange="_sfReadSoporteOC(event,&quot;sf-factura-data&quot;,&quot;sf-factura-label&quot;)"><input id="sf-factura-data" type="hidden"></div><div class="form-row"><label>Foto del producto recibido</label><button class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-producto-oc&quot;).click()">Tomar foto / adjuntar producto</button><span id="sf-producto-label" style="font-size:11px;color:var(--muted);margin-left:8px">Sin soporte</span><input id="sf-producto-oc" type="file" accept="image/*" capture="environment" style="display:none" onchange="_sfReadSoporteOC(event,&quot;sf-producto-data&quot;,&quot;sf-producto-label&quot;)"><input id="sf-producto-data" type="hidden"></div></div><div style="margin:10px 0;padding:10px;border:1px solid rgba(34,197,94,.25);background:rgba(34,197,94,.08);border-radius:8px;font-size:11px;color:var(--neon)">Al confirmar, el stock ingresara al inventario y la OC quedara cerrada con estado INGRESO.</div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_sfGuardarRecepcionOC(&quot;'+_sfEsc(o.id||o.numero)+'&quot;)">Confirmar ingreso</button></div>', 'modal-lg');
 }
-function _sfReadFacturaOC(ev) {
+function _sfReadSoporteOC(ev, inputId, labelId) {
   var f = ev.target.files && ev.target.files[0]; if (!f) return;
   var r = new FileReader();
-  r.onload = function(e){ var d=document.getElementById('sf-factura-data'), l=document.getElementById('sf-factura-label'); if(d)d.value=e.target.result; if(l)l.textContent='Soporte cargado'; };
+  r.onload = function(e){ var d=document.getElementById(inputId), l=document.getElementById(labelId); if(d)d.value=e.target.result; if(l)l.textContent='Soporte cargado'; };
   r.readAsDataURL(f);
 }
+function _sfReadFacturaOC(ev) { _sfReadSoporteOC(ev, 'sf-factura-data', 'sf-factura-label'); }
 function _sfGuardarRecepcionOC(id) {
   var compras = typeof loadCompras === 'function' ? loadCompras() : [];
   var idx = compras.findIndex(function(o){ return String(o.id||o.numero) === String(id); });
@@ -17409,15 +17438,24 @@ function _sfGuardarRecepcionOC(id) {
   var items = typeof loadItems === 'function' ? loadItems() : [];
   _sfOcItems(compras[idx]).forEach(function(l){
     var it = items.find(function(x){ return _sfItemCode(x) === String(l.sku); });
-    if (it) it.stock = Number(it.stock||0) + Number(l.cantidad||0);
+    if (it) {
+      it.stock = Number(it.stock||0) + Number(l.cantidad||0);
+      it.estado_oc = 'INGRESO';
+      it.ultima_oc = _sfOcDisplayNumber(compras[idx]);
+      it.fecha_ultimo_ingreso = new Date().toISOString();
+    }
   });
   if (typeof saveItems === 'function') saveItems(items);
-  compras[idx].estado = 'RECIBIDA';
+  compras[idx].estado = 'INGRESO';
+  compras[idx].estado_oc = 'INGRESO';
   compras[idx].fecha_recepcion = new Date().toISOString();
+  compras[idx].fecha_cierre = compras[idx].fecha_recepcion;
   compras[idx].factura_foto = (document.getElementById('sf-factura-data')||{value:''}).value;
+  compras[idx].producto_foto = (document.getElementById('sf-producto-data')||{value:''}).value;
+  compras[idx].cerrada = true;
   if (typeof saveCompras === 'function') saveCompras(compras);
   closeModal();
-  showToast('Entrada de compra registrada', 'green');
+  showToast('Ingreso registrado y OC cerrada', 'green');
   if (currentPage === 'compras') renders.compras();
 }
 
