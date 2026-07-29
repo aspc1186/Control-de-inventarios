@@ -17440,11 +17440,11 @@ function _sfRecibirOC(id) {
   h.push('<div class="form-row"><label>Estado al confirmar</label><input readonly value="INGRESO"></div></div>');
   h.push('<input id="sf-rec-oc-id" type="hidden" value="'+_sfEsc(o && (o.id || o.numero) || '')+'">');
   h.push('<div id="sf-rec-detalle" style="margin-top:10px"></div>');
-  h.push('<div class="form-grid" style="margin-top:10px"><div class="form-row"><label>Fotos de factura/remision</label><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-navy btn-sm" onclick="_sfAbrirCamaraOC(&quot;facturas&quot;)">Abrir camara</button><button class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-factura-oc&quot;).click()">Adjuntar fotos</button></div><span id="sf-factura-label" style="font-size:11px;color:var(--muted);display:block;margin-top:6px">0 fotos</span><input id="sf-factura-oc" type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="_sfReadSoportesOC(event,&quot;facturas&quot;)"><div id="sf-factura-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div></div>');
-  h.push('<div class="form-row"><label>Fotos del producto recibido</label><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-navy btn-sm" onclick="_sfAbrirCamaraOC(&quot;productos&quot;)">Abrir camara</button><button class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-producto-oc&quot;).click()">Adjuntar fotos</button></div><span id="sf-producto-label" style="font-size:11px;color:var(--muted);display:block;margin-top:6px">0 fotos</span><input id="sf-producto-oc" type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="_sfReadSoportesOC(event,&quot;productos&quot;)"><div id="sf-producto-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div></div></div>');
-  h.push('<div id="sf-rec-camera" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--border2);border-radius:10px;background:var(--card2)"><p id="sf-rec-camera-title" style="font-size:12px;font-weight:800;color:var(--white);margin-bottom:8px">Camara</p><video id="sf-rec-video" autoplay playsinline muted style="width:100%;max-height:280px;background:#000;border-radius:8px;object-fit:cover"></video><canvas id="sf-rec-canvas" style="display:none"></canvas><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn btn-navy btn-sm" onclick="_sfCapturarCamaraOC()">Tomar foto</button><button class="btn btn-ghost btn-sm" onclick="_sfCerrarCamaraOC()">Cerrar camara</button></div><p id="sf-rec-camera-msg" style="font-size:11px;color:var(--muted);margin-top:6px"></p></div>');
+  h.push('<div class="form-grid" style="margin-top:10px"><div class="form-row"><label>Fotos de factura/remision</label><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn btn-navy btn-sm" onclick="_sfAbrirCamaraOC(&quot;facturas&quot;);return false">Abrir camara</button><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-factura-oc&quot;).click();return false">Adjuntar fotos</button></div><span id="sf-factura-label" style="font-size:11px;color:var(--muted);display:block;margin-top:6px">0 fotos</span><input id="sf-factura-oc" type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="_sfReadSoportesOC(event,&quot;facturas&quot;)"><div id="sf-factura-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div></div>');
+  h.push('<div class="form-row"><label>Fotos del producto recibido</label><div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="btn btn-navy btn-sm" onclick="_sfAbrirCamaraOC(&quot;productos&quot;);return false">Abrir camara</button><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-producto-oc&quot;).click();return false">Adjuntar fotos</button></div><span id="sf-producto-label" style="font-size:11px;color:var(--muted);display:block;margin-top:6px">0 fotos</span><input id="sf-producto-oc" type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="_sfReadSoportesOC(event,&quot;productos&quot;)"><div id="sf-producto-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div></div></div>');
+  h.push('<div id="sf-rec-camera" style="display:none;margin-top:10px;padding:10px;border:1px solid var(--border2);border-radius:10px;background:var(--card2)"><p id="sf-rec-camera-title" style="font-size:12px;font-weight:800;color:var(--white);margin-bottom:8px">Camara</p><video id="sf-rec-video" autoplay playsinline muted style="width:100%;max-height:280px;background:#000;border-radius:8px;object-fit:cover"></video><canvas id="sf-rec-canvas" style="display:none"></canvas><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn btn-navy btn-sm" onclick="_sfCapturarCamaraOC();return false">Tomar foto</button><button type="button" class="btn btn-ghost btn-sm" onclick="_sfCerrarCamaraOC();return false">Cerrar camara</button></div><p id="sf-rec-camera-msg" style="font-size:11px;color:var(--muted);margin-top:6px"></p></div>');
   h.push('<div style="margin:10px 0;padding:10px;border:1px solid rgba(34,197,94,.25);background:rgba(34,197,94,.08);border-radius:8px;font-size:11px;color:var(--neon)">Puedes editar proveedor, fecha, codigos, productos, cantidades y costos antes de confirmar. Al confirmar, el stock ingresara al inventario y la OC quedara cerrada como INGRESO.</div>');
-  h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_sfGuardarRecepcionOC()">Confirmar ingreso</button></div>');
+  h.push('<div class="modal-actions"><button type="button" class="btn btn-ghost" onclick="_sfCerrarCamaraOC();closeModal();return false">Cancelar</button><button type="button" class="btn btn-navy" onclick="_sfGuardarRecepcionOC();return false">Confirmar ingreso</button></div>');
   openModal(h.join(''), 'modal-lg');
   setTimeout(function(){ if (o) _sfRenderRecepcionOC(o); else _sfBuscarRecepcionOC(); }, 0);
 }
@@ -17497,14 +17497,14 @@ function _sfComprimirImagenOC(fileOrData, ok, fail) {
   var finish = function(src) {
     var img = new Image();
     img.onload = function(){
-      var max = 900;
+      var max = 720;
       var scale = Math.min(1, max / Math.max(img.width || max, img.height || max));
       var canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round((img.width || max) * scale));
       canvas.height = Math.max(1, Math.round((img.height || max) * scale));
       var ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      ok(canvas.toDataURL('image/jpeg', 0.62));
+      ok(canvas.toDataURL('image/jpeg', 0.5));
     };
     img.onerror = fail || function(){};
     img.src = src;
@@ -17516,6 +17516,7 @@ function _sfComprimirImagenOC(fileOrData, ok, fail) {
   r.readAsDataURL(fileOrData);
 }
 function _sfAbrirCamaraOC(tipo) {
+  if (window._sfCamaraRecepcionStream) _sfCerrarCamaraOC(true);
   window._sfCamaraRecepcionTipo = tipo === 'productos' ? 'productos' : 'facturas';
   var wrap = document.getElementById('sf-rec-camera');
   var video = document.getElementById('sf-rec-video');
@@ -17528,7 +17529,6 @@ function _sfAbrirCamaraOC(tipo) {
     if (msg) msg.textContent = 'Camara no soportada en este navegador. Usa Adjuntar fotos.';
     return;
   }
-  if (window._sfCamaraRecepcionStream) _sfCerrarCamaraOC();
   navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ ideal:'environment' } }, audio:false })
     .then(function(stream){
       window._sfCamaraRecepcionStream = stream;
@@ -17557,7 +17557,7 @@ function _sfCapturarCamaraOC() {
     showToast('Foto agregada', 'green');
   }, function(){ showToast('No se pudo capturar la foto', 'red'); });
 }
-function _sfCerrarCamaraOC() {
+function _sfCerrarCamaraOC(keepPanel) {
   if (window._sfCamaraRecepcionStream) {
     window._sfCamaraRecepcionStream.getTracks().forEach(function(t){ try { t.stop(); } catch(e){} });
     window._sfCamaraRecepcionStream = null;
@@ -17565,7 +17565,7 @@ function _sfCerrarCamaraOC() {
   var video = document.getElementById('sf-rec-video');
   if (video) video.srcObject = null;
   var wrap = document.getElementById('sf-rec-camera');
-  if (wrap) wrap.style.display = 'none';
+  if (wrap && !keepPanel) wrap.style.display = 'none';
 }
 function _sfRenderFotosRecepcion() {
   var fotos = window._sfRecepcionFotosOC || { facturas:[], productos:[] };
@@ -17582,6 +17582,38 @@ function _sfReadSoporteOC(ev, inputId, labelId) {
   _sfReadSoportesOC(ev, tipo);
 }
 function _sfReadFacturaOC(ev) { _sfReadSoportesOC(ev, 'facturas'); }
+function _sfCrearItemDesdeIngreso(linea, oc) {
+  var sku = String(linea.sku || '').trim();
+  var nombre = String(linea.nombre || linea.articulo || sku || 'Referencia ingresada').trim();
+  var eid = typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : null;
+  return {
+    id: sku || uid(),
+    sku: sku,
+    codigo: sku,
+    nombre: nombre,
+    descripcion: nombre,
+    unidad: 'UND',
+    ubicacion: linea.ubicacion || '',
+    stock: 0,
+    stock_reservado: 0,
+    costo: Number(linea.costo || 0),
+    proveedor: oc && oc.proveedor || '',
+    estado: 'DISPONIBLE',
+    estado_oc: 'INGRESO',
+    ultima_oc: oc ? _sfOcDisplayNumber(oc) : '',
+    empresa_id: eid,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+}
+function _sfRefreshPostIngreso() {
+  if (typeof _KPI_invalidar === 'function') _KPI_invalidar();
+  window._dashCloudLoaded = true;
+  window._comprasCloudLoaded = true;
+  if (currentPage === 'compras' && renders.compras) renders.compras();
+  if (currentPage === 'inventario' && typeof _buildInventarioUI === 'function') _buildInventarioUI(_invItems || loadItems());
+  if (currentPage === 'dashboard' && typeof _renderDashboardUnico === 'function') _renderDashboardUnico();
+}
 function _sfGuardarRecepcionOC(id) {
   var btn = null;
   try {
@@ -17606,17 +17638,40 @@ function _sfGuardarRecepcionOC(id) {
     }
     if (!editedLines.length) { if (btn) { btn.disabled = false; btn.textContent = 'Confirmar ingreso'; } return showToast('La OC no tiene productos para ingresar', 'red'); }
     var items = typeof loadItems === 'function' ? loadItems() : [];
+    var movs = typeof loadMovs === 'function' ? loadMovs() : [];
+    var fechaIngreso = new Date().toISOString();
     editedLines.forEach(function(l){
       var it = items.find(function(x){ return _sfItemCode(x) === String(l.sku); });
-      if (it) {
-        it.stock = Number(it.stock||0) + Number(l.cantidad||0);
-        if (l.ubicacion) it.ubicacion = l.ubicacion;
-        it.estado_oc = 'INGRESO';
-        it.ultima_oc = _sfOcDisplayNumber(compras[idx]);
-        it.fecha_ultimo_ingreso = new Date().toISOString();
+      if (!it) {
+        it = _sfCrearItemDesdeIngreso(l, compras[idx]);
+        items.push(it);
       }
+      it.stock = Number(it.stock||0) + Number(l.cantidad||0);
+      if (l.ubicacion) it.ubicacion = l.ubicacion;
+      if (l.costo) it.costo = Number(l.costo || 0);
+      it.estado = Number(it.stock || 0) > 0 ? 'DISPONIBLE' : (it.estado || 'DISPONIBLE');
+      it.estado_oc = 'INGRESO';
+      it.ultima_oc = _sfOcDisplayNumber(compras[idx]);
+      it.fecha_ultimo_ingreso = fechaIngreso;
+      it.updated_at = fechaIngreso;
+      movs.unshift({
+        id: uid(),
+        fecha: new Date().toLocaleDateString('es-CO'),
+        ts: Date.now(),
+        tipo: 'ENTRADA',
+        sku: l.sku,
+        articulo: l.nombre,
+        cantidad: Number(l.cantidad || 0),
+        costo: Number(l.costo || 0),
+        proveedor: (document.getElementById('sf-rec-proveedor') || {value:compras[idx].proveedor||''}).value,
+        factura: _sfOcDisplayNumber(compras[idx]),
+        observacion: 'Ingreso por OC ' + _sfOcDisplayNumber(compras[idx]),
+        usuario: SESSION.user && SESSION.user.nombre || 'Sistema',
+        empresa_id: typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : null
+      });
     });
     if (typeof saveItems === 'function') saveItems(items);
+    if (typeof saveMovs === 'function') saveMovs(movs);
     _invItems = items;
     compras[idx].items = editedLines;
     compras[idx].proveedor = (document.getElementById('sf-rec-proveedor') || {value:compras[idx].proveedor||''}).value;
@@ -17634,14 +17689,10 @@ function _sfGuardarRecepcionOC(id) {
     compras[idx].producto_foto = compras[idx].producto_fotos[0] && compras[idx].producto_fotos[0].data || '';
     compras[idx].cerrada = true;
     if (typeof saveCompras === 'function') saveCompras(compras);
-    if (typeof _KPI_invalidar === 'function') _KPI_invalidar();
-    window._dashCloudLoaded = false;
-    window._comprasCloudLoaded = true;
     _sfCerrarCamaraOC();
     closeModal();
     showToast('Ingreso registrado y OC cerrada', 'green');
-    if (currentPage === 'compras') renders.compras();
-    if (currentPage === 'inventario' && typeof _buildInventarioUI === 'function') _buildInventarioUI(_invItems || loadItems());
+    _sfRefreshPostIngreso();
   } catch(err) {
     console.error('[SF] Error guardando recepcion OC:', err);
     if (btn) { btn.disabled = false; btn.textContent = 'Confirmar ingreso'; }
