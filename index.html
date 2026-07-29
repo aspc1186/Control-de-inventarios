@@ -17855,6 +17855,327 @@ goto = function(page, param) {
   return _sfGotoFinal ? _sfGotoFinal(page, param) : undefined;
 };
 
+/* Modo soporte SA: contexto temporal de empresa cliente y auditoria de datos */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+
+  function _supportIsSA() {
+    return !!(SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR');
+  }
+  function _supportEsc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function _supportGetEmpresaId() {
+    try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) { return ''; }
+  }
+  function _supportSetEmpresaId(empId) {
+    try {
+      if (empId) sessionStorage.setItem(SUPPORT_KEY, empId);
+      else sessionStorage.removeItem(SUPPORT_KEY);
+    } catch(e) {}
+  }
+  function _supportEmpresa() {
+    var empId = _supportGetEmpresaId();
+    return (typeof loadEmpresas === 'function' ? loadEmpresas() : []).find(function(e){ return e.id === empId; }) || null;
+  }
+  function _supportScopedRows(key, empId) {
+    var all = DB.get(key) || [];
+    if (!Array.isArray(all)) return [];
+    return empId ? all.filter(function(r){ return r && r.empresa_id === empId; }) : all;
+  }
+  function _supportAuditRows(empId) {
+    return [
+      {key:'articulos',    name:'Inventario',  field:'sku',    alt:'codigo', required:['sku','codigo','nombre']},
+      {key:'proveedores',  name:'Proveedores', field:'nit',    alt:'id',     required:['nit','razon_social','nombre']},
+      {key:'clientes',     name:'Clientes',    field:'nit',    alt:'id',     required:['nit','razon_social','nombre']},
+      {key:'pedidos',      name:'Pedidos',     field:'numero', alt:'id',     required:['cliente','lineas']},
+      {key:'compras',      name:'Compras/OC',  field:'numero', alt:'id',     required:['numero','proveedor','items']},
+      {key:'bodegas',      name:'Bodegas',     field:'codigo', alt:'id',     required:['codigo','nombre']},
+      {key:'ubicaciones',  name:'Ubicaciones', field:'codigo', alt:'id',     required:['codigo','nombre']},
+      {key:'movimientos',  name:'WMS/Movs.',   field:'id',     alt:'sku',    required:['tipo','cantidad']}
+    ].map(function(def){
+      var rows = _supportScopedRows(def.key, empId);
+      var seen = {};
+      var dups = 0;
+      var missing = 0;
+      rows.forEach(function(r){
+        var k = String((r && (r[def.field] || r[def.alt] || r.id)) || '').trim().toUpperCase();
+        if (k) {
+          if (seen[k]) dups++;
+          seen[k] = true;
+        }
+        var ok = def.required.some(function(f){
+          if (f === 'lineas' || f === 'items') return Array.isArray(r && r[f]) && r[f].length > 0;
+          return !!(r && r[f]);
+        });
+        if (!ok) missing++;
+      });
+      return Object.assign({}, def, {count:rows.length, dups:dups, missing:missing});
+    });
+  }
+  function _supportStatusBadge(row) {
+    if (row.dups || row.missing) return '<span class="badge" style="background:rgba(245,158,11,.16);color:var(--amber)">Revisar</span>';
+    return '<span class="badge" style="background:rgba(34,197,94,.16);color:var(--neon)">OK</span>';
+  }
+  function _supportEnsureModule() {
+    if (typeof PAGE_TITLES !== 'undefined') PAGE_TITLES.soporte = 'Modo soporte SA';
+    if (typeof PERMISOS !== 'undefined' && Array.isArray(PERMISOS['SUPER ADMINISTRADOR']) && PERMISOS['SUPER ADMINISTRADOR'].indexOf('soporte') < 0) {
+      PERMISOS['SUPER ADMINISTRADOR'].push('soporte');
+    }
+    if (typeof ACCIONES !== 'undefined' && ACCIONES.ROOT && Array.isArray(ACCIONES.ROOT.modulos) && ACCIONES.ROOT.modulos.indexOf('soporte') < 0) {
+      ACCIONES.ROOT.modulos.push('soporte');
+    }
+    var nav = document.getElementById('main-nav');
+    if (nav && !document.getElementById('nav-soporte')) {
+      var a = document.createElement('a');
+      a.id = 'nav-soporte';
+      a.style.display = 'none';
+      a.setAttribute('onclick', "goto('soporte')");
+      a.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>Modo soporte SA';
+      var ref = document.getElementById('nav-empresas');
+      if (ref && ref.parentNode) ref.parentNode.insertBefore(a, ref);
+      else nav.appendChild(a);
+    }
+    var inner = document.querySelector('.page-inner');
+    if (inner && !document.getElementById('pg-soporte')) {
+      var pg = document.createElement('div');
+      pg.id = 'pg-soporte';
+      pg.style.display = 'none';
+      inner.appendChild(pg);
+    }
+  }
+  function _supportRenderBanner() {
+    if (!_supportIsSA()) return;
+    var emp = _supportEmpresa();
+    var old = document.getElementById('sf-support-banner');
+    if (!emp) { if (old) old.remove(); return; }
+    var topbar = document.getElementById('topbar');
+    if (!topbar) return;
+    if (!old) {
+      old = document.createElement('div');
+      old.id = 'sf-support-banner';
+      old.style.cssText = 'position:sticky;top:0;z-index:20;margin:0 0 8px;padding:8px 12px;border:1px solid rgba(139,92,246,.35);border-radius:10px;background:rgba(139,92,246,.12);color:var(--text);display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12px';
+      topbar.parentNode.insertBefore(old, topbar.nextSibling);
+    }
+    old.innerHTML = '<strong>Modo soporte activo:</strong> '+_supportEsc(emp.nombre)+' <button class="btn btn-ghost btn-sm" onclick="_cerrarModoSoporte()">Salir</button>';
+  }
+
+  var _baseGetEmpresaId = typeof _getEmpresaId === 'function' ? _getEmpresaId : null;
+  _getEmpresaId = function() {
+    if (_supportIsSA()) {
+      var empId = _supportGetEmpresaId();
+      if (empId) return empId;
+    }
+    return _baseGetEmpresaId ? _baseGetEmpresaId() : null;
+  };
+
+  var _baseLoadUsers = typeof loadUsers === 'function' ? loadUsers : null;
+  loadUsers = function() {
+    if (_supportIsSA()) {
+      var empId = _supportGetEmpresaId();
+      var all = DB.get('usuarios') || [];
+      if (empId) return all.filter(function(u){ return u && u.empresa_id === empId; });
+      return all.filter(function(u){ return u && !u.empresa_id; });
+    }
+    return _baseLoadUsers ? _baseLoadUsers() : [];
+  };
+
+  var _baseSaveUsers = typeof saveUsers === 'function' ? saveUsers : null;
+  saveUsers = function(arr) {
+    if (_supportIsSA() && _supportGetEmpresaId()) {
+      var empId = _supportGetEmpresaId();
+      var all = DB.get('usuarios') || [];
+      var other = all.filter(function(u){ return !u || u.empresa_id !== empId; });
+      var mine = (arr || []).map(function(u){ return Object.assign({}, u, {empresa_id: empId}); });
+      DB.set('usuarios', other.concat(mine));
+      return;
+    }
+    if (_baseSaveUsers) return _baseSaveUsers(arr);
+    DB.set('usuarios', arr || []);
+  };
+
+  var _baseSaveProveedores = typeof saveProveedores === 'function' ? saveProveedores : null;
+  saveProveedores = function(arr) {
+    var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+    if (eid && eid !== '__SA__') {
+      var all = DB.get('proveedores') || [];
+      var other = all.filter(function(p){ return !p || p.empresa_id !== eid; });
+      var mine = (arr || []).map(function(p){ return Object.assign({}, p, {empresa_id:eid}); });
+      DB.set('proveedores', other.concat(mine));
+      return;
+    }
+    if (_baseSaveProveedores) return _baseSaveProveedores(arr);
+    DB.set('proveedores', arr || []);
+  };
+
+  window._abrirModoSoporte = function(empId) {
+    if (!_supportIsSA()) { showToast('Solo el Super Administrador puede abrir soporte', 'red'); return; }
+    _supportSetEmpresaId(empId || '');
+    var emp = _supportEmpresa();
+    try { auditLog('MODO_SOPORTE_ABIERTO', 'Empresa: ' + (emp ? emp.nombre : empId), SESSION.user && SESSION.user.nombre); } catch(e) {}
+    _supportEnsureModule();
+    _supportRenderBanner();
+    goto('soporte');
+  };
+  window._cerrarModoSoporte = function() {
+    var emp = _supportEmpresa();
+    _supportSetEmpresaId('');
+    try { auditLog('MODO_SOPORTE_CERRADO', 'Empresa: ' + (emp ? emp.nombre : ''), SESSION.user && SESSION.user.nombre); } catch(e) {}
+    _supportRenderBanner();
+    showToast('Modo soporte cerrado', 'green');
+    if (currentPage === 'soporte') goto('empresas');
+    else if (typeof renders[currentPage] === 'function') renders[currentPage]();
+  };
+  window._soporteSeleccionEmpresa = function() {
+    _supportSetEmpresaId((document.getElementById('soporte-empresa') || {value:''}).value);
+    _supportRenderBanner();
+    renders.soporte();
+  };
+  window._soporteAbrirModulo = function(page) {
+    if (!_supportGetEmpresaId()) { showToast('Selecciona una empresa cliente primero', 'amber'); return; }
+    goto(page);
+  };
+  window._soporteCrearBackup = function() {
+    var stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    var backup = {
+      empresa_id:_supportGetEmpresaId(),
+      created_at:new Date().toISOString(),
+      articulos:DB.get('articulos')||[],
+      proveedores:DB.get('proveedores')||[],
+      clientes:DB.get('clientes')||[],
+      pedidos:DB.get('pedidos')||[],
+      compras:DB.get('compras')||[],
+      bodegas:DB.get('bodegas')||[],
+      ubicaciones:DB.get('ubicaciones')||[],
+      movimientos:DB.get('movimientos')||[],
+      usuarios:DB.get('usuarios')||[]
+    };
+    DB.set('soporte_backup_' + stamp, backup);
+    showToast('Respaldo local creado', 'green');
+  };
+  window._soporteRepararDuplicados = function() {
+    var empId = _supportGetEmpresaId();
+    if (!empId) { showToast('Selecciona una empresa cliente primero', 'amber'); return; }
+    if (!confirm('Se creara un respaldo local y se compactaran duplicados de la empresa seleccionada. Continuar?')) return;
+    _soporteCrearBackup();
+    var defs = _supportAuditRows(empId);
+    var totalRemoved = 0;
+    defs.forEach(function(def){
+      var all = DB.get(def.key) || [];
+      if (!Array.isArray(all)) return;
+      var seen = {};
+      var cleaned = [];
+      all.forEach(function(r){
+        if (!r || r.empresa_id !== empId) { cleaned.push(r); return; }
+        var key = String(r[def.field] || r[def.alt] || r.id || '').trim().toUpperCase();
+        if (!key) {
+          r.id = r.id || uid();
+          cleaned.push(r);
+          return;
+        }
+        if (seen[key]) { totalRemoved++; return; }
+        seen[key] = true;
+        cleaned.push(r);
+      });
+      DB.set(def.key, cleaned);
+    });
+    try { auditLog('SOPORTE_REPARACION', 'Duplicados removidos: ' + totalRemoved, SESSION.user && SESSION.user.nombre); } catch(e) {}
+    showToast('Auditoria aplicada. Duplicados removidos: ' + totalRemoved, totalRemoved ? 'amber' : 'green');
+    renders.soporte();
+  };
+
+  renders.soporte = function() {
+    _supportEnsureModule();
+    var pg = document.getElementById('pg-soporte');
+    if (!pg) return;
+    if (!_supportIsSA()) { goto('dashboard'); return; }
+    var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    var empId = _supportGetEmpresaId();
+    var emp = empresas.find(function(e){ return e.id === empId; }) || null;
+    var rows = _supportAuditRows(empId);
+    var issues = rows.reduce(function(s,r){ return s + r.dups + r.missing; }, 0);
+    var modules = [
+      ['inventario','Inventario'],['compras','Compras'],['proveedores','Proveedores'],['clientes','Clientes'],
+      ['pedidos','Pedidos'],['comercial','Comercial'],['logistica','Logistica WMS'],['ubicaciones','Bodegas'],
+      ['generar-qr','QR'],['escaner','Escaner'],['usuarios','Usuarios']
+    ];
+    var h = [];
+    h.push('<div style="max-width:1200px;margin:0 auto;padding:16px">');
+    h.push('<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:14px"><div><h2 style="font-size:20px;margin:0;color:var(--white)">Modo de soporte de superadministrador</h2><p style="font-size:12px;color:var(--muted);margin:4px 0 0">Corrige errores de modulos por empresa cliente con contexto aislado y respaldo previo.</p></div><button class="btn btn-ghost btn-sm" onclick="_cerrarModoSoporte()">Cerrar soporte</button></div>');
+    h.push('<div class="card" style="margin-bottom:12px"><div class="form-grid"><div class="form-row"><label>Empresa cliente</label><select id="soporte-empresa" onchange="_soporteSeleccionEmpresa()">');
+    h.push('<option value="">Seleccionar empresa...</option>');
+    empresas.forEach(function(e){ h.push('<option value="'+_supportEsc(e.id)+'" '+(e.id===empId?'selected':'')+'>'+_supportEsc(e.nombre)+' - '+_supportEsc(e.plan||'')+'</option>'); });
+    h.push('</select></div><div class="form-row"><label>Contexto activo</label><input readonly value="'+_supportEsc(emp ? emp.nombre : 'Sin empresa seleccionada')+'"></div></div>');
+    if (emp) {
+      h.push('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-navy btn-sm" onclick="_soporteCrearBackup()">Crear respaldo local</button><button class="btn btn-ghost btn-sm" onclick="_soporteRepararDuplicados()">Reparar duplicados</button><button class="btn btn-ghost btn-sm" onclick="_editarEmpresa(&quot;'+_supportEsc(emp.id)+'&quot;)">Editar empresa</button><button class="btn btn-ghost btn-sm" onclick="_cambiarPwdEmpresa(&quot;'+_supportEsc(emp.id)+'&quot;)">Cambiar clave admin</button></div>');
+    }
+    h.push('</div>');
+    h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px">');
+    [['Empresa', emp ? emp.nombre : 'No seleccionada'],['Modulos auditados', rows.length],['Hallazgos', issues],['Usuarios cliente', _supportScopedRows('usuarios', empId).length]].forEach(function(k){
+      h.push('<div class="kpi"><span class="lbl">'+_supportEsc(k[0])+'</span><span class="val">'+_supportEsc(k[1])+'</span></div>');
+    });
+    h.push('</div>');
+    h.push('<div class="card" style="margin-bottom:12px"><h3 style="font-size:14px;margin-bottom:10px;color:var(--white)">Abrir modulos del cliente</h3><div style="display:flex;gap:8px;flex-wrap:wrap">');
+    modules.forEach(function(m){ h.push('<button class="btn btn-ghost btn-sm" onclick="_soporteAbrirModulo(&quot;'+m[0]+'&quot;)">'+_supportEsc(m[1])+'</button>'); });
+    h.push('</div></div>');
+    h.push('<div class="card"><h3 style="font-size:14px;margin-bottom:10px;color:var(--white)">Auditoria rapida por modulo</h3><div class="tbl-overflow"><table><thead><tr><th>Modulo</th><th>Registros</th><th>Duplicados</th><th>Campos faltantes</th><th>Estado</th></tr></thead><tbody>');
+    rows.forEach(function(r){
+      h.push('<tr><td>'+_supportEsc(r.name)+'</td><td>'+r.count+'</td><td>'+r.dups+'</td><td>'+r.missing+'</td><td>'+_supportStatusBadge(r)+'</td></tr>');
+    });
+    h.push('</tbody></table></div></div></div>');
+    pg.innerHTML = h.join('');
+    _supportRenderBanner();
+  };
+
+  var _supportApplyPlanUI = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function() {
+    _supportEnsureModule();
+    if (_supportApplyPlanUI) _supportApplyPlanUI();
+    var isSA = _supportIsSA();
+    var nav = document.getElementById('nav-soporte');
+    if (nav) nav.style.display = isSA ? '' : 'none';
+    var adminSec = document.getElementById('nav-sec-admin');
+    if (adminSec && isSA) adminSec.style.display = '';
+    _supportRenderBanner();
+  };
+
+  var _supportGetMods = typeof getModulosDisponibles === 'function' ? getModulosDisponibles : null;
+  getModulosDisponibles = function() {
+    var mods = _supportGetMods ? _supportGetMods() : [];
+    if (_supportIsSA() && mods.indexOf('soporte') < 0) mods.push('soporte');
+    return mods;
+  };
+
+  var _supportGoto = typeof goto === 'function' ? goto : null;
+  goto = function(page, param) {
+    _supportEnsureModule();
+    return _supportGoto ? _supportGoto(page, param) : undefined;
+  };
+
+  var _supportEmpresasRender = renders.empresas;
+  renders.empresas = function() {
+    _supportEmpresasRender();
+    if (!_supportIsSA()) return;
+    setTimeout(function(){
+      var cards = document.querySelectorAll('#pg-empresas .card');
+      var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+      cards.forEach(function(card, idx){
+        var emp = empresas[idx];
+        if (!emp || card.querySelector('[data-support-btn="'+emp.id+'"]')) return;
+        var bar = document.createElement('div');
+        bar.style.cssText = 'margin-top:6px';
+        bar.innerHTML = '<button data-support-btn="'+_supportEsc(emp.id)+'" class="btn btn-navy btn-sm" style="width:100%;font-size:11px" onclick="_abrirModoSoporte(&quot;'+_supportEsc(emp.id)+'&quot;)">Abrir modo soporte</button>';
+        card.appendChild(bar);
+      });
+    }, 0);
+  };
+
+  window._supportEnsureModule = _supportEnsureModule;
+  _supportEnsureModule();
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
