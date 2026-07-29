@@ -17365,7 +17365,16 @@ function _sfOcDisplayNumber(o) {
 }
 function _sfOcTotal(o) { return Number(o.total || _sfOcItems(o).reduce(function(s,l){ return s + Number(l.total || Number(l.cantidad||0)*Number(l.costo||0)); },0)); }
 function _sfOrdenCompraPorId(id) {
-  return (typeof loadCompras === 'function' ? loadCompras() : []).find(function(o){ return String(o.id||o.numero) === String(id); });
+  var needle = String(id || '').trim();
+  if (!needle) return null;
+  var needleDigits = needle.replace(/\D/g, '');
+  return (typeof loadCompras === 'function' ? loadCompras() : []).find(function(o){
+    var vals = [o.id, o.numero, o.numero_full, _sfOcDisplayNumber(o)].map(function(v){ return String(v || '').trim(); });
+    return vals.some(function(v){
+      return v === needle || v.toUpperCase() === needle.toUpperCase() ||
+        (needleDigits && v.replace(/\D/g, '') === needleDigits);
+    });
+  }) || null;
 }
 function _sfEstadoCompraProducto(code) {
   var ocs = typeof loadCompras === 'function' ? loadCompras() : [];
@@ -17397,7 +17406,7 @@ renders.compras = function() {
   var fmt = function(n){ return Number(n||0).toLocaleString('es-CO'); };
   var money = function(n){ return '$' + fmt(Math.round(Number(n||0))); };
   var h = [];
-  h.push('<div style="max-width:1200px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px"><div><h2 style="font-size:18px;margin:0;color:var(--white)">Compras</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Reposicion, ordenes de compra, recepciones y soportes.</p></div><button class="btn btn-navy btn-sm" onclick="openNuevaOrdenCompra()">Nueva orden</button></div>');
+  h.push('<div style="max-width:1200px;margin:0 auto;padding:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px"><div><h2 style="font-size:18px;margin:0;color:var(--white)">Compras</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Reposicion, ordenes de compra, recepciones y soportes.</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="_sfRecibirOC()">Registrar entrada</button><button class="btn btn-navy btn-sm" onclick="openNuevaOrdenCompra()">Nueva orden</button></div></div>');
   h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px">'+[['Para comprar',needBuy.length],['OC abiertas',ordenes.filter(function(o){return !/INGRESO|RECIBIDA|CERRADA|ANULADA/.test(String(o.estado||''));}).length],['Proveedores',provs.length],['Valor OC',money(ordenes.reduce(function(s,o){return s+_sfOcTotal(o);},0))]].map(function(k){ return '<div class="kpi"><span class="lbl">'+k[0]+'</span><span class="val">'+k[1]+'</span></div>'; }).join('')+'</div>');
   h.push('<div class="card" style="margin-bottom:14px"><p style="font-size:13px;font-weight:800;color:var(--white);margin-bottom:10px">Cantidades sugeridas para comprar</p><div class="tbl-overflow"><table><thead><tr><th>Codigo</th><th>Producto</th><th>Proveedor sugerido</th><th>Stock</th><th>Minimo</th><th>Compra</th><th>Reserva</th><th>Estado OC</th><th>Total estimado</th><th></th></tr></thead><tbody>');
   needBuy.slice(0,80).forEach(function(it){ var c=_sfItemCode(it), oc=_sfEstadoCompraProducto(c), q=_sfBuyQty(it), costo=Number(it.costo||it.costo_unitario||0); h.push('<tr><td><code>'+_sfEsc(c)+'</code></td><td>'+_sfEsc(it.nombre||it.descripcion||'')+'</td><td>'+_sfEsc(_sfProveedorSugerido(it))+'</td><td>'+fmt(_sfQty(it))+'</td><td>'+fmt(it.smin||it.stock_minimo||0)+'</td><td><strong>'+fmt(oc.compra||q)+'</strong></td><td>'+fmt(oc.reserva)+'</td><td>'+_sfEsc(oc.estado)+'</td><td>'+money((oc.compra||q)*costo)+'</td><td><button class="btn btn-ghost btn-sm" onclick="openNuevaOrdenCompra(&quot;'+_sfEsc(c)+'&quot;)">Crear OC</button></td></tr>'); });
@@ -17420,38 +17429,124 @@ function _sfPdfOC(id) {
   w.document.close();
 }
 function _sfRecibirOC(id) {
-  var o = _sfOrdenCompraPorId(id);
-  if (!o) return showToast('Orden no encontrada', 'red');
-  openModal('<h3 style="margin-bottom:10px">Registrar entrada de compra</h3><p style="font-size:12px;color:var(--muted);margin-bottom:12px">OC '+_sfEsc(_sfOcDisplayNumber(o))+' - '+_sfEsc(o.proveedor||'')+'</p><div class="form-grid"><div class="form-row"><label>Foto de factura/remision recibida</label><button class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-factura-oc&quot;).click()">Tomar foto / adjuntar factura</button><span id="sf-factura-label" style="font-size:11px;color:var(--muted);margin-left:8px">Sin soporte</span><input id="sf-factura-oc" type="file" accept="image/*" capture="environment" style="display:none" onchange="_sfReadSoporteOC(event,&quot;sf-factura-data&quot;,&quot;sf-factura-label&quot;)"><input id="sf-factura-data" type="hidden"></div><div class="form-row"><label>Foto del producto recibido</label><button class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-producto-oc&quot;).click()">Tomar foto / adjuntar producto</button><span id="sf-producto-label" style="font-size:11px;color:var(--muted);margin-left:8px">Sin soporte</span><input id="sf-producto-oc" type="file" accept="image/*" capture="environment" style="display:none" onchange="_sfReadSoporteOC(event,&quot;sf-producto-data&quot;,&quot;sf-producto-label&quot;)"><input id="sf-producto-data" type="hidden"></div></div><div style="margin:10px 0;padding:10px;border:1px solid rgba(34,197,94,.25);background:rgba(34,197,94,.08);border-radius:8px;font-size:11px;color:var(--neon)">Al confirmar, el stock ingresara al inventario y la OC quedara cerrada con estado INGRESO.</div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_sfGuardarRecepcionOC(&quot;'+_sfEsc(o.id||o.numero)+'&quot;)">Confirmar ingreso</button></div>', 'modal-lg');
+  var o = id ? _sfOrdenCompraPorId(id) : null;
+  if (id && !o) return showToast('Orden no encontrada', 'red');
+  window._sfRecepcionFotosOC = { facturas:[], productos:[] };
+  var ocVal = o ? _sfOcDisplayNumber(o) : '';
+  var h = [];
+  h.push('<h3 style="margin-bottom:10px">Registrar entrada de compra</h3>');
+  h.push('<div class="form-grid"><div class="form-row"><label>Numero de OC</label><input id="sf-rec-oc" value="'+_sfEsc(ocVal)+'" placeholder="Ej: 00001, OC-20260729-00001 o id" oninput="_sfBuscarRecepcionOC()"></div>');
+  h.push('<div class="form-row"><label>Estado al confirmar</label><input readonly value="INGRESO"></div></div>');
+  h.push('<input id="sf-rec-oc-id" type="hidden" value="'+_sfEsc(o && (o.id || o.numero) || '')+'">');
+  h.push('<div id="sf-rec-detalle" style="margin-top:10px"></div>');
+  h.push('<div class="form-grid" style="margin-top:10px"><div class="form-row"><label>Fotos de factura/remision</label><button class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-factura-oc&quot;).click()">Tomar/agregar fotos</button><span id="sf-factura-label" style="font-size:11px;color:var(--muted);margin-left:8px">0 fotos</span><input id="sf-factura-oc" type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="_sfReadSoportesOC(event,&quot;facturas&quot;)"><div id="sf-factura-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div></div>');
+  h.push('<div class="form-row"><label>Fotos del producto recibido</label><button class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;sf-producto-oc&quot;).click()">Tomar/agregar fotos</button><span id="sf-producto-label" style="font-size:11px;color:var(--muted);margin-left:8px">0 fotos</span><input id="sf-producto-oc" type="file" accept="image/*" capture="environment" multiple style="display:none" onchange="_sfReadSoportesOC(event,&quot;productos&quot;)"><div id="sf-producto-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px"></div></div></div>');
+  h.push('<div style="margin:10px 0;padding:10px;border:1px solid rgba(34,197,94,.25);background:rgba(34,197,94,.08);border-radius:8px;font-size:11px;color:var(--neon)">Puedes editar proveedor, fecha, codigos, productos, cantidades y costos antes de confirmar. Al confirmar, el stock ingresara al inventario y la OC quedara cerrada como INGRESO.</div>');
+  h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_sfGuardarRecepcionOC()">Confirmar ingreso</button></div>');
+  openModal(h.join(''), 'modal-lg');
+  setTimeout(function(){ if (o) _sfRenderRecepcionOC(o); else _sfBuscarRecepcionOC(); }, 0);
+}
+function _sfBuscarRecepcionOC() {
+  var val = (document.getElementById('sf-rec-oc') || {value:''}).value.trim();
+  var o = _sfOrdenCompraPorId(val);
+  var hidden = document.getElementById('sf-rec-oc-id');
+  if (hidden) hidden.value = o ? (o.id || o.numero || '') : '';
+  if (o) _sfRenderRecepcionOC(o);
+  else {
+    var box = document.getElementById('sf-rec-detalle');
+    if (box) box.innerHTML = '<div class="empty-state"><p>Ingresa el numero de OC para cargar automaticamente productos y datos.</p></div>';
+  }
+}
+function _sfRenderRecepcionOC(o) {
+  var box = document.getElementById('sf-rec-detalle');
+  if (!box || !o) return;
+  var lines = _sfOcItems(o);
+  var h = [];
+  h.push('<div class="card" style="margin-bottom:10px"><div class="form-grid"><div class="form-row"><label>Proveedor</label><input id="sf-rec-proveedor" value="'+_sfEsc(o.proveedor||'')+'"></div><div class="form-row"><label>Fecha OC</label><input id="sf-rec-fecha" value="'+_sfEsc(String(o.fecha||o.created_at||'').slice(0,10))+'"></div></div>');
+  h.push('<div class="form-row"><label>Observaciones de entrada</label><input id="sf-rec-obs" value="'+_sfEsc(o.observaciones||o.observacion||'')+'" placeholder="Notas de recepcion, novedades o diferencias"></div></div>');
+  h.push('<div class="card"><p style="font-size:13px;font-weight:800;color:var(--white);margin-bottom:8px">Productos recibidos</p><div class="tbl-overflow"><table><thead><tr><th>Codigo</th><th>Producto</th><th>Cantidad</th><th>Costo</th><th>Ubicacion</th></tr></thead><tbody>');
+  lines.forEach(function(l, i){
+    var it = (typeof _sfFindItemByCode === 'function') ? _sfFindItemByCode(l.sku) : null;
+    h.push('<tr><td><input id="sf-rec-sku-'+i+'" value="'+_sfEsc(l.sku||'')+'" style="min-width:90px"></td><td><input id="sf-rec-nom-'+i+'" value="'+_sfEsc(l.nombre||l.articulo||it&&it.nombre||'')+'" style="min-width:190px"></td><td><input id="sf-rec-qty-'+i+'" type="number" min="0" step="1" value="'+Number(l.cantidad||0)+'" style="width:90px"></td><td><input id="sf-rec-costo-'+i+'" type="number" min="0" step="0.01" value="'+Number(l.costo||0)+'" style="width:100px"></td><td><input id="sf-rec-ubi-'+i+'" value="'+_sfEsc(l.ubicacion||it&&it.ubicacion||'')+'" style="min-width:130px"></td></tr>');
+  });
+  h.push('</tbody></table></div><input id="sf-rec-line-count" type="hidden" value="'+lines.length+'"></div>');
+  box.innerHTML = h.join('');
+}
+function _sfReadSoportesOC(ev, tipo) {
+  var files = Array.prototype.slice.call(ev.target.files || []);
+  if (!files.length) return;
+  window._sfRecepcionFotosOC = window._sfRecepcionFotosOC || { facturas:[], productos:[] };
+  var key = tipo === 'productos' ? 'productos' : 'facturas';
+  var pending = files.length;
+  files.forEach(function(f){
+    var r = new FileReader();
+    r.onload = function(e){
+      window._sfRecepcionFotosOC[key].push({ nombre:f.name || 'foto', data:e.target.result, fecha:new Date().toISOString() });
+      pending--;
+      if (pending <= 0) _sfRenderFotosRecepcion();
+    };
+    r.readAsDataURL(f);
+  });
+  ev.target.value = '';
+}
+function _sfRenderFotosRecepcion() {
+  var fotos = window._sfRecepcionFotosOC || { facturas:[], productos:[] };
+  [['facturas','sf-factura-label','sf-factura-preview'],['productos','sf-producto-label','sf-producto-preview']].forEach(function(cfg){
+    var arr = fotos[cfg[0]] || [];
+    var lab = document.getElementById(cfg[1]);
+    var prev = document.getElementById(cfg[2]);
+    if (lab) lab.textContent = arr.length + ' foto(s)';
+    if (prev) prev.innerHTML = arr.map(function(f, i){ return '<img src="'+f.data+'" title="'+_sfEsc(f.nombre||('foto '+(i+1)))+'" style="width:54px;height:54px;object-fit:cover;border-radius:8px;border:1px solid var(--border2)">'; }).join('');
+  });
 }
 function _sfReadSoporteOC(ev, inputId, labelId) {
-  var f = ev.target.files && ev.target.files[0]; if (!f) return;
-  var r = new FileReader();
-  r.onload = function(e){ var d=document.getElementById(inputId), l=document.getElementById(labelId); if(d)d.value=e.target.result; if(l)l.textContent='Soporte cargado'; };
-  r.readAsDataURL(f);
+  var tipo = inputId && inputId.indexOf('producto') >= 0 ? 'productos' : 'facturas';
+  _sfReadSoportesOC(ev, tipo);
 }
-function _sfReadFacturaOC(ev) { _sfReadSoporteOC(ev, 'sf-factura-data', 'sf-factura-label'); }
+function _sfReadFacturaOC(ev) { _sfReadSoportesOC(ev, 'facturas'); }
 function _sfGuardarRecepcionOC(id) {
   var compras = typeof loadCompras === 'function' ? loadCompras() : [];
-  var idx = compras.findIndex(function(o){ return String(o.id||o.numero) === String(id); });
+  var lookup = id || (document.getElementById('sf-rec-oc-id') || {value:''}).value || (document.getElementById('sf-rec-oc') || {value:''}).value;
+  var ocFound = _sfOrdenCompraPorId(lookup);
+  var idx = compras.findIndex(function(o){ return ocFound && String(o.id||o.numero) === String(ocFound.id||ocFound.numero); });
   if (idx < 0) return showToast('Orden no encontrada', 'red');
+  var count = Number((document.getElementById('sf-rec-line-count') || {value:0}).value || 0);
+  var editedLines = [];
+  for (var i=0; i<count; i++) {
+    var sku = (document.getElementById('sf-rec-sku-'+i) || {value:''}).value.trim();
+    var nombre = (document.getElementById('sf-rec-nom-'+i) || {value:''}).value.trim();
+    var cantidad = Number((document.getElementById('sf-rec-qty-'+i) || {value:0}).value || 0);
+    var costo = Number((document.getElementById('sf-rec-costo-'+i) || {value:0}).value || 0);
+    var ubicacion = (document.getElementById('sf-rec-ubi-'+i) || {value:''}).value.trim();
+    if (sku || nombre || cantidad) editedLines.push({ sku:sku, nombre:nombre, articulo:nombre, cantidad:cantidad, costo:costo, total:cantidad*costo, ubicacion:ubicacion });
+  }
+  if (!editedLines.length) return showToast('La OC no tiene productos para ingresar', 'red');
   var items = typeof loadItems === 'function' ? loadItems() : [];
-  _sfOcItems(compras[idx]).forEach(function(l){
+  editedLines.forEach(function(l){
     var it = items.find(function(x){ return _sfItemCode(x) === String(l.sku); });
     if (it) {
       it.stock = Number(it.stock||0) + Number(l.cantidad||0);
+      if (l.ubicacion) it.ubicacion = l.ubicacion;
       it.estado_oc = 'INGRESO';
       it.ultima_oc = _sfOcDisplayNumber(compras[idx]);
       it.fecha_ultimo_ingreso = new Date().toISOString();
     }
   });
   if (typeof saveItems === 'function') saveItems(items);
+  compras[idx].items = editedLines;
+  compras[idx].proveedor = (document.getElementById('sf-rec-proveedor') || {value:compras[idx].proveedor||''}).value;
+  compras[idx].fecha = (document.getElementById('sf-rec-fecha') || {value:compras[idx].fecha||''}).value || compras[idx].fecha;
+  compras[idx].observacion_recepcion = (document.getElementById('sf-rec-obs') || {value:''}).value;
+  compras[idx].total = editedLines.reduce(function(s,l){ return s + Number(l.total || 0); }, 0);
   compras[idx].estado = 'INGRESO';
   compras[idx].estado_oc = 'INGRESO';
   compras[idx].fecha_recepcion = new Date().toISOString();
   compras[idx].fecha_cierre = compras[idx].fecha_recepcion;
-  compras[idx].factura_foto = (document.getElementById('sf-factura-data')||{value:''}).value;
-  compras[idx].producto_foto = (document.getElementById('sf-producto-data')||{value:''}).value;
+  var fotos = window._sfRecepcionFotosOC || { facturas:[], productos:[] };
+  compras[idx].factura_fotos = fotos.facturas || [];
+  compras[idx].producto_fotos = fotos.productos || [];
+  compras[idx].factura_foto = compras[idx].factura_fotos[0] && compras[idx].factura_fotos[0].data || '';
+  compras[idx].producto_foto = compras[idx].producto_fotos[0] && compras[idx].producto_fotos[0].data || '';
   compras[idx].cerrada = true;
   if (typeof saveCompras === 'function') saveCompras(compras);
   closeModal();
