@@ -1338,6 +1338,11 @@ function saveMovs(movs) {
   DB.set('movimientos', other.concat(mine));
 }
 function _syncMovimientosFromAPI(done) {
+  if (_sfIsDirty('movimientos')) {
+    window._movimientosCloudLoaded = true;
+    if (typeof done === 'function') done(loadMovs());
+    return;
+  }
   if (window._movimientosFetching) return;
   window._movimientosFetching = true;
   var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
@@ -1577,7 +1582,18 @@ function saveCompras(ordenes) {
   DB.set('compras', other.concat(mine));
   window._comprasCloudLoaded = true;
 }
+function _sfMarkDirty(recurso) {
+  try { DB.set('sync_dirty_' + recurso, Date.now()); } catch(e) {}
+}
+function _sfIsDirty(recurso) {
+  try { return !!DB.get('sync_dirty_' + recurso); } catch(e) { return false; }
+}
 function _syncComprasFromAPI(done) {
+  if (_sfIsDirty('compras')) {
+    window._comprasCloudLoaded = true;
+    if (typeof done === 'function') done(loadCompras());
+    return;
+  }
   if (window._comprasFetching) return;
   window._comprasFetching = true;
   var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
@@ -1684,6 +1700,8 @@ function registrarMov(tipo, articuloId, cantidad, extra) {
   var movs = loadMovs();
   movs.unshift(mov);
   saveMovs(movs);
+  _sfMarkDirty('articulos');
+  _sfMarkDirty('movimientos');
 
   // ── Add to historial cache ───────────────────────────────────────────
   if (_histData) _histData.unshift(mov);
@@ -1814,8 +1832,7 @@ var PERMISOS = {
   ],
   // ALMACENISTA — entradas, salidas, traslados, QR
   'ALMACENISTA': [
-    'dashboard','inventario','movimientos','historial',
-    'generar-qr','escaner','traslados','logistica','picking','packing','mis-inventarios',
+    'inventario','logistica','picking','packing','traslados',
   ],
   // OPERARIO INVENTARIO — solo conteos y lectura
   'OPERARIO INVENTARIO': [
@@ -2242,9 +2259,14 @@ function _completarLogin(user) {
   }
 
   // ── Navigate to dashboard (after DOM flush) ───────────────────────
-  var destino = 'dashboard';
+  var destino = DB.get('last_page') || 'dashboard';
+  if (!document.getElementById('pg-' + destino)) destino = 'dashboard';
   if (SESSION.user && SESSION.user.rol === 'CONSULTA DE PRODUCTOS') {
     destino = 'consulta-productos';
+  }
+  if (SESSION.user && SESSION.user.rol === 'ALMACENISTA') {
+    var allowedAlmacen = ['inventario','logistica','picking','packing','traslados'];
+    if (allowedAlmacen.indexOf(destino) < 0) destino = 'inventario';
   }
   // Navegar directamente — el browser procesa display changes en orden
   // Forzar reflow para asegurar que login-view esté hidden antes de mostrar dashboard
@@ -2269,6 +2291,11 @@ function _completarLogin(user) {
 
 /* ── _syncAllFromNeon — carga datos desde Neon en background ─────────── */
 function _syncAllFromNeon(callback) {
+  if (_sfIsDirty('articulos')) {
+    _invItems = loadItems();
+    if (typeof callback==='function') callback();
+    return;
+  }
   // Sync artículos
   var eid  = typeof _getEmpresaId==='function' ? _getEmpresaId() : null;
   var url  = '/api/articulos?limit=5000' + (eid && eid!=='__SA__' ? '&empresa_id='+eid : '');
@@ -2313,6 +2340,11 @@ function doLogout() {
   try { DB.set('session', null); } catch(e) {}
   // Remover clase app-mode — CSS maneja la visibilidad
   document.body.classList.remove('app-mode');
+  try { DB.set('last_page', null); } catch(e) {}
+  var lv = document.getElementById('login-view');
+  var av = document.getElementById('app-view');
+  if (lv) { lv.removeAttribute('style'); lv.classList.remove('hidden'); }
+  if (av) { av.removeAttribute('style'); }
   var pwd = document.getElementById('l-pwd');
   if (pwd) pwd.value = '';
   var usr = document.getElementById('l-login');
@@ -2402,10 +2434,10 @@ function goto(page, param) {
   if (!isFullAdmin) {
     var rp2   = (typeof PERMISOS !== 'undefined' && PERMISOS[rol]) || {};
     var perms = Array.isArray(rp2.modulos) ? rp2.modulos : (Array.isArray(rp2) ? rp2 : []);
-    var always = ['dashboard', 'detalle', 'consulta-productos'];
+    var always = rol === 'ALMACENISTA' ? ['detalle'] : ['dashboard', 'detalle', 'consulta-productos'];
     if (always.indexOf(page) < 0 && perms.indexOf(page) < 0) {
       showToast('Acceso restringido para tu rol', 'red');
-      page = isConsultaP ? 'consulta-productos' : 'dashboard';
+      page = isConsultaP ? 'consulta-productos' : (rol === 'ALMACENISTA' ? 'inventario' : 'dashboard');
     }
   }
 
@@ -2428,6 +2460,9 @@ function goto(page, param) {
 
   // Establecer página actual
   currentPage = page;
+  if (SESSION.user && page !== 'detalle') {
+    try { DB.set('last_page', page); } catch(e) {}
+  }
   closeSidebar();
 
   // Mostrar el div de la página
@@ -2584,7 +2619,7 @@ function _renderInvProductos(q) {
   }
 
   // Sync desde Neon — SIEMPRE, para tener datos frescos
-  if (!_invFetching) {
+  if (!_sfIsDirty('articulos') && !_invFetching) {
     _invFetching = true;
     // SA: sin filtro empresa → ver todos. Empresa: filtrar por empresa_id
     var _eid = _getEmpresaId();
@@ -3506,6 +3541,11 @@ function DB_traslados_save(d) {
   try { localStorage.setItem('erp_traslados', JSON.stringify(d.slice(0,500))); } catch(e){}
 }
 function _syncTrasladosFromAPI(done) {
+  if (_sfIsDirty('traslados')) {
+    window._trasladosCloudLoaded = true;
+    if (typeof done === 'function') done(DB_traslados_load());
+    return;
+  }
   if (window._trasladosFetching) return;
   window._trasladosFetching = true;
   var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
@@ -3717,9 +3757,31 @@ function _traslado_camara(tipo) {
   });
 }
 
+function _sfUbicacionExiste(code) {
+  var target = String(code || '').trim().toUpperCase();
+  if (!target) return false;
+  var found = false;
+  function check(v) {
+    if (found || !v) return;
+    var raw = typeof v === 'object' ? (v.codigo || v.id || v.nombre || '') : v;
+    if (String(raw || '').trim().toUpperCase() === target) found = true;
+  }
+  var bodegas = [];
+  try { bodegas = typeof loadUbicaciones === 'function' ? loadUbicaciones() : (DB.get('bodegas') || []); } catch(e) { bodegas = DB.get('bodegas') || []; }
+  (bodegas || []).forEach(function(b){
+    check(b);
+    (b.ubicaciones || []).forEach(check);
+  });
+  (DB.get('ubicaciones') || []).forEach(check);
+  (loadItems() || []).forEach(function(i){ check(i.ubicacion); });
+  return found;
+}
+
 function _setTrasladoOrigen(code) {
   if (!code) return;
-  _traslado.origen = code.trim().toUpperCase();
+  var origen = code.trim().toUpperCase();
+  if (!_sfUbicacionExiste(origen)) { showToast('La ubicacion origen no existe: ' + origen, 'red'); return; }
+  _traslado.origen = origen;
   _traslado.paso = 2;
   _renderTrasladoModal();
 }
@@ -3757,6 +3819,7 @@ function _setTrasladoDestino(code) {
   if (!code) return;
   var dest = code.trim().toUpperCase();
   if (dest === (_traslado.origen||'').toUpperCase()) { showToast('El destino no puede ser el mismo que el origen', 'red'); return; }
+  if (!_sfUbicacionExiste(dest)) { showToast('La ubicacion destino no existe: ' + dest, 'red'); return; }
   _traslado.destino = dest;
   _traslado.paso    = 5;
   _renderTrasladoModal();
@@ -3768,6 +3831,8 @@ function _confirmarTraslado() {
   var items = loadItems();
   var art  = items.find(function(i){ return i.sku === p.sku; });
   if (!art) { showToast('Producto no encontrado', 'red'); return; }
+  if (!_sfUbicacionExiste(p.origen)) { showToast('La ubicacion origen no existe: ' + p.origen, 'red'); return; }
+  if (!_sfUbicacionExiste(p.destino)) { showToast('La ubicacion destino no existe: ' + p.destino, 'red'); return; }
   if (Number(art.stock||0) < p.cantidad) { showToast('Stock insuficiente', 'red'); return; }
 
   // Register SALIDA from origin
@@ -3799,6 +3864,7 @@ function _confirmarTraslado() {
     empresa_id: typeof _getEmpresaId==='function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (art.empresa_id || null),
   });
   DB_traslados_save(hist);
+  _sfMarkDirty('traslados');
   fetch('/api/movimientos?recurso=traslados', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
@@ -6537,6 +6603,10 @@ function applyPlanUI() {
   if (secPrincipal) secPrincipal.style.display = '';
   var navDash = document.getElementById('nav-dashboard');
   if (navDash) navDash.style.display = '';
+  if (rol === 'ALMACENISTA') {
+    if (secPrincipal) secPrincipal.style.display = 'none';
+    if (navDash) navDash.style.display = 'none';
+  }
 
   // ── Módulos especiales solo admin ─────────────────────────────────
   if (isFullAdmin) {
@@ -16382,10 +16452,10 @@ function _dashSyncCloud(done) {
     fetch('/api/proveedores').then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
     fetch('/api/movimientos?recurso=compras' + suffix).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; })
   ]).then(function(res){
-    if (res[0] && Array.isArray(res[0].data)) { _invItems = res[0].data; saveItems(res[0].data); }
-    if (res[1] && Array.isArray(res[1].data)) saveMovs(res[1].data);
+    if (!_sfIsDirty('articulos') && res[0] && Array.isArray(res[0].data)) { _invItems = res[0].data; saveItems(res[0].data); }
+    if (!_sfIsDirty('movimientos') && res[1] && Array.isArray(res[1].data)) saveMovs(res[1].data);
     if (res[2] && Array.isArray(res[2].data)) saveProveedores(res[2].data);
-    if (res[3] && Array.isArray(res[3].data)) saveCompras(res[3].data);
+    if (!_sfIsDirty('compras') && res[3] && Array.isArray(res[3].data)) saveCompras(res[3].data);
     if (typeof _KPI_invalidar === 'function') _KPI_invalidar();
     window._dashCloudLoaded = true;
     if (typeof done === 'function') done();
@@ -16459,7 +16529,7 @@ function _renderDashboardUnico() {
 renders.dashboard = function() {
   var pg = document.getElementById('pg-dashboard');
   if (!pg) return;
-  if (!window._dashCloudLoaded && !window._dashCloudSyncing) {
+  if (!window._dashCloudLoaded && !window._dashCloudSyncing && !_sfIsDirty('articulos') && !_sfIsDirty('movimientos') && !_sfIsDirty('compras')) {
     pg.innerHTML = '<div style="padding:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">' + Array(6).fill('<div style="height:84px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;animation:pulse 1.2s ease-in-out infinite"></div>').join('') + '</div>';
     _dashSyncCloud(function(){ if (currentPage === 'dashboard') _renderDashboardUnico(); });
     return;
@@ -16861,6 +16931,7 @@ renders.conciliacion = function() {
   _buildConciliacionUI();
   var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
   var url = '/api/articulos?limit=5000' + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : '');
+  if (_sfIsDirty('articulos')) return;
   fetch(url)
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res){
@@ -16891,7 +16962,7 @@ function _sfEnsureOperationalModules() {
   if (PERMISOS.COMPRAS) PERMISOS.COMPRAS = _sfAppendOnce(PERMISOS.COMPRAS, ['pedidos','compras','proveedores','clientes','conciliacion']);
   PERMISOS.COMERCIAL = _sfAppendOnce(PERMISOS.COMERCIAL || ['dashboard'], ['comercial','clientes','pedidos','inventario','generar-qr','escaner']);
   PERMISOS.CARTERA = _sfAppendOnce(PERMISOS.CARTERA || ['dashboard'], ['pedidos','clientes','inventario']);
-  if (PERMISOS.ALMACENISTA) PERMISOS.ALMACENISTA = _sfAppendOnce(PERMISOS.ALMACENISTA, ['logistica','traslados','picking','packing']);
+  if (PERMISOS.ALMACENISTA) PERMISOS.ALMACENISTA = ['inventario','logistica','picking','packing','traslados'];
 }
 
 function _sfInstallThemeReadabilityFixes() {
@@ -16906,6 +16977,8 @@ function _sfInstallThemeReadabilityFixes() {
     'html[data-theme] .nav-item.active, html[data-theme] nav .active, html[data-theme] aside .active{background:var(--card2)!important;color:var(--electric)!important}',
     'html[data-theme] input, html[data-theme] select, html[data-theme] textarea{background:var(--card2)!important;color:var(--white)!important;border-color:var(--border2)!important}',
     'html[data-theme] table, html[data-theme] th, html[data-theme] td{color:var(--text)!important;border-color:var(--border2)!important}',
+    'html[data-theme] #pg-inventario td, html[data-theme] #pg-inventario td *, html[data-theme] #pg-inventario code, html[data-theme] #pg-inventario strong{opacity:1!important;color:var(--text)!important;text-shadow:none!important}',
+    'html[data-theme] #pg-inventario .badge, html[data-theme] #pg-inventario .btn, html[data-theme] #pg-inventario .btn *{color:inherit!important}',
     'html[data-theme] th{background:var(--card2)!important;color:var(--white)!important}',
     'html[data-theme] label, html[data-theme] p, html[data-theme] span, html[data-theme] div{border-color:var(--border2)}',
     'html[data-theme] .btn-ghost{background:var(--card2)!important;color:var(--white)!important;border-color:var(--border2)!important}',
@@ -17414,8 +17487,8 @@ renders.compras = function() {
   h.push('</tbody></table></div></div>');
   h.push('<div class="card"><p style="font-size:13px;font-weight:800;color:var(--white);margin-bottom:10px">Ordenes de compra</p>');
   if (!ordenes.length) h.push('<div class="empty-state"><p>No hay ordenes creadas.</p></div>');
-  else { h.push('<div class="tbl-overflow"><table><thead><tr><th>Numero</th><th>Proveedor</th><th>Estado</th><th>Cant.</th><th>Total</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>');
-    ordenes.forEach(function(o){ var oi=_sfOcItems(o); h.push('<tr><td><code>'+_sfEsc(_sfOcDisplayNumber(o))+'</code></td><td>'+_sfEsc(o.proveedor||'Sin proveedor')+'</td><td><span class="badge cic-prog">'+_sfEsc(String(o.estado||'EN_PROCESO').replace(/_/g,' '))+'</span></td><td>'+fmt(oi.reduce(function(s,l){return s+Number(l.cantidad||0);},0))+'</td><td>'+money(_sfOcTotal(o))+'</td><td>'+_sfEsc(String(o.fecha||o.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="_sfPdfOC(&quot;'+_sfEsc(o.id||o.numero)+'&quot;)">PDF</button> <button class="btn btn-navy btn-sm" onclick="_sfRecibirOC(&quot;'+_sfEsc(o.id||o.numero)+'&quot;)">Registrar entrada</button></td></tr>'); });
+  else { h.push('<div class="tbl-overflow"><table><thead><tr><th>Numero</th><th>Referencia interna</th><th>Proveedor</th><th>Estado</th><th>Cant.</th><th>Total</th><th>Fecha</th><th>Acciones</th></tr></thead><tbody>');
+    ordenes.forEach(function(o){ var oi=_sfOcItems(o); var refs=oi.map(function(l){ return l.sku || l.codigo || l.referencia || ''; }).filter(Boolean).join(', '); h.push('<tr><td><code>'+_sfEsc(_sfOcDisplayNumber(o))+'</code></td><td style="font-family:monospace">'+_sfEsc(refs||'-')+'</td><td>'+_sfEsc(o.proveedor||'Sin proveedor')+'</td><td><span class="badge cic-prog">'+_sfEsc(String(o.estado||'EN_PROCESO').replace(/_/g,' '))+'</span></td><td>'+fmt(oi.reduce(function(s,l){return s+Number(l.cantidad||0);},0))+'</td><td>'+money(_sfOcTotal(o))+'</td><td>'+_sfEsc(String(o.fecha||o.created_at||'').slice(0,10))+'</td><td style="white-space:nowrap"><button class="btn btn-ghost btn-sm" onclick="_sfPdfOC(&quot;'+_sfEsc(o.id||o.numero)+'&quot;)">PDF</button> <button class="btn btn-navy btn-sm" onclick="_sfRecibirOC(&quot;'+_sfEsc(o.id||o.numero)+'&quot;)">Registrar entrada</button></td></tr>'); });
     h.push('</tbody></table></div>'); }
   h.push('</div></div>');
   pg.innerHTML = h.join('');
@@ -17672,6 +17745,8 @@ function _sfGuardarRecepcionOC(id) {
     });
     if (typeof saveItems === 'function') saveItems(items);
     if (typeof saveMovs === 'function') saveMovs(movs);
+    _sfMarkDirty('articulos');
+    _sfMarkDirty('movimientos');
     _invItems = items;
     compras[idx].items = editedLines;
     compras[idx].proveedor = (document.getElementById('sf-rec-proveedor') || {value:compras[idx].proveedor||''}).value;
@@ -17689,6 +17764,7 @@ function _sfGuardarRecepcionOC(id) {
     compras[idx].producto_foto = compras[idx].producto_fotos[0] && compras[idx].producto_fotos[0].data || '';
     compras[idx].cerrada = true;
     if (typeof saveCompras === 'function') saveCompras(compras);
+    _sfMarkDirty('compras');
     _sfCerrarCamaraOC();
     closeModal();
     showToast('Ingreso registrado y OC cerrada', 'green');
