@@ -1016,6 +1016,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // 1. Sembrar usuarios seed
   try { seed(); } catch(e) { console.error('[SF] seed error:', e); }
+  try { _sfPurgeTestItems(); } catch(e) { console.error('[SF] purge test items error:', e); }
 
   // 2. Auth tests en background
   setTimeout(function() { try { _runAuthTests(); } catch(e) {} }, 300);
@@ -1254,8 +1255,23 @@ function _getEmpresaId() {
   if (SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR') return '__SA__';
   return null;
 }
-function loadItems() {
+function _sfIsTestItem(i) {
+  if (!i) return false;
+  var code = String(i.sku || i.codigo || i.id || '').toUpperCase();
+  var desc = String(i.nombre || i.descripcion || '').toLowerCase();
+  var cat  = String(i.categoria || '').toLowerCase();
+  return code.indexOf('_TEST_') === 0 || desc.indexOf('producto de prueba') >= 0 || cat === 'test';
+}
+function _sfPurgeTestItems() {
   var all = DB.get('articulos') || [];
+  var clean = all.filter(function(i){ return !_sfIsTestItem(i); });
+  if (clean.length !== all.length) {
+    DB.set('articulos', clean);
+    if (_invItems) _invItems = _invItems.filter(function(i){ return !_sfIsTestItem(i); });
+  }
+}
+function loadItems() {
+  var all = (DB.get('articulos') || []).filter(function(i){ return !_sfIsTestItem(i); });
   var eid = _getEmpresaId();
   if (eid === '__SA__') {
     // SA ve TODOS los items (sin filtro de empresa)
@@ -1269,6 +1285,7 @@ function loadItems() {
   return all;
 }
 function saveItems(items) {
+  items = (items || []).filter(function(i){ return !_sfIsTestItem(i); });
   var eid = _getEmpresaId();
   var isSA = eid === '__SA__';
 
@@ -3979,11 +3996,56 @@ function _buildPickingUI(pg) {
     );
 }
 
+function _pickingPedidosAsignables() {
+  var picks = DB_picking_load();
+  var pickIds = {};
+  picks.forEach(function(p){ if (p.pedido_id) pickIds[p.pedido_id] = true; });
+  return (typeof DB_pedidos_load === 'function' ? DB_pedidos_load() : []).filter(function(p){
+    var estado = String(p.estado || '').toUpperCase();
+    return !pickIds[p.id] && ['APROBADO_CARTERA','APROBADO'].indexOf(estado) >= 0;
+  });
+}
+
+function _pickingRenderLineas(lineas) {
+  var wrap = document.getElementById('pk-lineas-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '';
+  (lineas || []).forEach(function(l){
+    var sku = l.sku || l.codigo || '';
+    var qty = Number(l.cantidad || l.qty || 1);
+    var d = document.createElement('div');
+    d.className = 'pk-linea';
+    d.style.cssText = 'display:flex;gap:6px;margin-bottom:6px';
+    d.innerHTML = '<input class="pk-sku" type="text" value="'+_sfEsc(sku)+'" placeholder="Codigo" style="flex:1;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()"><input class="pk-qty" type="number" min="1" value="'+qty+'" placeholder="Cant." style="width:80px"><button onclick="this.closest(\'.pk-linea\').remove()" class="btn-icon" style="color:var(--red)">x</button>';
+    wrap.appendChild(d);
+  });
+}
+
+function _pickingSeleccionarPedido() {
+  var id = (document.getElementById('pk-pedido-asignado') || {value:''}).value;
+  var ped = _pickingPedidosAsignables().find(function(p){ return p.id === id; });
+  if (!ped) return;
+  var cod = document.getElementById('pk-cod');
+  var cli = document.getElementById('pk-cli');
+  var fecha = document.getElementById('pk-fecha');
+  var pri = document.getElementById('pk-pri');
+  var hid = document.getElementById('pk-pedido-id');
+  if (cod) cod.value = String(ped.numero || '').replace('PED','PIC');
+  if (cli) cli.value = ped.cliente && (ped.cliente.razon_social || ped.cliente.nombre) || ped.cliente_nombre || '';
+  if (fecha) fecha.value = String(ped.fecha_requerida || ped.fecha || ped.created_at || new Date().toISOString()).slice(0,10);
+  if (pri) pri.value = ped.prioridad || 'NORMAL';
+  if (hid) hid.value = ped.id;
+  _pickingRenderLineas(ped.lineas || []);
+}
+
 function _nuevoPedidoPicking() {
   var items = (_invItems||loadItems()).filter(function(i){ return Number(i.stock||0)>0; });
   var n     = DB_picking_load().length + 1;
+  var asignables = _pickingPedidosAsignables();
   openModal(
     '<h3 style="margin-bottom:14px">+ Nuevo Pedido de Picking</h3>' +
+    (asignables.length ? '<div class="form-row"><label>Pedido asignado</label><select id="pk-pedido-asignado" onchange="_pickingSeleccionarPedido()"><option value="">Seleccionar pedido aprobado...</option>'+asignables.map(function(p){ return '<option value="'+_sfEsc(p.id)+'">'+_sfEsc((p.numero||p.id)+' - '+(p.cliente && (p.cliente.razon_social||p.cliente.nombre) || 'Cliente'))+'</option>'; }).join('')+'</select></div>' : '') +
+    '<input id="pk-pedido-id" type="hidden" value="">' +
     '<div class="form-grid">' +
       '<div class="form-row"><label>Código de Pedido</label><input id="pk-cod" value="PED-' + String(n).padStart(4,'0') + '" readonly style="opacity:.6"></div>' +
       '<div class="form-row"><label>Prioridad</label>' +
@@ -4048,12 +4110,19 @@ function _guardarPedidoPicking() {
   var t = now();
   var pedidos = DB_picking_load();
   pedidos.unshift({
-    id: uid(), codigo: cod, cliente: cli, prioridad: pri, fecha: fech,
+    id: uid(), pedido_id: (document.getElementById('pk-pedido-id')||{value:''}).value || null, codigo: cod, cliente: cli, prioridad: pri, fecha: fech,
     estado: 'PENDIENTE', lineas: lineas,
     creado_por: SESSION.user && SESSION.user.nombre || 'Sistema',
     creado_en: t.fecha + ' ' + t.hora,
   });
   DB_picking_save(pedidos);
+  var pedidoId = (document.getElementById('pk-pedido-id')||{value:''}).value;
+  if (pedidoId && typeof DB_pedidos_load === 'function' && typeof DB_pedidos_save === 'function') {
+    var peds = DB_pedidos_load().map(function(p){
+      return p.id === pedidoId ? Object.assign({}, p, { estado:'EN_PICKING', picking_codigo:cod }) : p;
+    });
+    DB_pedidos_save(peds);
+  }
   auditLog('PICKING_CREADO', cod + ' | ' + cli + ' | ' + lineas.length + ' líneas', SESSION.user&&SESSION.user.nombre);
   closeModal();
   _buildPickingUI(document.getElementById('pg-picking'));
@@ -14941,13 +15010,8 @@ function _calcIndicadoresCompletos(item) {
   // ── Stock real desde movimientos (si hay historial) ──────────────────
   var movs = (typeof loadMovs==='function' ? loadMovs() : []) || [];
   var tieneMovs = movs.some(function(m){ return m&&(m.sku===sku||m.codigo===sku); });
-  if (tieneMovs) {
-    var stockCalc = _calcStockDesdeMovs(sku);
-    // Solo sobreescribir si difiere significativamente (>1) para evitar glitches
-    if (Math.abs(stockCalc - Number(item.stock||0)) > 1) {
-      item.stock = stockCalc;
-    }
-  }
+  // El stock maestro viene del inventario vigente. Los movimientos se usan para
+  // consumo y rotacion; no reconstruimos stock si no existe kardex inicial completo.
 
   // ── Stock reservado desde reservas activas ────────────────────────────
   item.stock_reservado = _calcStockReservado(sku);
@@ -14965,22 +15029,15 @@ function _calcIndicadoresCompletos(item) {
   var smax     = Number(item.stock_maximo   || 0);
   var smin     = Number(item.stock_minimo   || 0);
   var costo    = Number(item.costo || item.costo_unitario || item.precio || 0);
+  var demandaLT = Math.ceil(Math.max(0, consumo) * Math.max(0, lead));
 
   // ── Stock Seguridad ───────────────────────────────────────────────────
   // Si hay consumo y lead time: seg = consumo * lead
   // Si no: 20% del stock máximo, o 10% del stock actual
-  var seg;
-  if (consumo > 0 && lead > 0) {
-    seg = Math.round(consumo * lead);
-  } else if (smax > 0) {
-    seg = Math.round(smax * 0.20);
-  } else if (stock > 0) {
-    seg = Math.round(stock * 0.10);
-  } else {
-    seg = Number(item.stock_seguridad || 0);
-  }
+  var seg = Number(item.stock_seguridad || 0);
   // Solo auto-calcular si el usuario no lo definió manualmente
   if (!item.stock_seguridad || item.stock_seguridad === 0) {
+    seg = smin > demandaLT ? Math.max(0, smin - demandaLT) : 0;
     item.stock_seguridad = seg;
   } else {
     seg = Number(item.stock_seguridad);
@@ -14989,8 +15046,8 @@ function _calcIndicadoresCompletos(item) {
   // ── Punto de Reorden ─────────────────────────────────────────────────
   // Punto Reorden = (Consumo × Lead Time) + Stock Seguridad
   var preord;
-  if (consumo > 0 && lead > 0) {
-    preord = Math.round(consumo * lead + seg);
+  if (demandaLT > 0) {
+    preord = Math.ceil(demandaLT + seg);
   } else if (item.punto_reorden && item.punto_reorden > 0) {
     preord = Number(item.punto_reorden);
   } else if (smin > 0) {
@@ -18184,6 +18241,7 @@ applyPlanUI = function() {
   if (gerencial) gerencial.style.display = 'none';
   var principal = document.getElementById('nav-sec-principal');
   if (principal) principal.style.display = '';
+  if (SESSION.user && SESSION.user.rol === 'ALMACENISTA' && principal) principal.style.display = 'none';
 };
 _sfEnsureOperationalModules();
 _sfWrapRenderTemplate('importar', 'inventario', 'Inventario');
