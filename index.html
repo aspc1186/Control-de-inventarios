@@ -21690,6 +21690,159 @@ goto = function(page, param) {
   setTimeout(function(){ fixSupportBanner(); if (typeof currentPage !== 'undefined') addRootBack(currentPage); }, 0);
 })();
 
+/* Fase 1 operativa: tema global, foto producto, OT transaccional y reservas */
+(function(){
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function installUniversalTheme(){
+    if (document.getElementById('sf-theme-universal-fix')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-theme-universal-fix';
+    st.textContent =
+      'body,#app-view,.page,.page-inner,.modal-backdrop{background:var(--bg-deep)!important;color:var(--text)!important}' +
+      '.topbar,.sidebar,.card,.modal,.modal-content,.tbl-wrap,.sf-root-backbar,.empty-state{background:var(--bg-card)!important;color:var(--text)!important;border-color:var(--border2)!important}' +
+      'table,thead,tbody,tr,td,th{border-color:var(--border2)!important}th,thead tr{background:var(--card2)!important;color:var(--white)!important}td{color:var(--text)!important}' +
+      'h1,h2,h3,h4,h5,h6,strong,label,.brand-name,.page-title{color:var(--white)!important}.muted,small,.brand-sub,.lbl,p,span{border-color:var(--border2)}' +
+      'input,select,textarea{background:var(--card2)!important;color:var(--white)!important;border-color:var(--border2)!important}input::placeholder,textarea::placeholder{color:var(--muted)!important;opacity:1}' +
+      '.btn,.btn-ghost,.btn-navy,.btn-green,.btn-sm,.btn-xs{border-color:var(--border2)}' +
+      '.kpi{background:var(--bg-card)!important;color:var(--text)!important;border-color:var(--border2)!important}.kpi .val{color:var(--electric)!important}.kpi .lbl{color:var(--muted)!important}' +
+      '.form-row>label,.form-row label{color:var(--white)!important}.form-row p,.form-row small{color:var(--muted)!important}' +
+      '#na-img-preview{border-color:var(--border2)!important;background:var(--card2)!important}.sf-photo-actions{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 14px 72px}.sf-photo-actions .btn{min-height:30px}' +
+      '@media(max-width:680px){.sf-photo-actions{margin-left:0}}';
+    document.head.appendChild(st);
+  }
+
+  function maxOtSeq(){
+    var max = Number((typeof DB !== 'undefined' && DB.get) ? DB.get('sf_ot_seq') || 0 : 0) || 0;
+    try {
+      (typeof loadReservas === 'function' ? loadReservas() : []).forEach(function(r){
+        var m = String(r && r.ot || '').match(/OT-(\d+)/i);
+        if (m) max = Math.max(max, Number(m[1]) || 0);
+      });
+    } catch(e) {}
+    return max;
+  }
+  function nextOtValue(){ return 'OT-' + String(maxOtSeq() + 1).padStart(5,'0'); }
+  function wireReservaOt(){
+    var ced = document.getElementById('res-cedula');
+    var ot = document.getElementById('res-ot');
+    if (!ced || !ot) return;
+    ced.setAttribute('inputmode','numeric');
+    ced.setAttribute('autocomplete','off');
+    ot.placeholder = 'OT-00001';
+    ot.removeAttribute('readonly');
+    ot.dataset.autoOt = ot.value ? '0' : '1';
+    ced.oninput = function(){
+      this.value = String(this.value || '').replace(/\D/g, '');
+      if (this.value.length >= 5 && (!ot.value || ot.dataset.autoOt === '1')) {
+        ot.value = nextOtValue();
+        ot.dataset.autoOt = '1';
+      }
+    };
+    ot.oninput = function(){
+      this.value = String(this.value || '').toUpperCase();
+      this.dataset.autoOt = '0';
+    };
+  }
+
+  var baseAbrirReserva = typeof abrirPanelReserva === 'function' ? abrirPanelReserva : null;
+  if (baseAbrirReserva) {
+    abrirPanelReserva = function(){
+      var out = baseAbrirReserva.apply(this, arguments);
+      setTimeout(wireReservaOt, 40);
+      return out;
+    };
+    window.abrirPanelReserva = abrirPanelReserva;
+  }
+
+  var baseConfirmarReserva = typeof _confirmarReserva === 'function' ? _confirmarReserva : null;
+  if (baseConfirmarReserva) {
+    _confirmarReserva = function(){
+      var before = (typeof loadReservas === 'function' ? loadReservas() : []).length;
+      var ced = document.getElementById('res-cedula');
+      var ot = document.getElementById('res-ot');
+      if (ced) ced.value = String(ced.value || '').replace(/\D/g, '');
+      if (ot && !ot.value && ced && ced.value.length >= 5) ot.value = nextOtValue();
+      var out = baseConfirmarReserva.apply(this, arguments);
+      setTimeout(function(){
+        var reservas = typeof loadReservas === 'function' ? loadReservas() : [];
+        if (reservas.length > before && typeof DB !== 'undefined' && DB.set) DB.set('sf_ot_seq', maxOtSeq());
+      }, 0);
+      return out;
+    };
+    window._confirmarReserva = _confirmarReserva;
+  }
+
+  function wireReservaActions(){
+    var modal = document.querySelector('.modal-content,.modal');
+    if (!modal || modal.dataset.sfReservaActions === '1') return;
+    var rows = modal.querySelectorAll('tbody tr');
+    Array.prototype.forEach.call(rows, function(row){
+      var cells = row.querySelectorAll('td');
+      if (!cells.length) return;
+      var ot = (cells[0].textContent || '').trim();
+      var reserva = (typeof loadReservas === 'function' ? loadReservas() : []).find(function(r){ return String(r.ot || '').trim() === ot; });
+      if (!reserva) return;
+      Array.prototype.forEach.call(row.querySelectorAll('button'), function(btn){
+        var txt = (btn.textContent || '').toLowerCase();
+        if (txt.indexOf('entregar') >= 0) btn.onclick = function(){ _entregarReserva(reserva.id); };
+        if (txt.indexOf('cancelar') >= 0) btn.onclick = function(){ _cancelarReserva(reserva.id); };
+      });
+    });
+    modal.dataset.sfReservaActions = '1';
+  }
+  var baseGestionReservas = typeof abrirGestionReservas === 'function' ? abrirGestionReservas : null;
+  if (baseGestionReservas) {
+    abrirGestionReservas = function(){
+      var out = baseGestionReservas.apply(this, arguments);
+      setTimeout(wireReservaActions, 30);
+      return out;
+    };
+    window.abrirGestionReservas = abrirGestionReservas;
+  }
+
+  function wireProductoFoto(){
+    var preview = document.getElementById('na-img-preview');
+    var file = document.getElementById('na-img-file');
+    if (!preview || preview.dataset.sfPhotoReady === '1') return;
+    preview.dataset.sfPhotoReady = '1';
+    preview.title = 'Clic para tomar o cargar foto';
+    preview.onclick = function(){ if (typeof _captureProductImg === 'function') _captureProductImg(); };
+    var actions = document.createElement('div');
+    actions.className = 'sf-photo-actions';
+    actions.innerHTML =
+      '<button type="button" class="btn btn-navy btn-sm" onclick="_captureProductImg();return false">Camara</button>' +
+      '<button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById(&quot;na-img-file&quot;).click();return false">Cargar foto</button>';
+    var header = preview.parentNode;
+    if (header && header.parentNode && !document.querySelector('.sf-photo-actions')) header.parentNode.insertBefore(actions, header.nextSibling);
+    if (file) file.setAttribute('capture','environment');
+  }
+  var baseNuevoArticulo = typeof openNuevoArticulo === 'function' ? openNuevoArticulo : null;
+  if (baseNuevoArticulo) {
+    openNuevoArticulo = function(){
+      var out = baseNuevoArticulo.apply(this, arguments);
+      setTimeout(wireProductoFoto, 30);
+      return out;
+    };
+    window.openNuevoArticulo = openNuevoArticulo;
+  }
+
+  var baseApply = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function(){
+    if (baseApply) baseApply();
+    installUniversalTheme();
+  };
+  window.applyPlanUI = applyPlanUI;
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  goto = function(){
+    var out = baseGoto ? baseGoto.apply(this, arguments) : undefined;
+    setTimeout(installUniversalTheme, 0);
+    return out;
+  };
+  window.goto = goto;
+  installUniversalTheme();
+  setTimeout(installUniversalTheme, 0);
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
