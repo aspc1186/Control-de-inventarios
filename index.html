@@ -20657,6 +20657,357 @@ goto = function(page, param) {
   }, 0);
 })();
 
+/* Correccion final: soporte solo por empresa cliente y planes FREE/PRO/WMS */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var CLIENT_HIDDEN_MODULES = ['empresas','soporte','centro-pruebas','salud-sistema','gerencial'];
+  var SUPERADMIN_MODULES = [
+    'dashboard','inventario','importar','historial','proveedores','clientes','pedidos','comercial',
+    'movimientos','traslados','reportes','ubicaciones','generar-qr','escaner','compras','logistica',
+    'ciclicos','conciliacion','mis-inventarios','auditoria','empresas','usuarios','integraciones',
+    'respaldos','centro-pruebas','salud-sistema','picking','packing'
+  ];
+  var NAV_IDS = SUPERADMIN_MODULES.concat(['soporte']);
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function isSA(){
+    return !!(SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR');
+  }
+  function supportId(){
+    try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) { return ''; }
+  }
+  function normalizePlan(plan) {
+    plan = String(plan || 'FREE').toUpperCase();
+    if (plan === 'STARTER' || plan === 'LITE') return 'FREE';
+    if (plan === 'EMPRESARIAL_WMS' || plan === 'ENTERPRISE' || plan === 'EMPRESARIAL') return 'WMS';
+    if (plan === 'WMS' || plan === 'PRO' || plan === 'FREE') return plan;
+    return 'FREE';
+  }
+  function planModules(plan) {
+    plan = normalizePlan(plan);
+    var free = ['dashboard','inventario','clientes','movimientos','historial'];
+    var pro = free.concat([
+      'compras','pedidos','comercial','proveedores','logistica','ubicaciones','generar-qr',
+      'escaner','reportes','importar','ciclicos','conciliacion','picking','packing'
+    ]);
+    var wms = pro.concat(['auditoria','usuarios','integraciones','respaldos','traslados','mis-inventarios']);
+    return plan === 'FREE' ? free : (plan === 'PRO' ? pro : wms);
+  }
+  function installPlans() {
+    if (typeof PLANES === 'undefined') return;
+    PLANES.FREE = {
+      nombre: 'FREE',
+      modulos: planModules('FREE'),
+      limites: { sedes: 1, bodegas: 1, usuarios: 2, referencias: -1 },
+      precio: 'Gratis',
+      trialDias: 30
+    };
+    PLANES.PRO = {
+      nombre: 'PRO',
+      modulos: planModules('PRO'),
+      limites: { sedes: 1, bodegas: -1, usuarios: -1, referencias: -1 },
+      precio: '99.900 / mes',
+      trialDias: 30
+    };
+    PLANES.WMS = {
+      nombre: 'Empresarial WMS',
+      modulos: planModules('WMS'),
+      limites: { sedes: -1, bodegas: -1, usuarios: -1, referencias: -1 },
+      precio: 'Desde 249.900 / mes',
+      trialDias: 30
+    };
+    PLANES.STARTER = PLANES.FREE;
+    PLANES.LITE = PLANES.FREE;
+    PLANES.ENTERPRISE = PLANES.WMS;
+    PLANES.EMPRESARIAL_WMS = PLANES.WMS;
+  }
+  function migrateCompanyPlans() {
+    if (typeof loadEmpresas !== 'function' || typeof saveEmpresas !== 'function') return;
+    var empresas = loadEmpresas();
+    var changed = false;
+    empresas.forEach(function(emp){
+      if (!emp) return;
+      var next = normalizePlan(emp.plan);
+      if (emp.plan !== next) { emp.plan = next; changed = true; }
+    });
+    if (changed) saveEmpresas(empresas);
+  }
+  function removeSupportNav() {
+    var nav = document.getElementById('nav-soporte');
+    if (nav) nav.remove();
+    if (currentPage === 'soporte' && typeof goto === 'function') {
+      setTimeout(function(){ goto('empresas'); }, 0);
+    }
+  }
+  function getCurrentCompanyPlan() {
+    if (isSA() && supportId()) {
+      var emp = (typeof loadEmpresas === 'function' ? loadEmpresas() : []).find(function(e){ return e && e.id === supportId(); });
+      return normalizePlan(emp && emp.plan);
+    }
+    if (SESSION && SESSION.plan) return normalizePlan(SESSION.plan);
+    return 'FREE';
+  }
+  installPlans();
+  migrateCompanyPlans();
+
+  var baseSupportEnsure = typeof _supportEnsureModule === 'function' ? _supportEnsureModule : null;
+  window._supportEnsureModule = function() {
+    var out = baseSupportEnsure ? baseSupportEnsure() : undefined;
+    removeSupportNav();
+    return out;
+  };
+
+  var baseGetEmpresaPlan = typeof getEmpresaPlan === 'function' ? getEmpresaPlan : null;
+  getEmpresaPlan = function() {
+    if (isSA() && supportId()) return getCurrentCompanyPlan();
+    return normalizePlan(baseGetEmpresaPlan ? baseGetEmpresaPlan() : (SESSION && SESSION.plan));
+  };
+  window.getEmpresaPlan = getEmpresaPlan;
+
+  planHasModule = function(modulo) {
+    if (modulo === 'soporte') return false;
+    if (isSA() && !supportId()) return SUPERADMIN_MODULES.indexOf(modulo) >= 0;
+    return planModules(getCurrentCompanyPlan()).indexOf(modulo) >= 0;
+  };
+  window.planHasModule = planHasModule;
+
+  getModulosDisponibles = function() {
+    if (isSA() && !supportId()) return SUPERADMIN_MODULES.slice();
+    var mods = planModules(getCurrentCompanyPlan()).filter(function(m){ return CLIENT_HIDDEN_MODULES.indexOf(m) < 0; });
+    if (isSA() && supportId()) return mods;
+    var rol = SESSION && SESSION.user && SESSION.user.rol;
+    var roleMods = (typeof PERMISOS !== 'undefined' && PERMISOS && PERMISOS[rol]) ? PERMISOS[rol] : mods;
+    return mods.filter(function(m){ return roleMods.indexOf(m) >= 0; });
+  };
+  window.getModulosDisponibles = getModulosDisponibles;
+
+  function applyFinalPlanNav() {
+    removeSupportNav();
+    var mods = getModulosDisponibles();
+    NAV_IDS.forEach(function(id){
+      var el = document.getElementById('nav-' + id);
+      if (!el) return;
+      el.style.display = mods.indexOf(id) >= 0 ? '' : 'none';
+    });
+    var sections = {
+      'nav-sec-principal':['dashboard'],
+      'nav-sec-operacion':['inventario','importar','proveedores','clientes','pedidos','comercial','compras','logistica','movimientos','traslados'],
+      'nav-sec-analitica':['reportes'],
+      'nav-sec-bodegas':['ubicaciones','generar-qr','escaner'],
+      'nav-sec-seguridad':['auditoria'],
+      'nav-sec-admin':['empresas','usuarios','integraciones','respaldos'],
+      'nav-sec-sistema':['centro-pruebas','salud-sistema']
+    };
+    Object.keys(sections).forEach(function(sec){
+      var el = document.getElementById(sec);
+      if (!el) return;
+      el.style.display = sections[sec].some(function(m){ return mods.indexOf(m) >= 0; }) ? '' : 'none';
+    });
+    var badge = document.getElementById('plan-badge');
+    if (badge) badge.textContent = isSA() && !supportId() ? 'PLATFORM' : getCurrentCompanyPlan();
+  }
+
+  var baseApplyPlanUI = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function() {
+    installPlans();
+    migrateCompanyPlans();
+    if (baseApplyPlanUI) baseApplyPlanUI();
+    applyFinalPlanNav();
+  };
+  window.applyPlanUI = applyPlanUI;
+
+  function planBadge(plan) {
+    plan = normalizePlan(plan);
+    return plan === 'WMS' ? 'WMS' : plan;
+  }
+  function addSupportButtonsToCompanyCards() {
+    if (!isSA()) return;
+    var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    var pg = document.getElementById('pg-empresas');
+    if (!pg) return;
+    Array.prototype.forEach.call(pg.querySelectorAll('button'), function(btn){
+      if (/Abrir modo soporte/i.test(btn.textContent || '') && !btn.hasAttribute('data-support-btn')) {
+        btn.remove();
+      }
+    });
+    var cards = Array.prototype.filter.call(pg.querySelectorAll('.card'), function(card){
+      var txt = card.textContent || '';
+      return /Editar/.test(txt) && /Gestionar plan/.test(txt);
+    });
+    cards.forEach(function(card, idx){
+      var emp = empresas[idx];
+      if (!emp) return;
+      Array.prototype.forEach.call(card.querySelectorAll('[data-support-slot]'), function(node){ node.remove(); });
+      var slot = document.createElement('div');
+      slot.setAttribute('data-support-slot', emp.id);
+      slot.style.cssText = 'margin-top:8px;display:block';
+      slot.innerHTML = '<button class="btn btn-navy btn-sm" data-support-btn="'+esc(emp.id)+'" style="width:100%;font-size:11px" onclick="_abrirModoSoporte(&quot;'+esc(emp.id)+'&quot;)">Abrir modo soporte</button>';
+      card.appendChild(slot);
+      var badge = card.querySelector('span');
+      if (badge && /FREE|LITE|STARTER|PRO|WMS|ENTERPRISE|EMPRESARIAL/i.test(badge.textContent || '')) {
+        emp.plan = normalizePlan(emp.plan);
+        badge.textContent = planBadge(emp.plan);
+      }
+    });
+  }
+
+  function normalizePlanSelector(selectId, selected) {
+    var sel = document.getElementById(selectId);
+    if (!sel) return;
+    selected = normalizePlan(selected || sel.value);
+    sel.innerHTML = '<option value="FREE">FREE</option><option value="PRO">PRO</option><option value="WMS">Empresarial WMS</option>';
+    sel.value = selected;
+  }
+  function normalizeNewCompanyPlanCards() {
+    var hidden = document.getElementById('ne-plan');
+    if (hidden) hidden.value = normalizePlan(hidden.value);
+    var grid = hidden && hidden.previousElementSibling;
+    if (grid) grid.style.gridTemplateColumns = 'repeat(3,1fr)';
+    ['LITE','STARTER','ENTERPRISE'].forEach(function(p){
+      var el = document.getElementById('ne-plan-' + p);
+      if (el) el.remove();
+    });
+    ['FREE','PRO','WMS'].forEach(function(p){
+      var el = document.getElementById('ne-plan-' + p);
+      if (!el) return;
+      var label = el.querySelector('div:last-child');
+      if (label) label.textContent = p === 'WMS' ? 'WMS' : p;
+      el.onclick = function(){ _selPlanNuevaEmpresa(p); };
+    });
+  }
+  var baseSelPlanNuevaEmpresa = typeof _selPlanNuevaEmpresa === 'function' ? _selPlanNuevaEmpresa : null;
+  window._selPlanNuevaEmpresa = _selPlanNuevaEmpresa = function(planId) {
+    planId = normalizePlan(planId);
+    if (baseSelPlanNuevaEmpresa) baseSelPlanNuevaEmpresa(planId);
+    var hidden = document.getElementById('ne-plan');
+    if (hidden) hidden.value = planId;
+    ['FREE','PRO','WMS'].forEach(function(p){
+      var el = document.getElementById('ne-plan-' + p);
+      if (!el) return;
+      var selected = p === planId;
+      el.style.borderColor = selected ? 'var(--electric)' : 'var(--border2)';
+      el.style.background = selected ? 'rgba(0,168,255,.12)' : 'rgba(255,255,255,.02)';
+      var label = el.querySelector('div:last-child');
+      if (label) label.style.color = selected ? 'var(--electric)' : 'var(--text2)';
+    });
+  };
+
+  var baseAbrirNuevaEmpresa = typeof abrirNuevaEmpresa === 'function' ? abrirNuevaEmpresa : null;
+  if (baseAbrirNuevaEmpresa) {
+    abrirNuevaEmpresa = function() {
+      var out = baseAbrirNuevaEmpresa.apply(this, arguments);
+      setTimeout(function(){ normalizeNewCompanyPlanCards(); _selPlanNuevaEmpresa('FREE'); }, 0);
+      return out;
+    };
+    window.abrirNuevaEmpresa = abrirNuevaEmpresa;
+  }
+
+  var baseConfirmarNuevaEmpresa = typeof _confirmarNuevaEmpresa === 'function' ? _confirmarNuevaEmpresa : null;
+  if (baseConfirmarNuevaEmpresa) {
+    _confirmarNuevaEmpresa = function() {
+      var hidden = document.getElementById('ne-plan');
+      if (hidden) hidden.value = normalizePlan(hidden.value);
+      return baseConfirmarNuevaEmpresa.apply(this, arguments);
+    };
+    window._confirmarNuevaEmpresa = _confirmarNuevaEmpresa;
+  }
+
+  var baseEditarEmpresa = typeof _editarEmpresa === 'function' ? _editarEmpresa : null;
+  if (baseEditarEmpresa) {
+    _editarEmpresa = function(empId) {
+      var out = baseEditarEmpresa.apply(this, arguments);
+      setTimeout(function(){
+        var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+        var emp = empresas.find(function(e){ return e && e.id === empId; });
+        normalizePlanSelector('ee-plan', emp && emp.plan);
+      }, 0);
+      return out;
+    };
+    window._editarEmpresa = _editarEmpresa;
+  }
+
+  var baseGuardarEdicionEmpresa = typeof _guardarEdicionEmpresa === 'function' ? _guardarEdicionEmpresa : null;
+  if (baseGuardarEdicionEmpresa) {
+    _guardarEdicionEmpresa = function(empId) {
+      var sel = document.getElementById('ee-plan');
+      if (sel) sel.value = normalizePlan(sel.value);
+      var out = baseGuardarEdicionEmpresa.apply(this, arguments);
+      migrateCompanyPlans();
+      return out;
+    };
+    window._guardarEdicionEmpresa = _guardarEdicionEmpresa;
+  }
+
+  function wirePlanModal(empId) {
+    var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    var emp = empresas.find(function(e){ return e && e.id === empId; });
+    normalizePlanSelector('gp-plan', emp && emp.plan);
+    var active = document.getElementById('gp-btn-activo');
+    var susp = document.getElementById('gp-btn-susp');
+    if (active) active.onclick = function(){ if (typeof _setPlanEstado === 'function') _setPlanEstado(empId, 'ACTIVO'); };
+    if (susp) susp.onclick = function(){ if (typeof _setPlanEstado === 'function') _setPlanEstado(empId, 'SUSPENDIDO'); };
+    Array.prototype.forEach.call(document.querySelectorAll('.modal button, .modal-content button'), function(btn){
+      var txt = btn.textContent || '';
+      if (/\+ 30/.test(txt)) btn.onclick = function(){ setPlanDate(30); };
+      if (/\+ 60/.test(txt)) btn.onclick = function(){ setPlanDate(60); };
+      if (/\+ 90/.test(txt)) btn.onclick = function(){ setPlanDate(90); };
+      if (/\+ 1/.test(txt)) btn.onclick = function(){ setPlanDate(365); };
+      if (/Guardar cambios/i.test(txt)) btn.onclick = function(){ _guardarGestionPlan(empId); };
+    });
+  }
+  function setPlanDate(days) {
+    var input = document.getElementById('gp-vence');
+    if (!input) return;
+    var d = new Date();
+    d.setDate(d.getDate() + days);
+    input.value = d.toISOString().slice(0,10);
+  }
+  var baseGestionarPlan = typeof _gestionarPlan === 'function' ? _gestionarPlan : null;
+  if (baseGestionarPlan) {
+    _gestionarPlan = function(empId) {
+      var out = baseGestionarPlan.apply(this, arguments);
+      setTimeout(function(){ wirePlanModal(empId); }, 0);
+      return out;
+    };
+    window._gestionarPlan = _gestionarPlan;
+  }
+  var baseGuardarGestionPlan = typeof _guardarGestionPlan === 'function' ? _guardarGestionPlan : null;
+  if (baseGuardarGestionPlan) {
+    _guardarGestionPlan = function(empId) {
+      var sel = document.getElementById('gp-plan');
+      if (sel) sel.value = normalizePlan(sel.value);
+      var out = baseGuardarGestionPlan.apply(this, arguments);
+      migrateCompanyPlans();
+      applyPlanUI();
+      return out;
+    };
+    window._guardarGestionPlan = _guardarGestionPlan;
+  }
+
+  var baseEmpresasRender = (typeof renders !== 'undefined' && renders) ? renders.empresas : null;
+  if (baseEmpresasRender) {
+    renders.empresas = function() {
+      installPlans();
+      migrateCompanyPlans();
+      var out = baseEmpresasRender.apply(this, arguments);
+      setTimeout(function(){
+        removeSupportNav();
+        addSupportButtonsToCompanyCards();
+      }, 0);
+      return out;
+    };
+  }
+
+  setTimeout(function(){
+    removeSupportNav();
+    applyFinalPlanNav();
+    addSupportButtonsToCompanyCards();
+  }, 0);
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
