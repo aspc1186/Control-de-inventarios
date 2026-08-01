@@ -19522,7 +19522,7 @@ goto = function(page, param) {
       h.push('<div class="card" style="text-align:center;margin-bottom:12px"><p style="font-weight:800;color:var(--neon)">2FA activo</p></div>');
       h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button><button class="btn btn-ghost" style="color:var(--red)" onclick="_desactivar2FAConfirm(&quot;'+sfEsc(username)+'&quot;)">Desactivar 2FA</button></div>');
     } else {
-      h.push('<div style="display:grid;grid-template-columns:180px 1fr;gap:14px;align-items:center"><div style="text-align:center"><canvas id="mgr-2fa-qr" style="background:#fff;padding:8px;border-radius:8px"></canvas></div><div><p style="font-size:12px;color:var(--text2);margin-bottom:8px">Escanea el QR en una app autenticadora.</p><p style="font-size:11px;color:var(--muted)">Clave manual: <code>'+sfEsc(secret)+'</code></p><div class="form-row" style="margin-top:10px"><label>Codigo de verificacion</label><input id="mgr-2fa-code" inputmode="numeric" maxlength="6" placeholder="000000" oninput="this.value=this.value.replace(/\\D/g,\\'\\')" style="text-align:center;font-size:20px;letter-spacing:5px"></div></div></div>');
+      h.push('<div style="display:grid;grid-template-columns:180px 1fr;gap:14px;align-items:center"><div style="text-align:center"><canvas id="mgr-2fa-qr" style="background:#fff;padding:8px;border-radius:8px"></canvas></div><div><p style="font-size:12px;color:var(--text2);margin-bottom:8px">Escanea el QR en una app autenticadora.</p><p style="font-size:11px;color:var(--muted)">Clave manual: <code>'+sfEsc(secret)+'</code></p><div class="form-row" style="margin-top:10px"><label>Codigo de verificacion</label><input id="mgr-2fa-code" inputmode="numeric" maxlength="6" placeholder="000000" oninput="this.value=this.value.replace(/\\D/g, &quot;&quot;)" style="text-align:center;font-size:20px;letter-spacing:5px"></div></div></div>');
       h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_activar2FADesdePanel(&quot;'+sfEsc(username)+'&quot;)">Activar 2FA</button></div>');
     }
     openModal(h.join(''), 'modal-lg');
@@ -19698,6 +19698,253 @@ goto = function(page, param) {
       }, 0);
     };
   }
+})();
+
+/* Correccion raiz: autenticacion, usuarios y contexto empresa aislados */
+(function(){
+  var SF_SA_ID = '__SA__';
+  function sfNorm(v) { return String(v == null ? '' : v).trim().toLowerCase(); }
+  function sfDeletedUsersSafe() {
+    try { return DB.get('usuarios_eliminados') || []; } catch(e) { return []; }
+  }
+  function sfIsRootUser(u) {
+    return !!u && (sfNorm(u.username) === 'root' || sfNorm(u.rol) === 'root' || u.id === 'root_001');
+  }
+  function sfIsDeletedUserSafe(u) {
+    var deleted = sfDeletedUsersSafe();
+    return deleted.some(function(d){
+      return d && ((d.id && d.id === u.id) || (d.username && sfNorm(d.username) === sfNorm(u.username)));
+    });
+  }
+  function sfSystemSA() {
+    return {
+      id:'sa_001',
+      nombre:'Super Administrador',
+      username:'superadministrador',
+      correo:'superadmin@stockflow.app',
+      password:'erp_b59a1c55_14',
+      rol:'SUPER ADMINISTRADOR',
+      cargo:'Super Administrador',
+      area:'ADMINISTRACION',
+      estado:'ACTIVO',
+      intentos:0,
+      es_sistema:true,
+      eliminable:false,
+      empresa_id:SF_SA_ID,
+      created_at:'2026-01-01'
+    };
+  }
+  function sfCleanUsersStore() {
+    var users = [];
+    try { users = DB.get('usuarios') || []; } catch(e) { users = []; }
+    var out = [];
+    var seen = {};
+    users.forEach(function(u){
+      if (!u || sfIsRootUser(u) || sfIsDeletedUserSafe(u)) return;
+      var key = sfNorm(u.username || u.correo || u.id);
+      if (!key || seen[key]) return;
+      if (u.rol === 'SUPER ADMINISTRADOR') {
+        u.empresa_id = SF_SA_ID;
+        u.eliminable = false;
+        u.estado = u.estado || 'ACTIVO';
+      }
+      seen[key] = true;
+      out.push(u);
+    });
+    var hasSA = out.some(function(u){ return u && u.rol === 'SUPER ADMINISTRADOR'; });
+    if (!hasSA) out.unshift(sfSystemSA());
+    try { DB.set('usuarios', out); } catch(e) {}
+    try {
+      var sess = DB.get('session');
+      if (sess && sess.user && sfIsRootUser(sess.user)) DB.set('session', null);
+    } catch(e) {}
+    return out;
+  }
+
+  var sfBaseSeed = typeof seed === 'function' ? seed : null;
+  if (sfBaseSeed) {
+    seed = function() {
+      sfBaseSeed();
+      sfCleanUsersStore();
+    };
+    window.seed = seed;
+  }
+
+  function sfSupportEmpresaId() {
+    try { return sessionStorage.getItem('sf_support_empresa_id') || ''; } catch(e) { return ''; }
+  }
+  var sfBaseGetEmpresaIdFinal = typeof _getEmpresaId === 'function' ? _getEmpresaId : null;
+  _getEmpresaId = function() {
+    var user = SESSION && SESSION.user;
+    if (user && user.rol === 'SUPER ADMINISTRADOR') {
+      var supportId = sfSupportEmpresaId();
+      return supportId || SF_SA_ID;
+    }
+    if (user && user.empresa_id) return user.empresa_id;
+    return sfBaseGetEmpresaIdFinal ? sfBaseGetEmpresaIdFinal() : null;
+  };
+  window._getEmpresaId = _getEmpresaId;
+
+  loadUsers = function() {
+    var users = sfCleanUsersStore();
+    var user = SESSION && SESSION.user;
+    if (!user) return [];
+    if (user.rol === 'SUPER ADMINISTRADOR') {
+      var supportId = sfSupportEmpresaId();
+      if (supportId) return users.filter(function(u){ return u && u.empresa_id === supportId; });
+      return users.filter(function(u){ return u && (u.empresa_id === SF_SA_ID || !u.empresa_id || u.rol === 'SUPER ADMINISTRADOR'); });
+    }
+    if (user.empresa_id) return users.filter(function(u){ return u && u.empresa_id === user.empresa_id; });
+    return [];
+  };
+  window.loadUsers = loadUsers;
+
+  function sfRestoreLoginButton(btn) {
+    window._loginInProgress = false;
+    if (!btn) return;
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Ingresar al sistema';
+  }
+  function sfFindUserForLogin(login) {
+    var users = sfCleanUsersStore();
+    return users.find(function(u){
+      return sfNorm(u.username) === login || sfNorm(u.correo) === login;
+    });
+  }
+  function sfSaveUserLoginState(user) {
+    var users = sfCleanUsersStore();
+    var idx = users.findIndex(function(u){ return u && (u.id === user.id || sfNorm(u.username) === sfNorm(user.username)); });
+    if (idx >= 0) users[idx] = user;
+    else users.push(user);
+    DB.set('usuarios', users.filter(function(u){ return !sfIsRootUser(u) && !sfIsDeletedUserSafe(u); }));
+  }
+
+  function sfCompleteLoginStable(user) {
+    if (!user || sfIsRootUser(user)) {
+      showErr('Usuario no autorizado.');
+      window._loginInProgress = false;
+      return;
+    }
+    if (user.rol === 'SUPER ADMINISTRADOR') user.empresa_id = SF_SA_ID;
+
+    var fresh = sfFindUserForLogin(sfNorm(user.username)) || user;
+    if (fresh.primer_ingreso || fresh.debe_cambiar_pwd || fresh.pwd_temporal) {
+      SESSION.user = fresh;
+      try { if (typeof _mostrarCambioContraseñaObligatorio === 'function') _mostrarCambioContraseñaObligatorio(fresh); } catch(e) {}
+      window._loginInProgress = false;
+      return;
+    }
+    if (typeof _requiere2FA === 'function' && typeof _is2FAEnabled === 'function' && _requiere2FA(fresh.rol) && _is2FAEnabled(fresh.username)) {
+      SESSION.user = fresh;
+      try { if (typeof _iniciar2FALogin === 'function') _iniciar2FALogin(fresh); } catch(e) { showErr('Error al abrir 2FA: ' + (e.message || e)); }
+      window._loginInProgress = false;
+      return;
+    }
+
+    SESSION.user = fresh;
+    if (fresh.rol === 'SUPER ADMINISTRADOR') {
+      SESSION.empresa_id = null;
+      SESSION.empresa = 'StockFlow Platform';
+      SESSION.plan = 'WMS';
+    } else {
+      try { if (typeof _initEmpresaSession === 'function') _initEmpresaSession(); } catch(e) { console.warn('[SF] empresa session:', e); }
+    }
+
+    var loginTs = new Date().toISOString();
+    fresh.intentos = 0;
+    fresh.estado = 'ACTIVO';
+    fresh.ultimo_acceso = loginTs;
+    sfSaveUserLoginState(fresh);
+    try { DB.set('session', { user:fresh }); } catch(e) {}
+    try { auditLog('LOGIN', 'Acceso: ' + fresh.username + ' | Rol: ' + fresh.rol + ' | ' + loginTs, fresh.nombre); } catch(e) {}
+
+    var lv = document.getElementById('login-view');
+    var av = document.getElementById('app-view');
+    document.body.classList.add('app-mode');
+    if (lv) { lv.removeAttribute('style'); lv.classList.add('hidden'); }
+    if (av) av.removeAttribute('style');
+    var ni = document.getElementById('nav-user-info');
+    if (ni) ni.textContent = (fresh.nombre || fresh.username) + ' - ' + fresh.rol;
+    var tu = document.getElementById('topbar-user');
+    if (tu) { tu.textContent = (fresh.nombre || 'U').charAt(0).toUpperCase(); tu.title = (fresh.nombre || fresh.username) + ' - ' + fresh.rol; }
+
+    try { applyRoleUI(); } catch(e) { console.error('[SF] applyRoleUI:', e); }
+    try { applyPlanUI(); } catch(e) { console.error('[SF] applyPlanUI:', e); }
+    try { if (typeof _updatePlanBadge === 'function') _updatePlanBadge(); } catch(e) {}
+    try { if (typeof _injectPlanBadge === 'function') _injectPlanBadge(); } catch(e) {}
+    setTimeout(function(){ try { if (typeof _initEmpresaButton === 'function') _initEmpresaButton(); } catch(e) {} }, 50);
+
+    var destino = DB.get('last_page') || 'dashboard';
+    if (!document.getElementById('pg-' + destino)) destino = 'dashboard';
+    if (fresh.rol === 'CONSULTA DE PRODUCTOS') destino = 'consulta-productos';
+    if (fresh.rol === 'ALMACENISTA' && ['inventario','logistica','picking','packing','traslados'].indexOf(destino) < 0) destino = 'inventario';
+    try { goto(destino); } catch(e) {
+      console.error('[SF] goto:', e);
+      try { goto('dashboard'); } catch(e2) {}
+    }
+    window._loginInProgress = false;
+    setTimeout(function(){ try { if (typeof _syncAllFromNeon === 'function') _syncAllFromNeon(null); } catch(e) {} }, 100);
+  }
+  window._sfCompleteLoginStable = sfCompleteLoginStable;
+  _completarLogin = function(user) { sfCompleteLoginStable(user); };
+  window._completarLogin = _completarLogin;
+
+  doLogin = function() {
+    if (window._loginInProgress) return;
+    var btn = document.querySelector('.login-right .btn-navy');
+    try {
+      window._loginInProgress = true;
+      if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
+      var loginEl = document.getElementById('l-login');
+      var pwdEl = document.getElementById('l-pwd');
+      var login = sfNorm(loginEl && loginEl.value);
+      var pwd = String((pwdEl && pwdEl.value) || '');
+      var errEl = document.getElementById('l-error');
+      if (errEl) errEl.style.display = 'none';
+      if (!login || !pwd) {
+        sfRestoreLoginButton(btn);
+        showErr('Ingresa usuario y contrasena');
+        return;
+      }
+      var user = sfFindUserForLogin(login);
+      if (!user) {
+        sfRestoreLoginButton(btn);
+        showErr('Usuario no encontrado: ' + login);
+        return;
+      }
+      if (user.estado === 'INACTIVO') { sfRestoreLoginButton(btn); showErr('Cuenta inactiva. Contacta al administrador.'); return; }
+      if (user.estado === 'BLOQUEADO') { sfRestoreLoginButton(btn); showErr('Cuenta bloqueada. Contacta al administrador.'); return; }
+      var stored = user.password || user.password_hash || '';
+      var ok = stored && typeof checkPwd === 'function' && checkPwd(pwd, stored);
+      if (!ok && user.reset_token && user.reset_expiry) {
+        var today = new Date().toISOString().slice(0,10);
+        ok = user.reset_expiry >= today && typeof simpleHash === 'function' && simpleHash(pwd) === user.reset_token;
+        if (ok) {
+          user.reset_token = null;
+          user.reset_expiry = null;
+          user.debe_cambiar_pwd = true;
+          user.primer_ingreso = true;
+        }
+      }
+      if (!ok) {
+        user.intentos = Number(user.intentos || 0) + 1;
+        if (user.intentos >= 5 && user.rol !== 'SUPER ADMINISTRADOR') user.estado = 'BLOQUEADO';
+        sfSaveUserLoginState(user);
+        sfRestoreLoginButton(btn);
+        showErr(user.estado === 'BLOQUEADO' ? 'Cuenta bloqueada por 5 intentos fallidos.' : 'Contrasena incorrecta. Intentos: ' + user.intentos + '/5');
+        return;
+      }
+      sfRestoreLoginButton(btn);
+      sfCompleteLoginStable(user);
+    } catch(e) {
+      console.error('[SF] login fatal:', e);
+      sfRestoreLoginButton(btn);
+      showErr('Error al iniciar sesion: ' + (e && e.message ? e.message : e));
+    }
+  };
+  window.doLogin = doLogin;
+
+  try { sfCleanUsersStore(); } catch(e) {}
 })();
 
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
