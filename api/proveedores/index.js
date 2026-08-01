@@ -174,8 +174,8 @@ module.exports = async (req, res) => {
 
     if (req.method === 'GET') {
       const rows = empresaId && empresaId !== '__SA__'
-        ? await sql`SELECT * FROM proveedores WHERE empresa_id = ${empresaId} ORDER BY nombre ASC`
-        : await sql`SELECT * FROM proveedores ORDER BY nombre ASC`;
+        ? await sql`SELECT * FROM proveedores WHERE empresa_id = ${empresaId} AND COALESCE(estado, 'ACTIVO') <> 'ELIMINADO' ORDER BY nombre ASC`
+        : await sql`SELECT * FROM proveedores WHERE COALESCE(estado, 'ACTIVO') <> 'ELIMINADO' ORDER BY nombre ASC`;
       return res.status(200).json({ ok: true, data: rows });
     }
 
@@ -209,8 +209,7 @@ module.exports = async (req, res) => {
     if (req.method === 'DELETE') {
       const { id } = req.query;
       if (!id) return res.status(400).json({ ok: false, error: 'id requerido' });
-      if (!isUuid(id)) return res.status(200).json({ ok: true, skipped: true });
-      await sql`UPDATE proveedores SET estado = 'INACTIVO', updated_at = NOW() WHERE id = ${id}`;
+      await sql`DELETE FROM proveedores WHERE id = ${id}`;
       return res.status(200).json({ ok: true });
     }
 

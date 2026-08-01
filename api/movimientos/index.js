@@ -221,6 +221,16 @@ module.exports = async (req, res) => {
         }
         return res.status(200).json({ ok: true, count: saved.length, ids: saved, id: saved.length === 1 ? saved[0] : undefined });
       }
+      if (req.method === 'DELETE') {
+        const { id, empresa_id } = req.query;
+        if (!id) return res.status(400).json({ ok: false, error: 'id requerido' });
+        if (empresa_id && empresa_id !== '__SA__') {
+          await sql`DELETE FROM wms_operaciones WHERE recurso = ${recurso} AND id = ${id} AND empresa_id = ${empresa_id}`;
+        } else {
+          await sql`DELETE FROM wms_operaciones WHERE recurso = ${recurso} AND id = ${id}`;
+        }
+        return res.status(200).json({ ok: true });
+      }
       return res.status(405).json({ ok: false, error: 'Method not allowed' });
     } catch (err) {
       console.error('[wms via movimientos]', recurso, err.message);

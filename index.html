@@ -7824,9 +7824,9 @@ function _sha1(data) {
     for (var t=0; t<80; t++) {
       var f,k;
       if (t<20){f=(b&c)|((~b)&d);k=0x5A827999;}
-      else if(t<40){f=bcd;k=0x6ED9EBA1;}
+      else if(t<40){f=b^c^d;k=0x6ED9EBA1;}
       else if(t<60){f=(b&c)|(b&d)|(c&d);k=0x8F1BBCDC;}
-      else{f=bcd;k=0xCA62C1D6;}
+      else{f=b^c^d;k=0xCA62C1D6;}
       var tmp=((a<<5)|(a>>>27))+f+e+k+W[t];
       e=d;d=c;c=(b<<30)|(b>>>2);b=a;a=tmp;
     }
@@ -7903,7 +7903,7 @@ function _iniciar2FALogin(user) {
   h.push('</div>');
   h.push('<div id="twofa-error" style="display:none;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:10px;border-radius:8px;font-size:12px;margin-bottom:12px"></div>');
   h.push('<div class="form-row"><label>Código de 6 dígitos</label>');
-  h.push('<input id="twofa-code" type="text" maxlength="6" placeholder="000000" style="text-align:center;font-size:24px;letter-spacing:8px;font-family:monospace" oninput="this.value=this.value.replace(/[0-9]/g,\'\')" onkeypress="if(event.key===\'Enter\')_verificar2FA()">');
+  h.push('<input id="twofa-code" type="text" maxlength="6" placeholder="000000" style="text-align:center;font-size:24px;letter-spacing:8px;font-family:monospace" oninput="this.value=this.value.replace(/\\D/g,\'\')" onkeypress="if(event.key===\'Enter\')_verificar2FA()">');
   h.push('</div>');
   h.push('<button class="btn btn-navy" style="width:100%;justify-content:center;padding:11px;margin-bottom:10px" onclick="_verificar2FA()">✓ Verificar</button>');
   h.push('<button class="btn btn-ghost" style="width:100%;justify-content:center" onclick="_cancelar2FA()">← Volver</button>');
@@ -19946,6 +19946,243 @@ goto = function(page, param) {
   window.doLogin = doLogin;
 
   try { sfCleanUsersStore(); } catch(e) {}
+})();
+
+/* Correccion raiz: soporte persistente por empresa y 2FA estable */
+(function(){
+  var SF_SUPPORT_KEY = 'sf_support_empresa_id';
+  function norm(v){ return String(v == null ? '' : v).trim().toLowerCase(); }
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function currentEid() {
+    var u = SESSION && SESSION.user;
+    if (u && u.rol === 'SUPER ADMINISTRADOR') {
+      try { return sessionStorage.getItem(SF_SUPPORT_KEY) || '__SA__'; } catch(e) { return '__SA__'; }
+    }
+    return u && u.empresa_id ? u.empresa_id : (typeof _getEmpresaId === 'function' ? _getEmpresaId() : null);
+  }
+  function deletedKey(resource){ return 'sf_deleted_' + resource; }
+  function deletedRows(resource) {
+    try { return DB.get(deletedKey(resource)) || []; } catch(e) { return []; }
+  }
+  function rowId(row) {
+    return norm(row && (row.id || row.nit || row.codigo || row.sku || row.username || row.razon_social || row.nombre));
+  }
+  function isDeleted(resource, row) {
+    var id = rowId(row);
+    if (!id) return false;
+    var eid = row && row.empresa_id || '';
+    return deletedRows(resource).some(function(d){
+      if (!d) return false;
+      var sameId = norm(d.id) === id || norm(d.nit) === norm(row && row.nit) || norm(d.username) === norm(row && row.username);
+      var sameEmp = !d.empresa_id || !eid || d.empresa_id === eid;
+      return sameId && sameEmp;
+    });
+  }
+  function rememberDeleted(resource, row) {
+    var rows = deletedRows(resource);
+    var item = {
+      id: row && row.id || '',
+      nit: row && row.nit || '',
+      username: row && row.username || '',
+      empresa_id: row && row.empresa_id || (currentEid() !== '__SA__' ? currentEid() : ''),
+      deleted_at: new Date().toISOString(),
+      deleted_by: SESSION.user && SESSION.user.username || ''
+    };
+    if (!rows.some(function(d){ return norm(d.id || d.nit || d.username) === norm(item.id || item.nit || item.username) && d.empresa_id === item.empresa_id; })) rows.push(item);
+    DB.set(deletedKey(resource), rows);
+  }
+  function scopedLoad(resource) {
+    var all = (DB.get(resource) || []).filter(function(r){ return !isDeleted(resource, r); });
+    var eid = currentEid();
+    if (eid && eid !== '__SA__') return all.filter(function(r){ return r && r.empresa_id === eid; });
+    return all;
+  }
+  function scopedSave(resource, arr) {
+    arr = (arr || []).filter(function(r){ return !isDeleted(resource, r); });
+    var eid = currentEid();
+    if (eid && eid !== '__SA__') {
+      var all = (DB.get(resource) || []).filter(function(r){ return !isDeleted(resource, r); });
+      var other = all.filter(function(r){ return !r || r.empresa_id !== eid; });
+      var mine = arr.map(function(r){ return Object.assign({}, r, { empresa_id:eid }); });
+      DB.set(resource, other.concat(mine));
+      return;
+    }
+    DB.set(resource, arr);
+  }
+
+  loadClientes = function(){ return scopedLoad('clientes'); };
+  saveClientes = function(arr){ scopedSave('clientes', arr); };
+  loadProveedores = function(){ return scopedLoad('proveedores'); };
+  saveProveedores = function(arr){ scopedSave('proveedores', arr); };
+  window.loadClientes = loadClientes;
+  window.saveClientes = saveClientes;
+  window.loadProveedores = loadProveedores;
+  window.saveProveedores = saveProveedores;
+
+  var baseSyncClientes = typeof _syncClientesFromAPI === 'function' ? _syncClientesFromAPI : null;
+  _syncClientesFromAPI = function(done) {
+    if (!baseSyncClientes) { if (done) done(loadClientes()); return; }
+    baseSyncClientes(function(rows){
+      var clean = (DB.get('clientes') || []).filter(function(c){ return !isDeleted('clientes', c); });
+      DB.set('clientes', clean);
+      if (typeof done === 'function') done(loadClientes());
+    });
+  };
+  window._syncClientesFromAPI = _syncClientesFromAPI;
+
+  var baseSyncProveedores = typeof _syncProveedoresFromAPI === 'function' ? _syncProveedoresFromAPI : null;
+  _syncProveedoresFromAPI = function(done) {
+    if (!baseSyncProveedores) { if (done) done(loadProveedores()); return; }
+    baseSyncProveedores(function(rows){
+      var clean = (DB.get('proveedores') || []).filter(function(p){ return !isDeleted('proveedores', p); });
+      DB.set('proveedores', clean);
+      if (typeof done === 'function') done(loadProveedores());
+    });
+  };
+  window._syncProveedoresFromAPI = _syncProveedoresFromAPI;
+
+  deleteProveedor = function(idx) {
+    var provs = loadProveedores();
+    var p = provs[idx];
+    if (!p || !confirm('Eliminar proveedor "' + (p.razon_social || p.nombre || p.nit || '') + '"?')) return;
+    rememberDeleted('proveedores', p);
+    provs.splice(idx, 1);
+    saveProveedores(provs);
+    if (p.id) fetch('/api/proveedores?id=' + encodeURIComponent(p.id), { method:'DELETE' }).catch(function(){});
+    showToast('Proveedor eliminado', 'green');
+    if (currentPage === 'proveedores') renders.proveedores();
+    if (currentPage === 'soporte' && typeof _soporteVerModuloCliente === 'function') _soporteVerModuloCliente('proveedores');
+  };
+  window.deleteProveedor = deleteProveedor;
+
+  window.eliminarCliente = function(id) {
+    var clientes = loadClientes();
+    var idx = clientes.findIndex(function(c){ return c && c.id === id; });
+    var c = clientes[idx];
+    if (!c || !confirm('Eliminar cliente "' + (c.razon_social || c.nombre || c.nit || '') + '"?')) return;
+    rememberDeleted('clientes', c);
+    clientes.splice(idx, 1);
+    saveClientes(clientes);
+    if (c.id) {
+      var eid = currentEid();
+      fetch('/api/movimientos?recurso=clientes&id=' + encodeURIComponent(c.id) + (eid && eid !== '__SA__' ? '&empresa_id=' + encodeURIComponent(eid) : ''), { method:'DELETE' }).catch(function(){});
+    }
+    showToast('Cliente eliminado', 'green');
+    if (currentPage === 'clientes') renders.clientes();
+    if (currentPage === 'soporte' && typeof _soporteVerModuloCliente === 'function') _soporteVerModuloCliente('clientes');
+  };
+
+  var baseClientesRender = renders.clientes;
+  if (baseClientesRender) {
+    renders.clientes = function(){
+      baseClientesRender();
+      setTimeout(function(){
+        var rows = document.querySelectorAll('#pg-clientes tbody tr');
+        var clientes = loadClientes();
+        Array.prototype.forEach.call(rows, function(tr, i){
+          var c = clientes[i];
+          var td = tr.querySelector('td:last-child');
+          if (!td || !c || td.querySelector('[data-del-cliente]')) return;
+          td.insertAdjacentHTML('beforeend', ' <button data-del-cliente="1" class="btn btn-ghost btn-sm" style="color:var(--red)" onclick="eliminarCliente(&quot;'+esc(c.id)+'&quot;)">Eliminar</button>');
+        });
+      }, 0);
+    };
+  }
+
+  function bytesToHex(bytes) {
+    return Array.prototype.map.call(bytes, function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+  }
+  function base32Decode(secret) {
+    var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+    var bits = '', out = [];
+    String(secret || '').toUpperCase().replace(/[^A-Z2-7]/g,'').split('').forEach(function(ch){
+      var val = alphabet.indexOf(ch);
+      if (val >= 0) bits += val.toString(2).padStart(5,'0');
+    });
+    for (var i = 0; i + 8 <= bits.length; i += 8) out.push(parseInt(bits.slice(i, i+8), 2));
+    return new Uint8Array(out);
+  }
+  function hotpSync(secret, counter) {
+    try {
+      var key = base32Decode(secret);
+      var msg = new Uint8Array(8);
+      for (var i = 7; i >= 0; i--) { msg[i] = counter & 255; counter = Math.floor(counter / 256); }
+      if (typeof _hmacSha1 === 'function') {
+        var h = _hmacSha1(key, msg);
+        var off = h[19] & 15;
+        var bin = ((h[off] & 127) << 24) | ((h[off+1] & 255) << 16) | ((h[off+2] & 255) << 8) | (h[off+3] & 255);
+        return String(bin % 1000000).padStart(6,'0');
+      }
+    } catch(e) {}
+    return '';
+  }
+  async function hotpAsync(secret, counter) {
+    if (!window.crypto || !crypto.subtle) return hotpSync(secret, counter);
+    var keyData = base32Decode(secret);
+    var msg = new Uint8Array(8);
+    for (var i = 7; i >= 0; i--) { msg[i] = counter & 255; counter = Math.floor(counter / 256); }
+    var key = await crypto.subtle.importKey('raw', keyData, { name:'HMAC', hash:'SHA-1' }, false, ['sign']);
+    var sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, msg));
+    var off = sig[19] & 15;
+    var bin = ((sig[off] & 127) << 24) | ((sig[off+1] & 255) << 16) | ((sig[off+2] & 255) << 8) | (sig[off+3] & 255);
+    return String(bin % 1000000).padStart(6,'0');
+  }
+  _verify2FACode = function(username, code) {
+    code = String(code || '').replace(/\D/g,'');
+    var secret = _get2FASecret(username);
+    var counter = Math.floor(Date.now() / 30000);
+    for (var w = counter - 2; w <= counter + 2; w++) {
+      if (hotpSync(secret, w) === code) return true;
+    }
+    return false;
+  };
+  window._verify2FACode = _verify2FACode;
+
+  window._activar2FADesdePanel = function(username) {
+    username = username || (SESSION.user && SESSION.user.username) || '';
+    var input = document.getElementById('mgr-2fa-code');
+    var code = String(input && input.value || '').replace(/\D/g,'');
+    if (code.length !== 6) { showToast('Ingresa el codigo de 6 digitos', 'red'); if (input) input.focus(); return; }
+    var secret = _get2FASecret(username);
+    var counter = Math.floor(Date.now() / 30000);
+    Promise.all([hotpAsync(secret, counter-2), hotpAsync(secret, counter-1), hotpAsync(secret, counter), hotpAsync(secret, counter+1), hotpAsync(secret, counter+2)])
+      .then(function(codes){
+        if (codes.indexOf(code) < 0) { showToast('Codigo incorrecto. Revisa hora del celular o vuelve a escanear el QR.', 'red'); return; }
+        _enable2FA(username);
+        try { _auditSeg('2FA_ACTIVADO', '2FA activado desde panel de usuario', { usuario: username }); } catch(e) {}
+        closeModal();
+        showToast('2FA activado', 'green');
+        var b = document.getElementById('sf-2fa-top-btn');
+        if (b) b.textContent = '2FA activo';
+        if (currentPage === 'usuarios') renders.usuarios();
+      })
+      .catch(function(err){ showToast('No se pudo validar 2FA: ' + (err && err.message ? err.message : err), 'red'); });
+  };
+
+  var baseAbrir2FA = typeof _abrir2FAUsuario === 'function' ? _abrir2FAUsuario : null;
+  _abrir2FAUsuario = function(username) {
+    username = username || (SESSION.user && SESSION.user.username) || '';
+    var enabled = typeof _is2FAEnabled === 'function' && _is2FAEnabled(username);
+    var secret = typeof _get2FASecret === 'function' ? _get2FASecret(username) : '';
+    var uri = typeof _get2FAQRUri === 'function' ? _get2FAQRUri(username, secret) : secret;
+    var h = [];
+    h.push('<h3 style="margin-bottom:8px">Doble Factor de Autenticacion</h3>');
+    h.push('<p style="font-size:12px;color:var(--muted);margin-bottom:14px">Cuenta: <strong>'+esc(username)+'</strong></p>');
+    if (enabled) {
+      h.push('<div class="card" style="text-align:center;margin-bottom:12px"><p style="font-weight:800;color:var(--neon)">2FA activo</p><p style="font-size:12px;color:var(--muted)">Este estado es independiente de la contrasena.</p></div>');
+      h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button><button class="btn btn-ghost" style="color:var(--red)" onclick="_desactivar2FAConfirm(&quot;'+esc(username)+'&quot;)">Desactivar 2FA</button></div>');
+    } else {
+      h.push('<div style="display:grid;grid-template-columns:minmax(150px,190px) 1fr;gap:18px;align-items:center"><div style="text-align:center"><canvas id="mgr-2fa-qr" style="background:#fff;padding:8px;border-radius:8px"></canvas></div><div><p style="font-size:12px;color:var(--text2);margin-bottom:8px">Escanea el QR en una app autenticadora.</p><p style="font-size:11px;color:var(--muted);word-break:break-all">Clave manual: <code>'+esc(secret)+'</code></p><div class="form-row" style="margin-top:10px"><label>Codigo de verificacion</label><input id="mgr-2fa-code" inputmode="numeric" maxlength="6" placeholder="000000" oninput="this.value=this.value.replace(/\\D/g, &quot;&quot;)" style="text-align:center;font-size:20px;letter-spacing:5px"></div></div></div>');
+      h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_activar2FADesdePanel(&quot;'+esc(username)+'&quot;)">Activar 2FA</button></div>');
+    }
+    openModal(h.join(''), 'modal-lg');
+    setTimeout(function(){ try { if (!enabled && typeof QRious !== 'undefined') new QRious({ element:document.getElementById('mgr-2fa-qr'), value:uri, size:170, level:'M' }); } catch(e){} }, 80);
+  };
+  window._abrir2FAUsuario = _abrir2FAUsuario;
 })();
 
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
