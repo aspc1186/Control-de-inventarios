@@ -18926,6 +18926,385 @@ goto = function(page, param) {
   }
 })();
 
+/* Cierre funcional: usuarios, dashboard unico, filtros, WMS, bodegas, empresas y respaldos */
+(function(){
+  function _sfEscFinal(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function _sfDeletedUsers() {
+    try { return DB.get('usuarios_eliminados') || []; } catch(e) { return []; }
+  }
+  function _sfIsDeletedUser(u) {
+    var deleted = _sfDeletedUsers();
+    return deleted.some(function(d){
+      return (d.id && d.id === u.id) || (d.username && String(d.username).toLowerCase() === String(u.username || '').toLowerCase());
+    });
+  }
+  function _sfNormalizeUsersRoot() {
+    try {
+      var users = DB.get('usuarios') || [];
+      var before = users.length;
+      users = users.filter(function(u){ return u && u.rol !== 'ROOT' && String(u.username || '').toLowerCase() !== 'root'; });
+      users = users.map(function(u){
+        if (String(u.rol || '').toUpperCase() === 'ROOT') u.rol = 'SUPER ADMINISTRADOR';
+        return u;
+      });
+      if (users.length !== before) DB.set('usuarios', users);
+    } catch(e) {}
+  }
+  _sfNormalizeUsersRoot();
+
+  var _baseLoadUsersFinal = typeof loadUsers === 'function' ? loadUsers : null;
+  loadUsers = function() {
+    _sfNormalizeUsersRoot();
+    var rows = _baseLoadUsersFinal ? _baseLoadUsersFinal() : (DB.get('usuarios') || []);
+    return (rows || []).filter(function(u){
+      return u && u.rol !== 'ROOT' && String(u.username || '').toLowerCase() !== 'root' && !_sfIsDeletedUser(u);
+    });
+  };
+
+  var _baseBuildUsuariosFinal = typeof _buildUsuariosUI === 'function' ? _buildUsuariosUI : null;
+  _buildUsuariosUI = function(users) {
+    users = (users || loadUsers()).filter(function(u){
+      return u && u.rol !== 'ROOT' && String(u.username || '').toLowerCase() !== 'root' && !_sfIsDeletedUser(u);
+    });
+    if (_baseBuildUsuariosFinal) _baseBuildUsuariosFinal(users);
+    _sfWire2FAButton();
+  };
+
+  _eliminarUsuarioActivo = function(id) {
+    var all = DB.get('usuarios') || [];
+    var u = all.find(function(x){ return x && x.id === id; });
+    if (!u) { showToast('Usuario no encontrado', 'red'); return; }
+    if (u.rol === 'SUPER ADMINISTRADOR') return showToast('El superadministrador no se puede eliminar', 'red');
+    if (!confirm('Eliminar usuario ' + (u.username || u.nombre || id) + '?')) return;
+    var deleted = _sfDeletedUsers();
+    deleted.push({ id:u.id, username:u.username || '', rol:u.rol || '', deleted_at:new Date().toISOString(), deleted_by:SESSION.user && SESSION.user.username || '' });
+    DB.set('usuarios_eliminados', deleted);
+    DB.set('usuarios', all.filter(function(x){ return x && x.id !== id && String(x.username || '').toLowerCase() !== String(u.username || '').toLowerCase(); }));
+    fetch('/api/usuarios?id=' + encodeURIComponent(id), { method:'DELETE' }).catch(function(){});
+    try { auditLog('ELIMINAR_USUARIO', 'Usuario: ' + (u.username || id), SESSION.user && SESSION.user.nombre); } catch(e) {}
+    showToast('Usuario eliminado', 'green');
+    if (currentPage === 'usuarios') renders.usuarios();
+  };
+  window._eliminarUsuarioActivo = _eliminarUsuarioActivo;
+
+  function _sfWire2FAButton() {
+    var rol = SESSION.user && SESSION.user.rol || '';
+    if (rol !== 'SUPER ADMINISTRADOR' && rol !== 'ADMINISTRADOR') return;
+    var topbar = document.getElementById('topbar');
+    if (!topbar || document.getElementById('sf-2fa-top-btn')) return;
+    var user = SESSION.user && SESSION.user.username || '';
+    var enabled = typeof _is2FAEnabled === 'function' && _is2FAEnabled(user);
+    var btn = document.createElement('button');
+    btn.id = 'sf-2fa-top-btn';
+    btn.className = 'btn btn-ghost btn-sm';
+    btn.style.marginLeft = '6px';
+    btn.textContent = enabled ? '2FA activo' : 'Activar 2FA';
+    btn.onclick = function(){ if (typeof _abrir2FAUsuario === 'function') _abrir2FAUsuario(user); };
+    topbar.appendChild(btn);
+  }
+
+  var _baseApplyPlanFinalClean = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function() {
+    if (_baseApplyPlanFinalClean) _baseApplyPlanFinalClean();
+    var badge = document.getElementById('plan-badge');
+    if (badge) badge.style.display = 'none';
+    var gerencial = document.getElementById('nav-gerencial');
+    if (gerencial) gerencial.style.display = 'none';
+    var rootRoleOptions = document.querySelectorAll('option[value="ROOT"]');
+    Array.prototype.forEach.call(rootRoleOptions, function(o){ o.remove(); });
+    _sfWire2FAButton();
+  };
+
+  var _baseNuevoUsuarioFinal = typeof nuevoUsuario === 'function' ? nuevoUsuario : null;
+  if (_baseNuevoUsuarioFinal) {
+    nuevoUsuario = function() {
+      _baseNuevoUsuarioFinal();
+      setTimeout(function(){
+        var doc = document.getElementById('u-doc');
+        if (doc) {
+          doc.setAttribute('inputmode','numeric');
+          doc.placeholder = '12345678';
+          doc.oninput = function(){ this.value = this.value.replace(/\D/g, ''); };
+        }
+        var rol = document.getElementById('u-rol');
+        if (rol && !Array.prototype.some.call(rol.options, function(o){ return o.value === 'COMERCIAL'; })) {
+          rol.insertAdjacentHTML('afterbegin','<option value="COMERCIAL">COMERCIAL</option>');
+        }
+      },0);
+    };
+  }
+
+  var _baseGuardarUsuarioFinal = typeof guardarUsuario === 'function' ? guardarUsuario : null;
+  if (_baseGuardarUsuarioFinal) {
+    guardarUsuario = function() {
+      var doc = document.getElementById('u-doc');
+      if (doc) doc.value = String(doc.value || '').replace(/\D/g, '');
+      return _baseGuardarUsuarioFinal();
+    };
+  }
+
+  var _baseAbrirReservaFinal = typeof abrirPanelReserva === 'function' ? abrirPanelReserva : null;
+  if (_baseAbrirReservaFinal) {
+    abrirPanelReserva = function() {
+      _baseAbrirReservaFinal();
+      setTimeout(function(){
+        var ced = document.getElementById('res-cedula');
+        var ot = document.getElementById('res-ot');
+        if (!ced) return;
+        ced.setAttribute('inputmode','numeric');
+        ced.oninput = function(){
+          this.value = this.value.replace(/\D/g, '');
+          if (ot && !ot.value && this.value.length >= 5) {
+            var seq = Number(DB.get('sf_ot_seq') || 0) + 1;
+            DB.set('sf_ot_seq', seq);
+            ot.value = 'OT-' + String(seq).padStart(5,'0');
+          }
+        };
+        if (ot) {
+          ot.removeAttribute('readonly');
+          ot.placeholder = 'OT-00001';
+        }
+      },0);
+    };
+  }
+
+  function _sfWireDashboard() {
+    var pg = document.getElementById('pg-dashboard');
+    if (!pg) return;
+    Array.prototype.forEach.call(pg.querySelectorAll('button'), function(btn){
+      var txt = (btn.textContent || '').trim().toLowerCase();
+      if (txt === 'nueva orden') btn.remove();
+      if (txt === 'actualizar') {
+        btn.onclick = function(){
+          if (typeof _KPI_invalidar === 'function') _KPI_invalidar();
+          window._dashCloudLoaded = false;
+          window._dashCloudSyncing = false;
+          if (typeof _dashSyncCloud === 'function') {
+            _dashSyncCloud(function(){ if (currentPage === 'dashboard') renders.dashboard(); });
+          } else {
+            renders.dashboard();
+          }
+          showToast('Dashboard actualizado', 'green');
+        };
+      }
+    });
+  }
+  var _baseDashboardFinal = renders.dashboard;
+  renders.dashboard = function() {
+    if (_baseDashboardFinal) _baseDashboardFinal();
+    setTimeout(_sfWireDashboard, 0);
+  };
+  var _baseRenderDashUnicoFinal = typeof _renderDashboardUnico === 'function' ? _renderDashboardUnico : null;
+  if (_baseRenderDashUnicoFinal) {
+    _renderDashboardUnico = function() {
+      _baseRenderDashUnicoFinal();
+      _sfWireDashboard();
+    };
+  }
+
+  function _sfWireInventarioButtons() {
+    var pg = document.getElementById('pg-inventario');
+    if (!pg) return;
+    Array.prototype.forEach.call(pg.querySelectorAll('button'), function(btn){
+      var txt = (btn.textContent || '').toLowerCase();
+      var f = txt.indexOf('todos') >= 0 ? 'TODOS' : txt.indexOf('bajo') >= 0 ? 'BAJO' : txt.indexOf('agotados') >= 0 ? 'AGOTADO' : '';
+      if (!f) return;
+      btn.onclick = function(){
+        invFiltro = f;
+        filterInventarioTable();
+        Array.prototype.forEach.call(pg.querySelectorAll('button'), function(b){
+          var t = (b.textContent || '').toLowerCase();
+          if (t.indexOf('todos') >= 0 || t.indexOf('bajo') >= 0 || t.indexOf('agotados') >= 0) {
+            b.className = 'btn ' + (((f === 'TODOS' && t.indexOf('todos') >= 0) || (f === 'BAJO' && t.indexOf('bajo') >= 0) || (f === 'AGOTADO' && t.indexOf('agotados') >= 0)) ? 'btn-navy' : 'btn-ghost') + ' btn-sm';
+          }
+        });
+      };
+    });
+  }
+  var _baseBuildInventarioClean = typeof _buildInventarioUI === 'function' ? _buildInventarioUI : null;
+  if (_baseBuildInventarioClean) {
+    _buildInventarioUI = function(items) {
+      _baseBuildInventarioClean(items);
+      setTimeout(_sfWireInventarioButtons, 0);
+    };
+  }
+
+  function _sfRowsSetVisible(rows, predicate) {
+    Array.prototype.forEach.call(rows, function(row, idx){
+      row.style.display = predicate(row, idx) ? '' : 'none';
+    });
+  }
+  function _sfWireKpis(page) {
+    var pg = document.getElementById('pg-' + page);
+    if (!pg) return;
+    Array.prototype.forEach.call(pg.querySelectorAll('.kpi'), function(kpi){
+      kpi.style.cursor = 'pointer';
+      kpi.setAttribute('tabindex','0');
+      kpi.onclick = function(){
+        var label = (kpi.querySelector('.lbl') || kpi).textContent.toLowerCase();
+        if (page === 'compras') {
+          var tables = pg.querySelectorAll('tbody');
+          if (label.indexOf('para comprar') >= 0 && tables[0]) {
+            _sfRowsSetVisible(tables[0].querySelectorAll('tr'), function(row){ return row.textContent.indexOf('Sin OC') >= 0 || row.textContent.indexOf('Crear OC') >= 0; });
+            tables[0].scrollIntoView({behavior:'smooth', block:'start'});
+          } else if (label.indexOf('oc abiertas') >= 0 && tables[1]) {
+            _sfRowsSetVisible(tables[1].querySelectorAll('tr'), function(row){ return !/INGRESO|CERRADA|CANCELADA/i.test(row.textContent); });
+            tables[1].scrollIntoView({behavior:'smooth', block:'start'});
+          } else if (label.indexOf('proveedores') >= 0) {
+            goto('proveedores');
+          } else {
+            if (tables[1]) { _sfRowsSetVisible(tables[1].querySelectorAll('tr'), function(){ return true; }); tables[1].scrollIntoView({behavior:'smooth', block:'start'}); }
+          }
+        }
+        if (page === 'proveedores' || page === 'clientes') {
+          var txt = label;
+          var tbody = pg.querySelector('tbody');
+          if (!tbody) return;
+          _sfRowsSetVisible(tbody.querySelectorAll('tr'), function(row){
+            var r = row.textContent.toLowerCase();
+            if (txt.indexOf('activo') >= 0) return r.indexOf('activo') >= 0 && r.indexOf('inactivo') < 0;
+            if (txt.indexOf('inactivo') >= 0 || txt.indexOf('bloqueado') >= 0) return r.indexOf('inactivo') >= 0 || r.indexOf('bloqueado') >= 0;
+            return true;
+          });
+        }
+        if (page === 'comercial') {
+          var body = pg.querySelector('tbody');
+          if (!body) return;
+          if (label.indexOf('con disponible') >= 0) _sfRowsSetVisible(body.querySelectorAll('tr'), function(row){ return !/NO DISPONIBLE|AGOTADO/i.test(row.textContent); });
+          else _sfRowsSetVisible(body.querySelectorAll('tr'), function(){ return true; });
+        }
+      };
+    });
+  }
+  ['compras','proveedores','clientes','comercial'].forEach(function(page){
+    var base = renders[page];
+    if (!base) return;
+    renders[page] = function() {
+      base();
+      setTimeout(function(){ _sfWireKpis(page); }, 0);
+    };
+  });
+
+  renders.logistica = function() {
+    var pg = document.getElementById('pg-logistica');
+    if (!pg) return;
+    var picking = typeof DB_picking_load === 'function' ? DB_picking_load() : [];
+    var packing = typeof DB_packing_load === 'function' ? DB_packing_load() : [];
+    var guias = typeof DB_guias_load === 'function' ? DB_guias_load() : [];
+    var desp = typeof DB_despachos_load === 'function' ? DB_despachos_load() : [];
+    var rems = typeof DB_remisiones_load === 'function' ? DB_remisiones_load() : [];
+    var movs = typeof loadMovs === 'function' ? loadMovs() : [];
+    var counts = [
+      ['Picking', picking.filter(function(x){ return !/COMPLETADO|CANCELADO/.test(String(x.estado||'')); }).length, "goto('picking')"],
+      ['Packing', packing.filter(function(x){ return !/DESPACHADO|CANCELADO|COMPLETADO/.test(String(x.estado||'')); }).length, "_packTab='packing';goto('packing')"],
+      ['Guias', guias.length, "_packTab='guias';goto('packing')"],
+      ['Despachos', desp.length, "_packTab='despacho';goto('packing')"],
+      ['Traslados', movs.filter(function(m){ return String(m.tipo||'').indexOf('TRASLADO') === 0; }).length, "goto('traslados')"],
+      ['Remisiones', rems.length, "abrirNuevaRemision()"]
+    ];
+    var h = [];
+    h.push('<div style="max-width:1100px;margin:0 auto;padding:16px">');
+    h.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px"><div style="display:flex;gap:10px;align-items:flex-start"><button class="btn btn-ghost btn-sm" onclick="goto(window._lastPage||\'dashboard\')" title="Volver">←</button><div><h2 style="font-size:18px;margin:0;color:var(--white)">Logistica WMS</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Control operativo sin accesos duplicados: picking, packing, guias, despachos, traslados y remisiones.</p></div></div><button class="btn btn-navy btn-sm" onclick="abrirNuevaRemision()">Nueva remision</button></div>');
+    h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px">');
+    counts.forEach(function(k){ h.push('<button class="kpi" onclick="'+k[2]+'" style="text-align:left;cursor:pointer"><span class="lbl">'+k[0]+'</span><span class="val">'+k[1]+'</span></button>'); });
+    h.push('</div>');
+    h.push('<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><h3 style="font-size:13px;margin:0;color:var(--white)">Remisiones recientes</h3><button class="btn btn-ghost btn-sm" onclick="abrirNuevaRemision()">Crear remision</button></div><div class="tbl-overflow"><table><thead><tr><th>Numero</th><th>Cliente</th><th>SKU</th><th>Cantidad</th><th>Estado</th></tr></thead><tbody>');
+    if (!rems.length) h.push('<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:18px">Sin remisiones registradas</td></tr>');
+    rems.slice(0,20).forEach(function(r){ h.push('<tr><td><code>'+_sfEscFinal(r.numero||'')+'</code></td><td>'+_sfEscFinal(r.cliente||'')+'</td><td>'+_sfEscFinal(r.sku||'')+'</td><td>'+Number(r.cantidad||0).toLocaleString('es-CO')+'</td><td><span class="badge b-ok">'+_sfEscFinal(r.estado||'')+'</span></td></tr>'); });
+    h.push('</tbody></table></div></div></div>');
+    pg.innerHTML = h.join('');
+  };
+
+  var _baseRenderPackTabFinal = typeof _renderPackTab === 'function' ? _renderPackTab : null;
+  if (_baseRenderPackTabFinal) {
+    _renderPackTab = function() {
+      _baseRenderPackTabFinal();
+      var pg = document.getElementById('pg-packing');
+      if (!pg) return;
+      if (!document.getElementById('sf-pack-back')) {
+        pg.insertAdjacentHTML('afterbegin','<button id="sf-pack-back" class="btn btn-ghost btn-sm" style="margin:0 0 8px" onclick="goto(\'logistica\')">← Volver a Logistica WMS</button>');
+      }
+    };
+  }
+
+  window.eliminarBodega = function(idx) {
+    var bodegas = typeof loadBodegas === 'function' ? loadBodegas() : [];
+    var b = bodegas[idx];
+    if (!b) return showToast('Bodega no encontrada', 'red');
+    if (!confirm('Eliminar bodega ' + (b.codigo || b.nombre) + '?')) return;
+    bodegas.splice(idx, 1);
+    if (typeof saveBodegas === 'function') saveBodegas(bodegas); else DB.set('bodegas', bodegas);
+    showToast('Bodega eliminada', 'green');
+    if (currentPage === 'ubicaciones') renders.ubicaciones();
+  };
+  var _baseRenderBodegaCardFinal = typeof _renderBodegaCard === 'function' ? _renderBodegaCard : null;
+  if (_baseRenderBodegaCardFinal) {
+    _renderBodegaCard = function(b, i, canEdit) {
+      var html = _baseRenderBodegaCardFinal(b, i, canEdit);
+      if (!canEdit || html.indexOf('eliminarBodega(') >= 0) return html;
+      return html.replace('</div></td></tr>', '</div></td></tr>').replace('</div></div>', '<button class="btn-icon" onclick="eliminarBodega('+i+')" title="Eliminar" style="color:var(--red)">×</button></div></div>');
+    };
+  }
+
+  function _sfWireRespaldos() {
+    var pg = document.getElementById('pg-respaldos');
+    if (!pg) return;
+    var list = typeof _loadRespaldos === 'function' ? _loadRespaldos() : [];
+    Array.prototype.forEach.call(pg.querySelectorAll('tbody tr'), function(row, idx){
+      var buttons = row.querySelectorAll('button');
+      if (buttons[0]) buttons[0].onclick = function(){ _descargarRespaldo(idx); };
+      if (buttons[1]) buttons[1].onclick = function(){ _restaurarRespaldo(idx); };
+      if (buttons[2]) buttons[2].onclick = function(){ _eliminarRespaldo(idx); };
+    });
+    var create = Array.prototype.find.call(pg.querySelectorAll('button'), function(b){ return /crear/i.test(b.textContent || ''); });
+    if (create) create.onclick = _crearRespaldo;
+    var restore = Array.prototype.find.call(pg.querySelectorAll('button'), function(b){ return /restaurar/i.test(b.textContent || ''); });
+    if (restore && !list.length) restore.onclick = _importarRespaldo;
+  }
+  var _baseRespaldosFinal = renders.respaldos || renders['respaldos'];
+  renders.respaldos = renders['respaldos'] = function() {
+    if (_baseRespaldosFinal) _baseRespaldosFinal();
+    setTimeout(_sfWireRespaldos, 0);
+  };
+
+  function _sfWireEmpresaButtons() {
+    var pg = document.getElementById('pg-empresas');
+    if (!pg) return;
+    Array.prototype.forEach.call(pg.querySelectorAll('button'), function(btn){
+      btn.disabled = false;
+      btn.style.pointerEvents = 'auto';
+    });
+  }
+  var _baseEmpresasFinalClean = renders.empresas;
+  if (_baseEmpresasFinalClean) {
+    renders.empresas = function() {
+      _baseEmpresasFinalClean();
+      setTimeout(_sfWireEmpresaButtons, 0);
+    };
+  }
+
+  var _baseGotoTrack = typeof goto === 'function' ? goto : null;
+  goto = function(page, param) {
+    if (typeof currentPage !== 'undefined' && currentPage !== page) window._lastPage = currentPage;
+    return _baseGotoTrack ? _baseGotoTrack(page, param) : undefined;
+  };
+
+  setTimeout(function(){
+    _sfNormalizeUsersRoot();
+    if (SESSION && SESSION.user) {
+      if (SESSION.user.rol === 'ROOT' || String(SESSION.user.username || '').toLowerCase() === 'root') {
+        SESSION.user.rol = 'SUPER ADMINISTRADOR';
+        SESSION.user.username = 'superadmin';
+      }
+      applyPlanUI();
+    }
+  }, 0);
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
