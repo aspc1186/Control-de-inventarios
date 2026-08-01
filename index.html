@@ -19533,6 +19533,173 @@ goto = function(page, param) {
   setTimeout(function(){ if (currentPage === 'inventario') wireCritico(); }, 0);
 })();
 
+/* Correccion raiz: login resiliente y soporte con visor vivo de modulos cliente */
+(function(){
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function allActiveUsersForLogin() {
+    try { seed(); } catch(e) {}
+    var deleted = DB.get('usuarios_eliminados') || [];
+    var isDeleted = function(u) {
+      return deleted.some(function(d){
+        return d && ((d.id && d.id === u.id) || (d.username && String(d.username).toLowerCase() === String(u.username || '').toLowerCase()));
+      });
+    };
+    var users = DB.get('usuarios') || [];
+    var hasSA = users.some(function(u){ return u && u.rol === 'SUPER ADMINISTRADOR'; });
+    if (!hasSA) {
+      users.unshift({
+        id:'sa_001',
+        nombre:'Super Administrador',
+        username:'superadministrador',
+        correo:'superadmin@stockflow.app',
+        password:'erp_b59a1c55_14',
+        rol:'SUPER ADMINISTRADOR',
+        estado:'ACTIVO',
+        intentos:0,
+        es_sistema:true,
+        eliminable:false,
+        empresa_id:'__SA__',
+        created_at:'2026-01-01'
+      });
+      DB.set('usuarios', users);
+    }
+    return users.filter(function(u){
+      return u && u.rol !== 'ROOT' && String(u.username || '').toLowerCase() !== 'root' && !isDeleted(u);
+    });
+  }
+  function restoreLoginButton(btn) {
+    window._loginInProgress = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>Ingresar al sistema';
+      btn.textContent = 'Ingresar al sistema';
+    }
+  }
+  doLogin = function() {
+    if (window._loginInProgress) return;
+    var btn = document.querySelector('.login-right .btn-navy');
+    try {
+      window._loginInProgress = true;
+      var loginEl = document.getElementById('l-login');
+      var pwdEl = document.getElementById('l-pwd');
+      var login = String((loginEl && loginEl.value) || '').trim().toLowerCase();
+      var pwd = String((pwdEl && pwdEl.value) || '');
+      var errEl = document.getElementById('l-error');
+      if (errEl) errEl.style.display = 'none';
+      if (!login || !pwd) {
+        restoreLoginButton(btn);
+        showErr('Ingresa usuario y contrasena');
+        return;
+      }
+      if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
+      var users = allActiveUsersForLogin();
+      var user = users.find(function(u){
+        return String(u.username || '').toLowerCase() === login || String(u.correo || '').toLowerCase() === login;
+      });
+      if (!user) {
+        restoreLoginButton(btn);
+        showErr('Usuario no encontrado: ' + login);
+        return;
+      }
+      if (user.estado === 'INACTIVO') { restoreLoginButton(btn); showErr('Cuenta inactiva. Contacta al administrador.'); return; }
+      if (user.estado === 'BLOQUEADO') { restoreLoginButton(btn); showErr('Cuenta bloqueada. Contacta al administrador.'); return; }
+      var stored = user.password || user.password_hash || '';
+      var ok = stored && typeof checkPwd === 'function' && checkPwd(pwd, stored);
+      if (!ok && user.reset_token && user.reset_expiry) {
+        var today = new Date().toISOString().slice(0,10);
+        ok = user.reset_expiry >= today && simpleHash(pwd) === user.reset_token;
+        if (ok) {
+          user.reset_token = null;
+          user.reset_expiry = null;
+          user.debe_cambiar_pwd = true;
+          user.primer_ingreso = true;
+        }
+      }
+      if (!ok) {
+        user.intentos = Number(user.intentos || 0) + 1;
+        if (user.intentos >= 5 && user.rol !== 'SUPER ADMINISTRADOR') user.estado = 'BLOQUEADO';
+        var all = DB.get('usuarios') || [];
+        var idx = all.findIndex(function(u){ return u.id === user.id; });
+        if (idx >= 0) all[idx] = user;
+        DB.set('usuarios', all);
+        restoreLoginButton(btn);
+        showErr(user.estado === 'BLOQUEADO' ? 'Cuenta bloqueada por 5 intentos fallidos.' : 'Contrasena incorrecta. Intentos: ' + user.intentos + '/5');
+        return;
+      }
+      user.intentos = 0;
+      user.estado = 'ACTIVO';
+      var allUsers = DB.get('usuarios') || [];
+      var uidx = allUsers.findIndex(function(u){ return u.id === user.id; });
+      if (uidx >= 0) allUsers[uidx] = user;
+      else allUsers.push(user);
+      DB.set('usuarios', allUsers);
+      restoreLoginButton(btn);
+      _completarLogin(user);
+    } catch(e) {
+      console.error('[SF] login fatal:', e);
+      restoreLoginButton(btn);
+      showErr('Error al iniciar sesion: ' + (e && e.message ? e.message : e));
+    }
+  };
+  window.doLogin = doLogin;
+
+  function supportEmpId() {
+    try { return sessionStorage.getItem('sf_support_empresa_id') || ''; } catch(e) { return ''; }
+  }
+  function supportRows(key) {
+    var empId = supportEmpId();
+    var rows = DB.get(key) || [];
+    if (!Array.isArray(rows)) return [];
+    return empId ? rows.filter(function(r){ return r && r.empresa_id === empId; }) : rows;
+  }
+  function supportMiniTable(key, cols) {
+    var rows = supportRows(key).slice(0, 30);
+    if (!rows.length) return '<p style="color:var(--muted);font-size:12px;padding:14px;text-align:center">Sin datos del cliente en este modulo.</p>';
+    var h = '<div class="tbl-overflow"><table><thead><tr>' + cols.map(function(c){ return '<th>'+esc(c[0])+'</th>'; }).join('') + '</tr></thead><tbody>';
+    rows.forEach(function(r){
+      h += '<tr>' + cols.map(function(c){ return '<td>'+esc(typeof c[1] === 'function' ? c[1](r) : r[c[1]])+'</td>'; }).join('') + '</tr>';
+    });
+    return h + '</tbody></table></div>';
+  }
+  window._soporteVerModuloCliente = function(mod) {
+    var body = document.getElementById('sf-support-module-body');
+    if (!body) return;
+    var title = {
+      articulos:'Inventario', compras:'Compras', proveedores:'Proveedores', clientes:'Clientes',
+      pedidos:'Pedidos', movimientos:'Movimientos/WMS', bodegas:'Bodegas', usuarios:'Usuarios'
+    }[mod] || mod;
+    var cols = {
+      articulos:[['Codigo',function(r){return r.sku||r.codigo||r.id;}],['Nombre','nombre'],['Stock','stock'],['Ubicacion','ubicacion'],['Estado','estado']],
+      compras:[['OC',function(r){return r.numero||r.id;}],['Proveedor','proveedor'],['Estado','estado'],['Total','total']],
+      proveedores:[['NIT','nit'],['Razon social',function(r){return r.razon_social||r.nombre;}],['Ciudad','ciudad'],['Estado','estado']],
+      clientes:[['NIT','nit'],['Razon social',function(r){return r.razon_social||r.nombre;}],['Telefono','telefono'],['Estado','estado']],
+      pedidos:[['Pedido',function(r){return r.numero||r.id;}],['Cliente',function(r){return r.cliente&&r.cliente.razon_social||'';}],['Estado','estado'],['Items',function(r){return (r.lineas||[]).length;}]],
+      movimientos:[['Fecha','fecha'],['Tipo','tipo'],['SKU','sku'],['Cant.','cantidad']],
+      bodegas:[['Codigo',function(r){return r.codigo||r.id;}],['Nombre','nombre'],['Estado','estado'],['Ubicaciones',function(r){return (r.ubicaciones||[]).length;}]],
+      usuarios:[['Usuario','username'],['Nombre','nombre'],['Rol','rol'],['Estado','estado']]
+    }[mod] || [['ID','id']];
+    body.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px"><h3 style="margin:0;font-size:14px;color:var(--white)">'+esc(title)+' del cliente</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="_soporteVerModuloCliente(&quot;'+mod+'&quot;)">Actualizar</button><button class="btn btn-navy btn-sm" onclick="_soporteAbrirModulo(&quot;'+(mod==='articulos'?'inventario':mod==='bodegas'?'ubicaciones':mod)+'&quot;)">Abrir modulo editable</button></div></div>' + supportMiniTable(mod, cols);
+  };
+  var baseSoporte = renders.soporte;
+  if (baseSoporte) {
+    renders.soporte = function() {
+      baseSoporte();
+      setTimeout(function(){
+        var pg = document.getElementById('pg-soporte');
+        if (!pg || document.getElementById('sf-support-live-panel')) return;
+        var html = '<div id="sf-support-live-panel" class="card" style="margin-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px"><div><strong>Modulo de trabajo del cliente en tiempo real</strong><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Selecciona un modulo para ver sus registros filtrados por empresa y abrirlo en modo editable de soporte.</p></div></div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+
+          [['articulos','Inventario'],['compras','Compras'],['proveedores','Proveedores'],['clientes','Clientes'],['pedidos','Pedidos'],['movimientos','WMS'],['bodegas','Bodegas'],['usuarios','Usuarios']].map(function(m){ return '<button class="btn btn-ghost btn-sm" onclick="_soporteVerModuloCliente(&quot;'+m[0]+'&quot;)">'+m[1]+'</button>'; }).join('')+
+          '</div><div id="sf-support-module-body"><p style="color:var(--muted);font-size:12px;text-align:center;padding:16px">Selecciona un modulo para cargar la informacion del cliente.</p></div></div>';
+        pg.insertAdjacentHTML('beforeend', html);
+      }, 0);
+    };
+  }
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
