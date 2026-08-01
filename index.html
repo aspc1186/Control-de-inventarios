@@ -20185,6 +20185,200 @@ goto = function(page, param) {
   window._abrir2FAUsuario = _abrir2FAUsuario;
 })();
 
+/* Correccion UX: soporte entra a pantalla completa del cliente */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var RETURN_KEY = 'sf_support_return_page';
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function supportId() {
+    try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) { return ''; }
+  }
+  function setSupportId(id) {
+    try {
+      if (id) sessionStorage.setItem(SUPPORT_KEY, id);
+      else sessionStorage.removeItem(SUPPORT_KEY);
+    } catch(e) {}
+  }
+  function isSA() {
+    return !!(SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR');
+  }
+  function supportEmpresa() {
+    var id = supportId();
+    return (typeof loadEmpresas === 'function' ? loadEmpresas() : []).find(function(e){ return e && e.id === id; }) || null;
+  }
+  function clientPlan(emp) {
+    var p = String((emp && emp.plan) || 'PRO').toUpperCase();
+    if (p === 'FREE' || p === 'LITE') return 'STARTER';
+    if (p === 'WMS' || p === 'EMPRESARIAL_WMS' || p === 'ENTERPRISE') return 'ENTERPRISE';
+    return p === 'PRO' ? 'PRO' : 'STARTER';
+  }
+  function modulesByPlan(plan) {
+    if (typeof PLANES !== 'undefined' && PLANES[plan] && Array.isArray(PLANES[plan].modulos)) return PLANES[plan].modulos.slice();
+    var starter = ['dashboard','inventario','clientes','movimientos','historial'];
+    var pro = starter.concat(['compras','pedidos','comercial','proveedores','logistica','ubicaciones','generar-qr','escaner','reportes','importar','ciclicos','conciliacion','picking','packing']);
+    var enterprise = pro.concat(['auditoria','usuarios','integraciones','respaldos','traslados','mis-inventarios']);
+    return plan === 'STARTER' ? starter : plan === 'PRO' ? pro : enterprise;
+  }
+  function supportModules() {
+    var emp = supportEmpresa();
+    var mods = modulesByPlan(clientPlan(emp));
+    if (mods.indexOf('soporte') < 0) mods.push('soporte');
+    return mods;
+  }
+  function supportHome() {
+    var mods = supportModules();
+    return mods.indexOf('dashboard') >= 0 ? 'dashboard' : (mods[0] || 'inventario');
+  }
+  function renderSupportBanner() {
+    var old = document.getElementById('sf-support-banner');
+    if (!isSA() || !supportId()) { if (old) old.remove(); document.body.classList.remove('sf-support-active'); return; }
+    var emp = supportEmpresa();
+    var topbar = document.getElementById('topbar');
+    if (!topbar) return;
+    document.body.classList.add('sf-support-active');
+    if (!old) {
+      old = document.createElement('div');
+      old.id = 'sf-support-banner';
+      topbar.parentNode.insertBefore(old, topbar.nextSibling);
+    }
+    old.style.cssText = 'position:sticky;top:0;z-index:60;margin:0 0 10px;padding:12px 16px;border:1px solid rgba(245,158,11,.65);border-radius:8px;background:linear-gradient(90deg,rgba(15,23,42,.96),rgba(30,41,59,.88));color:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 10px 24px rgba(15,23,42,.18)';
+    old.innerHTML = '<div style="display:flex;gap:10px;align-items:flex-start;min-width:0"><span style="color:#facc15;font-size:18px;line-height:1">◇</span><div style="min-width:0"><strong style="display:block;font-size:13px;color:#fff">Modo de soporte de superadministrador</strong><span style="display:block;font-size:11px;color:#fde68a">Estas corrigiendo los datos de '+esc(emp && emp.nombre || 'empresa cliente')+'. Los cambios afectan a esta empresa.</span></div></div><button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.18);color:#fff" onclick="_volverSuperadmin()">Volver a superadmin</button>';
+  }
+  function applySupportNav() {
+    if (!isSA() || !supportId()) { renderSupportBanner(); return; }
+    var mods = supportModules();
+    var navIds = ['dashboard','inventario','importar','historial','proveedores','clientes','pedidos','comercial','movimientos','traslados','reportes','ubicaciones','generar-qr','escaner','compras','logistica','gerencial','ciclicos','conciliacion','mis-inventarios','auditoria','empresas','usuarios','integraciones','respaldos','centro-pruebas','salud-sistema','picking','packing','soporte'];
+    navIds.forEach(function(id){
+      var el = document.getElementById('nav-' + id);
+      if (!el) return;
+      var visible = mods.indexOf(id) >= 0;
+      if (id === 'empresas' || id === 'centro-pruebas' || id === 'salud-sistema') visible = false;
+      if (id === 'soporte') visible = true;
+      el.style.display = visible ? '' : 'none';
+    });
+    var sections = {
+      'nav-sec-principal':['dashboard'],
+      'nav-sec-operacion':['inventario','importar','proveedores','clientes','pedidos','comercial','compras','logistica','movimientos','traslados'],
+      'nav-sec-analitica':['reportes'],
+      'nav-sec-bodegas':['ubicaciones','generar-qr','escaner'],
+      'nav-sec-seguridad':['auditoria'],
+      'nav-sec-admin':['usuarios','integraciones','respaldos','soporte'],
+      'nav-sec-sistema':[]
+    };
+    Object.keys(sections).forEach(function(sec){
+      var el = document.getElementById(sec);
+      if (!el) return;
+      el.style.display = sections[sec].some(function(m){ return mods.indexOf(m) >= 0 || m === 'soporte'; }) ? '' : 'none';
+    });
+    var ni = document.getElementById('nav-user-info');
+    var emp = supportEmpresa();
+    if (ni && emp) ni.textContent = 'Soporte SA - ' + emp.nombre;
+    renderSupportBanner();
+  }
+
+  var baseGetEmpresaPlan = typeof getEmpresaPlan === 'function' ? getEmpresaPlan : null;
+  getEmpresaPlan = function() {
+    if (isSA() && supportId()) return clientPlan(supportEmpresa());
+    return baseGetEmpresaPlan ? baseGetEmpresaPlan() : 'STARTER';
+  };
+  window.getEmpresaPlan = getEmpresaPlan;
+
+  var basePlanHasModule = typeof planHasModule === 'function' ? planHasModule : null;
+  planHasModule = function(modulo) {
+    if (isSA() && supportId()) return supportModules().indexOf(modulo) >= 0;
+    return basePlanHasModule ? basePlanHasModule(modulo) : true;
+  };
+  window.planHasModule = planHasModule;
+
+  var baseGetMods = typeof getModulosDisponibles === 'function' ? getModulosDisponibles : null;
+  getModulosDisponibles = function() {
+    if (isSA() && supportId()) return supportModules();
+    return baseGetMods ? baseGetMods() : [];
+  };
+  window.getModulosDisponibles = getModulosDisponibles;
+
+  var baseApplyPlan = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function() {
+    if (baseApplyPlan) baseApplyPlan();
+    applySupportNav();
+  };
+  window.applyPlanUI = applyPlanUI;
+
+  window._confirmarAbrirSoporteCliente = function(empId) {
+    var emp = (typeof loadEmpresas === 'function' ? loadEmpresas() : []).find(function(e){ return e && e.id === empId; });
+    if (!emp) { showToast('Empresa no encontrada', 'red'); return; }
+    try { sessionStorage.setItem(RETURN_KEY, currentPage || 'empresas'); } catch(e) {}
+    setSupportId(empId);
+    closeModal();
+    try { auditLog('MODO_SOPORTE_ABIERTO', 'Empresa: ' + emp.nombre, SESSION.user && SESSION.user.nombre); } catch(e) {}
+    applyPlanUI();
+    showToast('Modo soporte activo: ' + emp.nombre, 'green');
+    goto(supportHome());
+  };
+
+  window._abrirModoSoporte = function(empId) {
+    if (!isSA()) { showToast('Solo el Super Administrador puede abrir soporte', 'red'); return; }
+    var emp = (typeof loadEmpresas === 'function' ? loadEmpresas() : []).find(function(e){ return e && e.id === empId; });
+    if (!emp) { showToast('Empresa no encontrada', 'red'); return; }
+    var plan = clientPlan(emp);
+    var h = [];
+    h.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:18px"><h3 style="margin:0;color:var(--white)">Abrir modo soporte</h3><button class="btn btn-ghost btn-sm" onclick="closeModal()">x</button></div>');
+    h.push('<p style="font-size:13px;color:var(--muted);line-height:1.45;margin-bottom:12px">Vas a entrar a <strong style="color:var(--white)">'+esc(emp.nombre)+'</strong> con permisos de administrador para corregir informacion solicitada por el cliente.</p>');
+    h.push('<p style="font-size:13px;color:var(--muted);line-height:1.45;margin-bottom:12px">Podras gestionar los modulos activos del plan <strong style="color:var(--white)">'+esc(plan)+'</strong>. Los cambios se aplican solamente a esta empresa.</p>');
+    h.push('<div style="border:1px solid rgba(245,158,11,.55);background:rgba(245,158,11,.12);border-radius:8px;padding:12px;margin:12px 0 18px;color:#fde68a;font-size:12px;line-height:1.4"><strong>La sesion de soporte dura hasta dos horas</strong> y mostrara un aviso permanente. Podras volver al panel de superadministrador en cualquier momento.</div>');
+    h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_confirmarAbrirSoporteCliente(&quot;'+esc(emp.id)+'&quot;)">Abrir soporte</button></div>');
+    openModal(h.join(''), 'modal-md');
+  };
+
+  window._volverSuperadmin = function() {
+    var emp = supportEmpresa();
+    setSupportId('');
+    renderSupportBanner();
+    try { auditLog('MODO_SOPORTE_CERRADO', 'Empresa: ' + (emp && emp.nombre || ''), SESSION.user && SESSION.user.nombre); } catch(e) {}
+    applyPlanUI();
+    showToast('Volviste al panel de superadmin', 'green');
+    var back = 'empresas';
+    try { back = sessionStorage.getItem(RETURN_KEY) || 'empresas'; sessionStorage.removeItem(RETURN_KEY); } catch(e) {}
+    goto(back);
+  };
+  window._cerrarModoSoporte = window._volverSuperadmin;
+
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  goto = function(page, param) {
+    var res = baseGoto ? baseGoto(page, param) : undefined;
+    setTimeout(applySupportNav, 0);
+    return res;
+  };
+  window.goto = goto;
+
+  var baseEmpresasRender = renders.empresas;
+  if (baseEmpresasRender) {
+    renders.empresas = function() {
+      baseEmpresasRender();
+      setTimeout(function(){
+        if (!isSA()) return;
+        var cards = document.querySelectorAll('#pg-empresas .card');
+        var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+        Array.prototype.forEach.call(cards, function(card, idx){
+          var emp = empresas[idx];
+          if (!emp) return;
+          var btn = card.querySelector('[data-support-btn]');
+          if (btn) {
+            btn.onclick = function(){ _abrirModoSoporte(emp.id); };
+            btn.textContent = 'Abrir modo soporte';
+          }
+        });
+      }, 0);
+    };
+  }
+
+  setTimeout(applySupportNav, 0);
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
