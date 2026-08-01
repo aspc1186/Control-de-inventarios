@@ -21999,6 +21999,232 @@ goto = function(page, param) {
   installCountStyle();
 })();
 
+/* Fase 3: conteos visibles por usuario, conciliacion viva, ROOT editable y soporte compacto */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var MODULES = [
+    ['dashboard','Dashboard'],['inventario','Inventario y kardex'],['clientes','Clientes'],['proveedores','Proveedores'],
+    ['compras','Compras y abastecimiento'],['pedidos','Pedidos'],['comercial','Comercial'],['logistica','Logistica WMS'],
+    ['ubicaciones','Multiples bodegas'],['generar-qr','Codigos QR'],['escaner','Escaner QR'],['ciclicos','Conteos ciclicos'],
+    ['conciliacion','Conciliacion'],['reportes','Reportes avanzados'],['auditoria','Auditoria avanzada'],
+    ['usuarios','Usuarios'],['integraciones','Integracion ERP/API'],['respaldos','Respaldos'],['traslados','Traslados'],['mis-inventarios','Mis inventarios']
+  ];
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function isSA(){ return !!(SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR'); }
+  function isAdmin(){ var r=String(SESSION && SESSION.user && SESSION.user.rol || '').toUpperCase(); return r.indexOf('ADMIN')>=0 || r.indexOf('JEFE')>=0 || r.indexOf('SUPERVISOR')>=0; }
+  function userKeys(){
+    var u = SESSION && SESSION.user || {};
+    return [u.nombre,u.username,u.usuario,u.correo,u.email].filter(Boolean).map(function(x){ return String(x).toLowerCase().trim(); });
+  }
+  function supportId(){ try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e){ return ''; } }
+  function supportEmpresa(){ var id=supportId(); return (typeof loadEmpresas==='function'?loadEmpresas():[]).find(function(e){return e&&e.id===id;}) || null; }
+  function allCounts(){ return typeof loadCiclicos === 'function' ? loadCiclicos() : []; }
+  function activeCount(c){ return !/FINALIZADO|CANCELADO|CERRADO|AJUSTADO/i.test(String(c && c.estado || '')); }
+  function assignments(c){ return Array.isArray(c && c.asignaciones) ? c.asignaciones : Array.isArray(c && c.assignments) ? c.assignments : []; }
+  function entries(c){ return Array.isArray(c && c.conteo) ? c.conteo : []; }
+  function countForUser(c){
+    if (isSA() || isAdmin()) return true;
+    var keys = userKeys();
+    if (!keys.length) return false;
+    var resp = String(c && c.responsable || '').toLowerCase();
+    if (keys.some(function(k){ return resp.indexOf(k) >= 0; })) return true;
+    return assignments(c).some(function(a){ return keys.indexOf(String(a.user || a.usuario || a.nombre || '').toLowerCase().trim()) >= 0; });
+  }
+  function assignedLocations(c){
+    if (isSA() || isAdmin()) return c.ubicaciones || [];
+    var keys = userKeys();
+    var locs = [];
+    assignments(c).forEach(function(a){
+      var name = String(a.user || a.usuario || a.nombre || '').toLowerCase().trim();
+      if (keys.indexOf(name) >= 0) locs = locs.concat(a.locations || a.ubicaciones || []);
+    });
+    return locs.length ? locs : (c.ubicaciones || []);
+  }
+  function findItem(code){
+    code = String(code || '').replace(/^SFITEM:/i,'').trim();
+    if (typeof _sfDecodeQrCode === 'function') code = _sfDecodeQrCode(code);
+    var items = typeof _sfItemsAll === 'function' ? _sfItemsAll() : (typeof loadItems === 'function' ? loadItems() : []);
+    return items.find(function(i){ return String(i.sku || i.codigo || '').trim() === code; }) || null;
+  }
+  function itemCode(it){ return it ? String(it.sku || it.codigo || '').trim() : ''; }
+  function itemLoc(it){ return it ? (it.ubicacion || it.ubicacion_codigo || it.bodega || 'Sin ubicacion') : ''; }
+  function installFinalStyle(){
+    if (document.getElementById('sf-final-count-root-style')) return;
+    var st=document.createElement('style');
+    st.id='sf-final-count-root-style';
+    st.textContent =
+      '.sf-count-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-bottom:14px}.sf-count-card{background:var(--bg-card);border:1px solid var(--border2);border-radius:10px;padding:12px;color:var(--text)}.sf-count-card h4{margin:0 0 4px;color:var(--white);font-size:14px}.sf-count-card small{color:var(--muted);font-size:11px}.sf-progress{height:7px;background:var(--card2);border-radius:999px;overflow:hidden;margin:8px 0}.sf-progress span{display:block;height:100%;background:var(--electric)}' +
+      '.sf-count-scan{display:grid;grid-template-columns:minmax(260px,420px) 1fr;gap:12px}.sf-count-scan #sf-count-reader{min-height:280px;border:1px dashed var(--border2);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--muted);background:var(--card2)}' +
+      '.sf-plan-grid{grid-template-columns:minmax(220px,1fr) 80px 80px 130px minmax(190px,260px)!important}.sf-plan-grid div{color:var(--text)!important}.sf-plan-grid .head{color:var(--white)!important;background:var(--card2)!important}.sf-extra-cell label{display:flex;align-items:center;gap:6px;color:var(--text)!important;font-size:11px;margin:3px 0}.sf-extra-cell input{accent-color:var(--electric)}' +
+      '#sf-support-banner{position:sticky!important;top:0!important;left:auto!important;right:auto!important;bottom:auto!important;z-index:1000!important;width:100%!important;min-height:44px!important;margin:0 0 8px 0!important;padding:8px 14px!important;border-radius:8px!important;box-sizing:border-box!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;overflow:hidden!important;max-height:64px!important}.sidebar #sf-support-banner{display:none!important}.sf-support-spacer,.support-bottom,.support-panel{display:none!important}';
+    document.head.appendChild(st);
+  }
+  function renderCountCards(){
+    var counts = allCounts().filter(function(c){ return activeCount(c) && countForUser(c); });
+    var h=[];
+    h.push('<div class="sf-count-grid">');
+    if (!counts.length) {
+      h.push('<div class="sf-count-card"><h4>Sin conteos asignados</h4><small>Cuando el administrador programe un conteo para tu usuario, aparecera aqui.</small></div>');
+    }
+    counts.forEach(function(c){
+      var locs=assignedLocations(c), ent=entries(c), doneLocs={};
+      ent.forEach(function(e){ if(e.ubicacion) doneLocs[String(e.ubicacion).toUpperCase()]=1; });
+      var total=Math.max(locs.length, 1), done=Object.keys(doneLocs).length || ent.length, pct=Math.min(100, Math.round(done/total*100));
+      h.push('<div class="sf-count-card"><h4>'+esc(c.codigo || c.nombre || 'Conteo')+'</h4><small>'+esc(c.bodega || 'Todas')+' · '+esc(c.estado || 'PROGRAMADO')+' · '+esc(c.blindMode!==false?'Ciego':'Visible')+'</small><div class="sf-progress"><span style="width:'+pct+'%"></span></div><small>'+done+' / '+total+' ubicaciones o registros</small><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn btn-navy btn-sm" onclick="_sfOpenConteoOperativo(&quot;'+esc(c.id)+'&quot;)">Escanear y contar</button>'+(isAdmin()?'<button class="btn btn-ghost btn-sm" onclick="_sfOpenConteoOperativo(&quot;'+esc(c.id)+'&quot;,true)">Ver avance</button>':'')+'</div></div>');
+    });
+    h.push('</div>');
+    return h.join('');
+  }
+  window._sfOpenConteoOperativo = function(countId, readonly){
+    var c=allCounts().find(function(x){return x.id===countId;});
+    if(!c) return showToast('Conteo no encontrado','red');
+    var locs=assignedLocations(c);
+    var h=[];
+    h.push('<h3 style="margin:0 0 4px">Conteo '+esc(c.codigo||'')+'</h3><p style="font-size:12px;color:var(--muted);margin-bottom:12px">'+esc(c.bodega||'Todas')+' · '+locs.length+' ubicaciones asignadas</p>');
+    h.push('<div class="sf-count-scan"><div><div id="sf-count-reader">Camara sin iniciar</div><p id="sf-count-msg" style="font-size:11px;color:var(--muted);text-align:center;margin:8px 0">Escanea el QR del producto o ingresa el codigo manualmente.</p><div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn btn-navy btn-sm" onclick="_sfStartCountScanner(&quot;'+esc(countId)+'&quot;)">Iniciar camara</button><input id="sf-count-code" placeholder="SFITEM:1000097 o SKU" style="max-width:220px"><button class="btn btn-ghost btn-sm" onclick="_sfCountLookup(&quot;'+esc(countId)+'&quot;)">Buscar</button></div></div>');
+    h.push('<div><div class="sf-count-card"><h4>Conteo ciego</h4><small>El usuario cuenta sin ver stock teorico, reservado, diferencias ni costos.</small><div id="sf-count-product" style="margin-top:10px;color:var(--muted);font-size:12px">Escanea un producto para registrar cantidad.</div></div><div class="sf-count-card" style="margin-top:10px"><h4>Ubicaciones asignadas</h4><div style="max-height:160px;overflow:auto;font-size:11px;color:var(--muted)">'+(locs.map(esc).join('<br>')||'Sin ubicaciones especificas')+'</div></div></div></div>');
+    h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="_sfStopCountScanner();closeModal()">Cerrar</button></div>');
+    openModal(h.join(''),'modal-xl');
+  };
+  window._sfCountLookup = function(countId){
+    var raw=(document.getElementById('sf-count-code')||{value:''}).value;
+    _sfCountScanned(countId, raw);
+  };
+  window._sfCountScanned = function(countId, raw){
+    var c=allCounts().find(function(x){return x.id===countId;});
+    var it=findItem(raw);
+    var box=document.getElementById('sf-count-product');
+    if(!c||!box) return;
+    if(!it){ box.innerHTML='<p style="color:var(--red);font-weight:800">Producto no encontrado</p><small>'+esc(raw)+'</small>'; return; }
+    var code=itemCode(it);
+    box.innerHTML='<div style="display:grid;gap:8px"><strong style="color:var(--white)">'+esc(it.nombre||it.descripcion||code)+'</strong><small>Codigo: '+esc(code)+' · Ubicacion: '+esc(itemLoc(it))+'</small><label style="font-size:11px;font-weight:800;color:var(--white)">Cantidad contada</label><input id="sf-count-qty" type="number" min="0" step="1" autofocus><label style="font-size:11px;font-weight:800;color:var(--white)">Observacion</label><input id="sf-count-obs" placeholder="Opcional"><button class="btn btn-navy btn-sm" onclick="_sfSaveCountEntry(&quot;'+esc(countId)+'&quot;,&quot;'+esc(code)+'&quot;)">Guardar conteo</button></div>';
+    setTimeout(function(){ var q=document.getElementById('sf-count-qty'); if(q) q.focus(); },0);
+  };
+  window._sfSaveCountEntry = function(countId, code){
+    var qty=Number((document.getElementById('sf-count-qty')||{value:''}).value);
+    if (isNaN(qty)) return showToast('Ingresa cantidad valida','red');
+    var cics=allCounts(), idx=cics.findIndex(function(x){return x.id===countId;});
+    if(idx<0) return;
+    var it=findItem(code), t=typeof now==='function'?now():{fecha:new Date().toISOString().slice(0,10),hora:new Date().toLocaleTimeString(),ts:Date.now()};
+    cics[idx].conteo = entries(cics[idx]);
+    cics[idx].conteo.push({ id:uid(), sku:code, producto:it&&(it.nombre||it.descripcion)||code, ubicacion:itemLoc(it), cantidad:qty, usuario:SESSION.user&&(SESSION.user.nombre||SESSION.user.username)||'Sistema', fecha:t.fecha, hora:t.hora, ts:t.ts, observacion:(document.getElementById('sf-count-obs')||{value:''}).value||'', blind:true });
+    cics[idx].estado = cics[idx].estado === 'PROGRAMADO' ? 'EN_CONTEO' : cics[idx].estado;
+    cics[idx].updated_at = new Date().toISOString();
+    if(typeof saveCiclicos==='function') saveCiclicos(cics);
+    fetch('/api/ciclicos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cics[idx])}).catch(function(){});
+    showToast('Conteo guardado','green');
+    var input=document.getElementById('sf-count-code'); if(input) input.value='';
+    var box=document.getElementById('sf-count-product'); if(box) box.innerHTML='<span style="color:var(--muted)">Registro guardado. Escanea el siguiente producto.</span>';
+    if(currentPage==='inventario' && window._invTab==='conteos') setTimeout(_renderInvConteos,100);
+  };
+  window._sfStartCountScanner = function(countId){
+    var msg=document.getElementById('sf-count-msg'), target=document.getElementById('sf-count-reader');
+    if(!target || typeof Html5Qrcode==='undefined') { if(msg) msg.textContent='Escaner no disponible. Usa entrada manual.'; return; }
+    try { if(window._sfCountScanner) window._sfCountScanner.stop(); } catch(e){}
+    target.innerHTML='';
+    window._sfCountScanner=new Html5Qrcode('sf-count-reader');
+    Html5Qrcode.getCameras().then(function(cams){
+      if(!cams||!cams.length) throw new Error('No se detectaron camaras');
+      var cam=cams.find(function(c){return /back|rear|environment|trasera/i.test(c.label||'');})||cams[0];
+      return window._sfCountScanner.start({deviceId:{exact:cam.id}},{fps:10,qrbox:{width:230,height:230}},function(decoded){
+        _sfCountScanned(countId, decoded);
+      },function(){});
+    }).catch(function(err){ if(msg) msg.textContent='No se pudo abrir la camara: '+(err&&err.message?err.message:err); });
+  };
+  window._sfStopCountScanner=function(){ try{ if(window._sfCountScanner) window._sfCountScanner.stop(); }catch(e){} window._sfCountScanner=null; };
+  function conciliationHtml(){
+    var items=typeof loadItems==='function'?loadItems():[], map={};
+    items.forEach(function(i){ map[itemCode(i)] = i; });
+    var rows=[];
+    allCounts().filter(activeCount).forEach(function(c){ entries(c).forEach(function(e){ rows.push(Object.assign({count:c.codigo,countId:c.id}, e)); }); });
+    var grouped={};
+    rows.forEach(function(e){ grouped[e.sku]=(grouped[e.sku]||0)+Number(e.cantidad||0); });
+    var h='<div class="sf-count-grid"><div class="sf-count-card"><h4>Registros de conteo</h4><strong style="font-size:24px;color:var(--electric)">'+rows.length+'</strong></div><div class="sf-count-card"><h4>Referencias contadas</h4><strong style="font-size:24px;color:var(--electric)">'+Object.keys(grouped).length+'</strong></div></div>';
+    h+='<div class="tbl-overflow"><table><thead><tr><th>Conteo</th><th>SKU</th><th>Producto</th><th>Contado</th>'+(isAdmin()?'<th>Sistema</th><th>Diferencia</th>':'')+'<th>Usuario</th><th>Fecha</th></tr></thead><tbody>';
+    if(!rows.length) h+='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:18px">Sin conteos registrados aun</td></tr>';
+    rows.slice(0,200).forEach(function(e){
+      var it=map[e.sku]||{}, sys=Number(it.stock||0), diff=Number(e.cantidad||0)-sys;
+      h+='<tr><td>'+esc(e.count||'')+'</td><td><code>'+esc(e.sku||'')+'</code></td><td>'+esc(e.producto||it.nombre||'')+'</td><td><strong>'+Number(e.cantidad||0).toLocaleString('es-CO')+'</strong></td>'+(isAdmin()?'<td>'+sys.toLocaleString('es-CO')+'</td><td style="color:'+(diff===0?'var(--neon)':'var(--amber)')+'">'+diff.toLocaleString('es-CO')+'</td>':'')+'<td>'+esc(e.usuario||'')+'</td><td>'+esc(e.fecha||'')+'</td></tr>';
+    });
+    return h+'</tbody></table></div>';
+  }
+  var prevConteos=typeof _renderInvConteos==='function'?_renderInvConteos:null;
+  _renderInvConteos=function(){
+    var pg=document.getElementById('pg-inventario'); if(!pg) return;
+    var tabBar=pg.innerHTML;
+    pg.innerHTML=tabBar+'<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><div><h3 style="margin:0;color:var(--white)">Conteos asignados</h3><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Escanea QR, registra cantidades y alimenta conciliacion automaticamente.</p></div>'+(isAdmin()?'<button class="btn btn-navy btn-sm" onclick="openNuevoCiclico()">Asignar conteo ciclico</button>':'')+'</div></div>'+renderCountCards();
+  };
+  window._renderInvConteos=_renderInvConteos;
+  _renderInvConciliacion=function(){
+    var pg=document.getElementById('pg-inventario'); if(!pg) return;
+    var tabBar=pg.innerHTML;
+    pg.innerHTML=tabBar+'<div class="card" style="margin-bottom:12px"><h3 style="margin:0;color:var(--white)">Conciliacion automatica</h3><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Se actualiza con cada registro de conteo.</p></div>'+conciliationHtml();
+  };
+  window._renderInvConciliacion=_renderInvConciliacion;
+  var prevIndicadores=typeof _renderInvIndicadores==='function'?_renderInvIndicadores:null;
+  _renderInvIndicadores=function(){
+    var pg=document.getElementById('pg-inventario'); if(!pg) return;
+    var tabBar=pg.innerHTML, counts=allCounts().filter(activeCount), regs=counts.reduce(function(n,c){return n+entries(c).length;},0);
+    var locs=counts.reduce(function(n,c){return n+(c.ubicaciones||[]).length;},0), pct=locs?Math.min(100,Math.round(regs/locs*100)):0;
+    pg.innerHTML=tabBar+'<div class="sf-count-grid"><div class="sf-count-card"><h4>Conteos activos</h4><strong style="font-size:24px;color:var(--electric)">'+counts.length+'</strong></div><div class="sf-count-card"><h4>Registros capturados</h4><strong style="font-size:24px;color:var(--electric)">'+regs+'</strong></div><div class="sf-count-card"><h4>Avance estimado</h4><strong style="font-size:24px;color:var(--electric)">'+pct+'%</strong><div class="sf-progress"><span style="width:'+pct+'%"></span></div></div></div>'+(prevIndicadores?'<div class="card"><button class="btn btn-ghost btn-sm" onclick="_sfRenderIndicadoresBase()">Ver indicadores generales</button></div>':'');
+  };
+  window._renderInvIndicadores=_renderInvIndicadores;
+  window._sfRenderIndicadoresBase=function(){ if(prevIndicadores) prevIndicadores(); };
+
+  function getExtrasMap(){ return (typeof DB!=='undefined'&&DB.get?DB.get('sf_modulos_extra'):{}) || {}; }
+  function saveExtrasMap(m){ if(typeof DB!=='undefined'&&DB.set) DB.set('sf_modulos_extra', m || {}); }
+  window._sfRootSaveExtras=function(){
+    var map=getExtrasMap();
+    var selectedEmpresa=(document.getElementById('sf-extra-empresa')||{}).value || '';
+    if(!selectedEmpresa) return showToast('Selecciona una empresa para asignar modulos extra','amber');
+    map[selectedEmpresa]=Array.prototype.map.call(document.querySelectorAll('.sf-extra-module:checked'),function(cb){return cb.value;});
+    saveExtrasMap(map);
+    var empresas=typeof loadEmpresas==='function'?loadEmpresas():[];
+    empresas.forEach(function(e){ if(e.id===selectedEmpresa) e.modulos_extra=map[selectedEmpresa]; });
+    if(typeof saveEmpresas==='function') saveEmpresas(empresas);
+    showToast('Modulos extra guardados','green');
+  };
+  function renderEditableRoot(){
+    var pg=document.getElementById('pg-root'); if(!pg||!isSA()||supportId()) return false;
+    var empresas=typeof loadEmpresas==='function'?loadEmpresas():[], map=getExtrasMap();
+    var current=window._sfExtraEmpresa || (empresas[0]&&empresas[0].id) || '';
+    var checked=map[current] || (empresas.find(function(e){return e.id===current;})||{}).modulos_extra || [];
+    var rows=MODULES.map(function(m){
+      var planFree=['dashboard','inventario','clientes'].indexOf(m[0])>=0;
+      var planPro=planFree||['proveedores','compras','pedidos','comercial','logistica','ubicaciones','generar-qr','escaner','ciclicos','conciliacion','reportes'].indexOf(m[0])>=0;
+      var planWms=true;
+      return '<div>'+esc(m[1])+'</div><div class="'+(planFree?'yes':'no')+'">'+(planFree?'✓':'-')+'</div><div class="'+(planPro?'yes':'no')+'">'+(planPro?'✓':'-')+'</div><div class="'+(planWms?'yes':'no')+'">'+(planWms?'✓':'-')+'</div><div class="sf-extra-cell"><label><input class="sf-extra-module" type="checkbox" value="'+esc(m[0])+'" '+(checked.indexOf(m[0])>=0?'checked':'')+'> Asignar extra</label></div>';
+    }).join('');
+    pg.innerHTML='<div class="sf-sa-wrap"><div class="sf-sa-head"><div><h1 class="sf-sa-title">ROOT</h1><div class="sf-sa-sub">Centro tecnico para cambios, modulos y actualizaciones de clientes</div></div><button class="btn btn-navy" onclick="_rootAutorizarSeleccionadas&&_rootAutorizarSeleccionadas()">Actualizar versiones empresas seleccionadas</button></div><div class="sf-sa-panel"><div class="sf-sa-panel-title">Seleccion de empresa para modulos extra</div><div style="padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><select id="sf-extra-empresa" onchange="window._sfExtraEmpresa=this.value;renders.root()">'+empresas.map(function(e){return '<option value="'+esc(e.id)+'" '+(e.id===current?'selected':'')+'>'+esc(e.nombre||'Empresa')+'</option>';}).join('')+'</select><button class="btn btn-navy btn-sm" onclick="_sfRootSaveExtras()">Guardar modulos extra</button></div></div><div class="sf-sa-panel"><div class="sf-sa-panel-title">Matriz de planes y accesos</div><div class="sf-plan-grid"><div class="head">Modulo o capacidad</div><div class="head" style="text-align:center">FREE</div><div class="head" style="text-align:center">PRO</div><div class="head" style="text-align:center">Enterprise / WMS</div><div class="head">Extra por cliente</div>'+rows+'</div></div></div>';
+    return true;
+  }
+  var baseRoot = renders && renders.root;
+  renders.root=function(){ if(renderEditableRoot()) return; return baseRoot?baseRoot.apply(this,arguments):undefined; };
+
+  function fixSupportTop(){
+    installFinalStyle();
+    var banners=Array.prototype.slice.call(document.querySelectorAll('#sf-support-banner'));
+    if(!isSA() || !supportId()){ banners.forEach(function(b){b.remove();}); return; }
+    var keep=banners[0] || document.createElement('div');
+    keep.id='sf-support-banner';
+    banners.slice(1).forEach(function(b){b.remove();});
+    var top=document.getElementById('topbar') || document.querySelector('.topbar');
+    if(top && keep.parentNode!==top.parentNode) top.parentNode.insertBefore(keep, top.nextSibling);
+    else if(top && keep.previousElementSibling!==top) top.parentNode.insertBefore(keep, top.nextSibling);
+    var emp=supportEmpresa();
+    keep.innerHTML='<div style="display:flex;align-items:center;gap:10px;min-width:0"><span style="color:#facc15;font-size:16px">◇</span><div style="min-width:0"><strong style="display:block;font-size:13px;color:#fff">Modo de soporte de superadministrador</strong><span style="display:block;font-size:11px;color:#fde68a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Corrigiendo datos de '+esc(emp&&emp.nombre||'empresa cliente')+'. Los cambios afectan solamente a esta empresa.</span></div></div><button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.14)!important;color:#fff!important;border-color:rgba(255,255,255,.25)!important" onclick="_volverSuperadmin()">Volver a ROOT</button>';
+  }
+  var baseApply=typeof applyPlanUI==='function'?applyPlanUI:null;
+  applyPlanUI=function(){ if(baseApply) baseApply(); installFinalStyle(); fixSupportTop(); };
+  window.applyPlanUI=applyPlanUI;
+  var baseGoto=typeof goto==='function'?goto:null;
+  goto=function(page,param){ var out=baseGoto?baseGoto(page,param):undefined; setTimeout(function(){installFinalStyle();fixSupportTop();},0); return out; };
+  window.goto=goto;
+  installFinalStyle();
+  setInterval(function(){ if(supportId()) fixSupportTop(); }, 1200);
+  setTimeout(function(){ installFinalStyle(); fixSupportTop(); },0);
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
