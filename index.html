@@ -22259,11 +22259,19 @@ goto = function(page, param) {
   function installRootStyle(){
     if(document.getElementById('sf-root-full-style')) return;
     var st=document.createElement('style'); st.id='sf-root-full-style';
-    st.textContent='.sf-root-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;padding:14px}.sf-root-card{border:1px solid var(--border2)!important;background:var(--bg-card)!important;border-radius:9px;padding:12px;cursor:pointer;color:var(--text)!important;text-align:left}.sf-root-card:hover{border-color:var(--electric)!important}.sf-root-card strong{display:block;color:var(--white)!important;font-size:13px}.sf-root-card span{display:block;color:var(--muted)!important;font-size:11px;margin-top:4px}.sf-plan-grid{display:grid;grid-template-columns:minmax(220px,1fr) 1fr 1fr 1.35fr minmax(150px,.8fr)!important}.sf-plan-grid div{padding:10px 12px;border-bottom:1px solid var(--border2);font-size:12px;color:var(--text)!important}.sf-plan-grid .head{background:var(--card2)!important;color:var(--white)!important;font-weight:900}.sf-plan-grid .yes{color:var(--neon)!important;font-weight:900;text-align:center}.sf-plan-grid .no{color:var(--muted)!important;text-align:center}.sf-plan-grid .txt{text-align:center;color:var(--white)!important;font-weight:700}.sf-root-client-check,.sf-extra-module{accent-color:var(--electric)}.sf-extra-cell label{display:flex;align-items:center;justify-content:center;gap:6px;color:var(--white)!important;font-weight:700;font-size:11px}.sf-sa-theme-btn{display:inline-flex!important;align-items:center;gap:6px;white-space:nowrap}';
+    st.textContent='.sf-root-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;padding:14px}.sf-root-card{border:1px solid var(--border2)!important;background:var(--bg-card)!important;border-radius:9px;padding:12px;cursor:pointer;color:var(--text)!important;text-align:left}.sf-root-card:hover{border-color:var(--electric)!important}.sf-root-card strong{display:block;color:var(--white)!important;font-size:13px}.sf-root-card span{display:block;color:var(--muted)!important;font-size:11px;margin-top:4px}.sf-plan-grid{display:grid;grid-template-columns:minmax(220px,1fr) 1fr 1fr 1.35fr minmax(150px,.8fr)!important}.sf-plan-grid div{padding:10px 12px;border-bottom:1px solid var(--border2);font-size:12px;color:var(--text)!important}.sf-plan-grid .head{background:var(--card2)!important;color:var(--white)!important;font-weight:900}.sf-plan-grid .yes{color:var(--neon)!important;font-weight:900;text-align:center}.sf-plan-grid .no{color:var(--muted)!important;text-align:center}.sf-plan-grid .txt{text-align:center;color:var(--white)!important;font-weight:700}.sf-root-client-check,.sf-extra-module{accent-color:var(--electric)}.sf-extra-cell{display:flex;align-items:center;justify-content:center;gap:8px}.sf-extra-action{border:1px solid var(--border2);background:var(--bg-card);color:var(--white)!important;border-radius:8px;padding:5px 8px;font-size:10px;font-weight:900;cursor:pointer}.sf-extra-action.active{border-color:var(--neon);color:var(--neon)!important}.sf-sa-theme-btn{display:inline-flex!important;align-items:center;gap:6px;white-space:nowrap}';
     document.head.appendChild(st);
   }
   function installSuperAdminThemeButton(){
     if(!isSA()||document.getElementById('sf-sa-theme-btn')) return;
+    var existing=document.querySelector('button[onclick*="_abrirSelectorTema"]');
+    if(existing){
+      existing.id='sf-sa-theme-btn';
+      existing.classList.add('sf-sa-theme-btn');
+      existing.innerHTML='🎨 <span>Tema</span>';
+      existing.title='Cambiar tema';
+      return;
+    }
     var search=document.getElementById('global-search-btn');
     var bar=(search&&search.parentElement)||document.querySelector('.topbar-actions')||document.querySelector('.topbar .actions')||document.querySelector('.topbar')||document.querySelector('header .actions');
     if(!bar) return;
@@ -22287,6 +22295,17 @@ goto = function(page, param) {
     if(typeof saveEmpresas==='function') saveEmpresas(empresas);
     showToast('Modulos extra guardados','green');
   };
+  window._sfToggleExtraModule=function(id){
+    var cb=document.getElementById(id);
+    if(!cb) return;
+    cb.checked=!cb.checked;
+    var btn=cb.parentElement&&cb.parentElement.querySelector('.sf-extra-action');
+    if(btn){
+      btn.textContent=cb.checked?'Extra activo':'Activar extra';
+      btn.classList.toggle('active',cb.checked);
+    }
+    window._sfRootSaveExtras();
+  };
   function renderRootFull(){
     var pg=document.getElementById('pg-root');
     if(!pg||!isSA()||inSupport()) return false;
@@ -22298,7 +22317,7 @@ goto = function(page, param) {
     var cards=ROOT_MODULES_FULL.map(function(m){return '<button class="sf-root-card" onclick="goto(&quot;'+esc(m[1])+'&quot;)"><strong>'+esc(m[0])+'</strong><span>'+esc(m[2])+'</span></button>';}).join('');
     var clients=empresas.map(function(e){return '<label style="display:flex;gap:8px;align-items:center;padding:8px 0;color:var(--text)"><input type="checkbox" class="sf-root-client-check" value="'+esc(e.id)+'" checked> <strong style="color:var(--white)">'+esc(e.nombre||'Empresa')+'</strong> <span class="sf-sa-pill">'+esc(planLabel(e.plan))+'</span></label>';}).join('');
     var cell=function(v){var ok=v==='✓', no=v==='—';return '<div class="'+(ok?'yes':no?'no':'txt')+'">'+esc(v)+'</div>';};
-    var rows=MATRIX_MODULES.map(function(m){var checked=selectedExtras.indexOf(m[0])>=0?'checked':'';return '<div>'+esc(m[0])+'</div>'+cell(m[1])+cell(m[2])+cell(m[3])+'<div class="sf-extra-cell"><label><input class="sf-extra-module" type="checkbox" value="'+esc(m[0])+'" '+checked+'> Activar extra</label></div>';}).join('');
+    var rows=MATRIX_MODULES.map(function(m,i){var isChecked=selectedExtras.indexOf(m[0])>=0, checked=isChecked?'checked':'', id='sf-extra-module-'+i;return '<div>'+esc(m[0])+'</div>'+cell(m[1])+cell(m[2])+cell(m[3])+'<div class="sf-extra-cell"><input id="'+id+'" class="sf-extra-module" type="checkbox" value="'+esc(m[0])+'" '+checked+'><button type="button" class="sf-extra-action '+(isChecked?'active':'')+'" onclick="_sfToggleExtraModule(&quot;'+id+'&quot;)">'+(isChecked?'Extra activo':'Activar extra')+'</button></div>';}).join('');
     pg.innerHTML='<div class="sf-sa-wrap"><div class="sf-sa-head"><div><h1 class="sf-sa-title">ROOT</h1><div class="sf-sa-sub">Centro tecnico para cambios, modulos y actualizaciones de clientes</div></div><button class="btn btn-navy" onclick="_rootAutorizarSeleccionadas&&_rootAutorizarSeleccionadas()">Actualizar versiones empresas seleccionadas</button></div><div class="sf-sa-panel"><div class="sf-sa-panel-title">Modulos de plataforma</div><div class="sf-root-grid">'+cards+'</div></div><div class="sf-sa-panel"><div class="sf-sa-panel-title">Actualizar versiones en clientes seleccionados</div><div style="padding:14px 16px">'+(clients||'<p style="color:var(--muted)">No hay empresas cliente.</p>')+'</div></div><div class="sf-sa-panel"><div class="sf-sa-panel-title">Seleccion de empresa para modulos extra</div><div style="padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center"><select id="sf-extra-empresa" onchange="window._sfExtraEmpresa=this.value;renders.root()">'+empresas.map(function(e){return '<option value="'+esc(e.id)+'" '+(e.id===current?'selected':'')+'>'+esc(e.nombre||'Empresa')+'</option>';}).join('')+'</select><button class="btn btn-navy btn-sm" onclick="_sfRootSaveExtras()">Guardar modulos extra</button></div></div><div class="sf-sa-panel"><div class="sf-sa-panel-title">Matriz de planes y accesos</div><div class="sf-plan-grid"><div class="head">Modulo o capacidad</div><div class="head" style="text-align:center">Free</div><div class="head" style="text-align:center">Pro</div><div class="head" style="text-align:center">Enterprise / WMS</div><div class="head" style="text-align:center">Extra por cliente</div>'+rows+'</div></div></div>';
     installSuperAdminThemeButton();
     return true;
