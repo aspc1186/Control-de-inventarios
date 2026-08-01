@@ -21843,6 +21843,162 @@ goto = function(page, param) {
   setTimeout(installUniversalTheme, 0);
 })();
 
+/* Fase 2 conteos: asignaciones multiples, ubicaciones legibles y conteo ciego basico */
+(function(){
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function installCountStyle(){
+    if (document.getElementById('sf-count-phase2-style')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-count-phase2-style';
+    st.textContent =
+      ':root{--surface:var(--bg-card);--surface2:var(--card2)}' +
+      '#ci-ubi-list{background:var(--card2)!important;border-color:var(--border2)!important;color:var(--text)!important}' +
+      '.sf-count-section{background:var(--bg-card);border:1px solid var(--border2);border-radius:12px;padding:12px;margin:10px 0;color:var(--text)}' +
+      '.sf-count-section-title{font-size:12px;font-weight:900;color:var(--white);margin:0 0 8px;text-transform:uppercase;letter-spacing:0}' +
+      '.sf-count-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.sf-count-options label{font-size:11px;color:var(--white);font-weight:800}' +
+      '.sf-ubi-card{background:var(--bg-card)!important;border-color:var(--border2)!important;color:var(--text)!important}.sf-ubi-card:hover{border-color:var(--electric)!important}' +
+      '#ci-resp-multi{background:var(--card2)!important;border-color:var(--border2)!important}.ci-user-check{accent-color:var(--electric)}';
+    document.head.appendChild(st);
+  }
+  function activeUsers(){
+    return (typeof loadUsers === 'function' ? loadUsers() : []).filter(function(u){
+      return String(u && u.estado || 'ACTIVO').toUpperCase() === 'ACTIVO';
+    });
+  }
+  function selectedUsers(){
+    var nodes = document.querySelectorAll('.ci-user-check:checked');
+    return Array.prototype.map.call(nodes, function(cb){ return { nombre: cb.value, rol: cb.getAttribute('data-role') || '' }; });
+  }
+  function selectedLocations(){
+    return Array.prototype.map.call(document.querySelectorAll('.ci-ubi-check:checked'), function(cb){ return cb.value; });
+  }
+  function injectCountOptions(){
+    installCountStyle();
+    if (document.getElementById('sf-count-options')) return;
+    var multiBox = document.getElementById('ci-multiuser');
+    var anchor = multiBox ? multiBox.closest('div[style]') : document.getElementById('ci-obs');
+    if (!anchor || !anchor.parentNode) return;
+    anchor.insertAdjacentHTML('afterend',
+      '<div id="sf-count-options" class="sf-count-section">' +
+        '<p class="sf-count-section-title">Reglas del conteo</p>' +
+        '<div class="sf-count-options">' +
+          '<div><label>Prioridad</label><select id="ci-prioridad"><option value="NORMAL">Normal</option><option value="ALTA">Alta</option><option value="URGENTE">Urgente</option></select></div>' +
+          '<div><label>Tolerancia permitida (%)</label><input id="ci-tolerancia" type="number" min="0" step="0.01" value="0"></div>' +
+          '<div><label>Politica de movimientos</label><select id="ci-mov-policy"><option value="LOCK_LOCATIONS">Bloquear ubicaciones asignadas</option><option value="CUTOFF_SNAPSHOT">Permitir con hora de corte</option></select></div>' +
+          '<label style="display:flex;align-items:center;gap:8px"><input id="ci-blind" type="checkbox" checked> Conteo ciego</label>' +
+          '<label style="display:flex;align-items:center;gap:8px"><input id="ci-double" type="checkbox"> Doble conteo</label>' +
+        '</div>' +
+      '</div>');
+  }
+  function enhanceUsers(){
+    var resp = document.getElementById('ci-resp');
+    var multi = document.getElementById('ci-multiuser');
+    if (!resp || !multi) return;
+    if (!document.getElementById('ci-resp-multi')) {
+      var users = activeUsers();
+      resp.insertAdjacentHTML('afterend',
+        '<div id="ci-resp-multi" style="display:none;margin-top:8px;border:1px solid var(--border2);border-radius:10px;padding:10px;background:var(--card2)">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">' +
+            '<strong style="font-size:12px;color:var(--white)">Usuarios asignados</strong>' +
+            '<div style="display:flex;gap:6px"><button type="button" class="btn btn-ghost btn-xs" onclick="_ciSelectUsers(true)">Todos</button><button type="button" class="btn btn-ghost btn-xs" onclick="_ciSelectUsers(false)">Ninguno</button></div>' +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">' +
+            users.map(function(u){ return '<label style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border2);border-radius:8px;background:var(--bg-card);cursor:pointer;font-size:12px"><input type="checkbox" class="ci-user-check" value="'+esc(u.nombre)+'" data-role="'+esc(u.rol||'')+'"> <span><strong>'+esc(u.nombre)+'</strong><br><small>'+esc(u.rol||'')+'</small></span></label>'; }).join('') +
+          '</div>' +
+        '</div>');
+    }
+    function toggle(){
+      var on = !!multi.checked;
+      resp.style.display = on ? 'none' : '';
+      var box = document.getElementById('ci-resp-multi');
+      if (box) box.style.display = on ? '' : 'none';
+    }
+    multi.onchange = toggle;
+    toggle();
+  }
+  window._ciSelectUsers = function(checked){
+    Array.prototype.forEach.call(document.querySelectorAll('.ci-user-check'), function(cb){ cb.checked = checked; });
+  };
+  function buildAssignments(locations, users){
+    if (!users.length) users = [{ nombre:(document.getElementById('ci-resp') || {}).value || 'Sin responsable', rol:'' }];
+    var buckets = users.map(function(u, idx){ return {
+      id: 'ASG-' + String(idx + 1).padStart(3,'0'),
+      user: u.nombre,
+      role: u.rol || 'CONTADOR',
+      status: 'ASIGNADA',
+      locations: [],
+      createdAt: new Date().toISOString()
+    }; });
+    locations.forEach(function(loc, idx){ buckets[idx % buckets.length].locations.push(loc); });
+    return buckets;
+  }
+  function improveLocationSummary(){
+    var wrap = document.getElementById('ci-ubi-wrap');
+    var list = document.getElementById('ci-ubi-list');
+    if (!wrap || !list) return;
+    list.style.maxHeight = '320px';
+    list.style.background = 'var(--card2)';
+    list.style.borderColor = 'var(--border2)';
+    actualizarResumenUbicaciones();
+  }
+  var baseOpen = typeof openNuevoCiclico === 'function' ? openNuevoCiclico : null;
+  if (baseOpen) {
+    openNuevoCiclico = function(){
+      var out = baseOpen.apply(this, arguments);
+      setTimeout(function(){
+        installCountStyle();
+        injectCountOptions();
+        enhanceUsers();
+        improveLocationSummary();
+      }, 60);
+      return out;
+    };
+    window.openNuevoCiclico = openNuevoCiclico;
+  }
+  var baseCargar = typeof cargarUbicacionesCiclico === 'function' ? cargarUbicacionesCiclico : null;
+  if (baseCargar) {
+    cargarUbicacionesCiclico = function(){
+      var out = baseCargar.apply(this, arguments);
+      setTimeout(improveLocationSummary, 0);
+      return out;
+    };
+    window.cargarUbicacionesCiclico = cargarUbicacionesCiclico;
+  }
+  var baseGuardar = typeof guardarCiclico === 'function' ? guardarCiclico : null;
+  if (baseGuardar) {
+    guardarCiclico = function(){
+      var multi = document.getElementById('ci-multiuser');
+      var users = multi && multi.checked ? selectedUsers() : [];
+      if (multi && multi.checked && !users.length) { alert('Debes seleccionar al menos un usuario responsable.'); return; }
+      var beforeIds = (typeof loadCiclicos === 'function' ? loadCiclicos() : []).map(function(c){ return c.id; });
+      var ret = baseGuardar.apply(this, arguments);
+      setTimeout(function(){
+        var cics = typeof loadCiclicos === 'function' ? loadCiclicos() : [];
+        var inv = cics.find(function(c){ return beforeIds.indexOf(c.id) < 0; }) || cics[0];
+        if (!inv) return;
+        var locations = inv.ubicaciones && inv.ubicaciones.length ? inv.ubicaciones : selectedLocations();
+        var assignmentUsers = users.length ? users : [{ nombre: inv.responsable || ((document.getElementById('ci-resp') || {}).value || 'Sin responsable'), rol:'' }];
+        inv.asignaciones = buildAssignments(locations, assignmentUsers);
+        inv.assignments = inv.asignaciones;
+        inv.multiUsuario = assignmentUsers.length > 1 || !!(multi && multi.checked);
+        inv.responsables = assignmentUsers;
+        inv.responsable = assignmentUsers.map(function(u){ return u.nombre; }).join(', ');
+        inv.blindMode = !document.getElementById('ci-blind') || document.getElementById('ci-blind').checked;
+        inv.doubleCount = !!(document.getElementById('ci-double') && document.getElementById('ci-double').checked);
+        inv.movementPolicy = (document.getElementById('ci-mov-policy') || {}).value || 'LOCK_LOCATIONS';
+        inv.tolerance = Number((document.getElementById('ci-tolerancia') || {}).value || 0);
+        inv.prioridad = (document.getElementById('ci-prioridad') || {}).value || 'NORMAL';
+        inv.cutoffAt = inv.movementPolicy === 'CUTOFF_SNAPSHOT' ? new Date().toISOString() : null;
+        if (typeof saveCiclicos === 'function') saveCiclicos(cics);
+        fetch('/api/ciclicos', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(inv) }).catch(function(){});
+      }, 40);
+      return ret;
+    };
+    window.guardarCiclico = guardarCiclico;
+  }
+  installCountStyle();
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
