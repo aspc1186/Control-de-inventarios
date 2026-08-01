@@ -4239,9 +4239,11 @@ function _enviarAPacking(idx) {
   // Create packing record
   var packings = DB_packing_load();
   var t = now();
+  var seq = Math.max(1, (DB.get('sf_packing_seq') || 0) + 1);
+  DB.set('sf_packing_seq', seq);
   packings.unshift({
     id: pedidos[idx].packing_id, picking_id: p.id,
-    codigo: p.codigo.replace('PED','PAC'), pedido_codigo: p.codigo,
+    codigo: 'PIC-' + String(seq).padStart(5,'0'), pedido_codigo: p.codigo,
     cliente: p.cliente, lineas: p.lineas.map(function(l){ return Object.assign({}, l, { empacado: 0, estado: 'PENDIENTE' }); }),
     estado: 'PENDIENTE', operario_picking: p.operario,
     creado_en: t.fecha + ' ' + t.hora,
@@ -4509,8 +4511,8 @@ function _ejecutarPacking(idx) {
   // ── Evidencia fotográfica (3 fotos sugeridas, mínimo 1) ───────────────
   h.push('<div style="margin-bottom:14px">');
   h.push('<p style="font-size:12px;font-weight:700;margin-bottom:8px">📷 Evidencia fotográfica</p>');
-  h.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">');
-  var fotoLabels = ['Productos preparados','Empaque interno','Caja cerrada'];
+  h.push('<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:8px">');
+  var fotoLabels = ['Productos preparados','Empaque interno','Caja cerrada','Etiqueta','Guia','Sello','Detalle 1','Detalle 2','Detalle 3','Detalle 4'];
   fotoLabels.forEach(function(lbl, fi){
     var foto = fotos[fi];
     h.push('<div style="text-align:center">');
@@ -4525,6 +4527,9 @@ function _ejecutarPacking(idx) {
     h.push('</div>');
   });
   h.push('</div>');
+  if (fotos.length < 10) {
+    h.push('<button type="button" class="btn btn-ghost btn-sm" onclick="_capturarFotoPacking('+idx+','+Math.min(fotos.length,9)+')">Agregar foto ('+fotos.length+'/10)</button>');
+  }
   if (fotos.length < 3) {
     h.push('<p style="font-size:10px;color:var(--amber)">⚠ Se sugieren 3 fotos ('+fotos.length+'/3). Puedes cerrar con al menos 1 foto.</p>');
   } else {
@@ -4593,6 +4598,7 @@ function _onFotoPacking(ev) {
     var p = packings[packIdx];
     if (!p) return;
     p.fotos = p.fotos || [];
+    if (p.fotos.filter(Boolean).length >= 10 && !p.fotos[fotoIdx]) { showToast('Maximo 10 fotos por packing', 'amber'); return; }
     p.fotos[fotoIdx] = e.target.result;
     DB_packing_save(packings);
     closeModal();
@@ -18587,6 +18593,337 @@ goto = function(page, param) {
 
   window._supportEnsureModule = _supportEnsureModule;
   _supportEnsureModule();
+})();
+
+/* Correcciones finales SaaS/WMS: planes, visibilidad, inventario, remisiones y packing */
+(function(){
+  function _sfPlanModules(type) {
+    var base = ['dashboard','inventario','clientes'];
+    var starter = base.concat(['movimientos','historial']);
+    var pro = starter.concat(['compras','pedidos','comercial','proveedores','logistica','ubicaciones','generar-qr','escaner','reportes','importar','ciclicos','conciliacion','picking','packing']);
+    var enterprise = pro.concat(['auditoria','usuarios','integraciones','respaldos','traslados','mis-inventarios','empresas','centro-pruebas','salud-sistema']);
+    return type === 'STARTER' ? starter : type === 'PRO' ? pro : enterprise;
+  }
+  function _sfInstallSaasPlans() {
+    PLANES.STARTER = { nombre:'Starter', modulos:_sfPlanModules('STARTER'), limites:{sedes:1,bodegas:1,usuarios:2,referencias:-1}, precio:'Gratis' };
+    PLANES.PRO = { nombre:'Pro', modulos:_sfPlanModules('PRO'), limites:{sedes:1,bodegas:-1,usuarios:-1,referencias:-1}, precio:'99.900 / mes' };
+    PLANES.ENTERPRISE = { nombre:'Empresarial WMS', modulos:_sfPlanModules('ENTERPRISE'), limites:{sedes:-1,bodegas:-1,usuarios:-1,referencias:-1}, precio:'Desde 249.900 / mes' };
+    PLANES.EMPRESARIAL_WMS = PLANES.ENTERPRISE;
+    PLANES.WMS = PLANES.ENTERPRISE;
+    PLANES.FREE = PLANES.STARTER;
+    PLANES.LITE = PLANES.STARTER;
+  }
+  function _sfNormPlan(plan) {
+    plan = String(plan || 'STARTER').toUpperCase();
+    if (plan === 'FREE' || plan === 'LITE') return 'STARTER';
+    if (plan === 'WMS' || plan === 'EMPRESARIAL_WMS' || plan === 'ENTERPRISE') return 'ENTERPRISE';
+    return plan === 'PRO' ? 'PRO' : 'STARTER';
+  }
+  _sfInstallSaasPlans();
+  var _baseGetEmpresaPlan2 = typeof getEmpresaPlan === 'function' ? getEmpresaPlan : null;
+  getEmpresaPlan = function() { return _sfNormPlan(_baseGetEmpresaPlan2 ? _baseGetEmpresaPlan2() : (SESSION.plan || 'STARTER')); };
+  planHasModule = function(modulo) {
+    if (SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR') return true;
+    var p = PLANES[getEmpresaPlan()] || PLANES.STARTER;
+    return (p.modulos || []).indexOf(modulo) >= 0;
+  };
+  var _baseEnsureOps2 = typeof _sfEnsureOperationalModules === 'function' ? _sfEnsureOperationalModules : null;
+  _sfEnsureOperationalModules = function() {
+    _sfInstallSaasPlans();
+    if (_baseEnsureOps2) {
+      try { _baseEnsureOps2(); } catch(e) {}
+    }
+    PLANES.STARTER.modulos = _sfPlanModules('STARTER');
+    PLANES.PRO.modulos = _sfPlanModules('PRO');
+    PLANES.ENTERPRISE.modulos = _sfPlanModules('ENTERPRISE');
+    PLANES.WMS = PLANES.ENTERPRISE;
+    PLANES.FREE = PLANES.STARTER;
+    PLANES.LITE = PLANES.STARTER;
+  };
+  var _baseApplyPlan2 = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function() {
+    _sfEnsureOperationalModules();
+    if (_baseApplyPlan2) _baseApplyPlan2();
+    var rol = SESSION.user && SESSION.user.rol || '';
+    var isSA = rol === 'SUPER ADMINISTRADOR' || rol === 'ROOT';
+    var mods = isSA ? _sfPlanModules('ENTERPRISE').concat(['soporte']) : ((PLANES[getEmpresaPlan()] || PLANES.STARTER).modulos || []);
+    var navIds = ['dashboard','inventario','importar','historial','proveedores','clientes','pedidos','comercial','movimientos','traslados','reportes','ubicaciones','generar-qr','escaner','compras','logistica','gerencial','ciclicos','conciliacion','mis-inventarios','auditoria','empresas','usuarios','integraciones','respaldos','centro-pruebas','salud-sistema','picking','packing','soporte'];
+    navIds.forEach(function(id){
+      var el = document.getElementById('nav-' + id);
+      if (!el) return;
+      var show = isSA || mods.indexOf(id) >= 0;
+      if (rol === 'ALMACENISTA') show = ['inventario','logistica','picking','packing','traslados'].indexOf(id) >= 0;
+      el.style.display = show ? '' : 'none';
+    });
+    var badge = document.getElementById('plan-badge');
+    if (badge && !isSA) badge.textContent = (PLANES[getEmpresaPlan()] || {}).nombre || getEmpresaPlan();
+  };
+  var _baseGetMods2 = typeof getModulosDisponibles === 'function' ? getModulosDisponibles : null;
+  getModulosDisponibles = function() {
+    _sfEnsureOperationalModules();
+    var rol = SESSION.user && SESSION.user.rol || '';
+    if (rol === 'SUPER ADMINISTRADOR' || rol === 'ROOT') return _sfPlanModules('ENTERPRISE').concat(['empresas','usuarios','soporte','centro-pruebas','salud-sistema']);
+    if (rol === 'ALMACENISTA') return ['inventario','logistica','picking','packing','traslados'];
+    var mods = ((PLANES[getEmpresaPlan()] || PLANES.STARTER).modulos || []).slice();
+    return _baseGetMods2 ? mods.filter(function(m){ return _baseGetMods2().indexOf(m) >= 0 || ['dashboard','inventario','clientes'].indexOf(m)>=0; }) : mods;
+  };
+
+  function _sfInventoryTabsHtml() {
+    var tabs = [['productos','Productos'],['kardex','Kardex'],['movimientos','Movimientos'],['ajustes','Ajustes'],['conteos','Conteos'],['conciliacion','Conciliacion'],['indicadores','Indicadores']];
+    var active = window._invTab || 'productos';
+    return '<div id="sf-inv-tabs-final" style="display:flex;gap:4px;overflow:auto;margin:0 0 12px;padding:6px 0;border-bottom:1px solid var(--border2)">' + tabs.map(function(t){
+      var on = active === t[0];
+      return '<button class="btn '+(on?'btn-navy':'btn-ghost')+' btn-sm" onclick="window._invTab=\''+t[0]+'\';renders.inventario()" style="white-space:nowrap">'+t[1]+'</button>';
+    }).join('') + '</div>';
+  }
+  var _baseBuildInv2 = typeof _buildInventarioUI === 'function' ? _buildInventarioUI : null;
+  if (_baseBuildInv2) {
+    _buildInventarioUI = function(items) {
+      _baseBuildInv2(items);
+      var pg = document.getElementById('pg-inventario');
+      if (pg && !document.getElementById('sf-inv-tabs-final')) pg.insertAdjacentHTML('afterbegin', _sfInventoryTabsHtml());
+    };
+  }
+  function _sfInstallInventoryActionStyle() {
+    if (document.getElementById('sf-hide-inv-actions')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-hide-inv-actions';
+    st.textContent = '#pg-inventario table th:last-child,#pg-inventario table td:last-child{display:none!important}#sf-inv-tabs-final+*{margin-top:0!important}';
+    document.head.appendChild(st);
+  }
+  _sfInstallInventoryActionStyle();
+
+  function _sfScopedRows(key, rows) {
+    var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+    rows = Array.isArray(rows) ? rows : [];
+    if (eid && eid !== '__SA__') return rows.filter(function(r){ return r && r.empresa_id === eid; });
+    if (SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR') return rows.filter(function(r){ return r && !r.empresa_id; });
+    return rows;
+  }
+  ['Proveedores','Clientes'].forEach(function(name){
+    var lname = name.toLowerCase();
+    var loadName = 'load' + name;
+    if (typeof window[loadName] === 'function') {
+      var base = window[loadName];
+      window[loadName] = function(){ return _sfScopedRows(lname, base()); };
+    }
+  });
+
+  window._autorizarActualizacionClientes = function() {
+    var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    var version = 'v' + new Date().toISOString().replace(/[-:T.Z]/g,'').slice(0,12);
+    empresas = empresas.map(function(e){ return Object.assign({}, e, { version_autorizada:version, version_pendiente:false, updated_at:new Date().toISOString() }); });
+    if (typeof saveEmpresas === 'function') saveEmpresas(empresas);
+    DB.set('sf_platform_version', version);
+    showToast('Actualizacion autorizada para empresas cliente: ' + version, 'green');
+    if (currentPage === 'empresas' && renders.empresas) renders.empresas();
+  };
+  var _baseEmpresas2 = renders.empresas;
+  if (_baseEmpresas2) {
+    renders.empresas = function() {
+      _baseEmpresas2();
+      if (!(SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR')) return;
+      var pg = document.getElementById('pg-empresas');
+      if (pg && !document.getElementById('sf-version-clients')) {
+        pg.insertAdjacentHTML('afterbegin','<div id="sf-version-clients" class="card" style="margin-bottom:10px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap"><div><strong>Versiones empresa cliente</strong><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Los cambios de plataforma solo pasan a clientes al autorizar esta actualizacion.</p></div><button class="btn btn-navy btn-sm" onclick="_autorizarActualizacionClientes()">Actualizar versiones empresa cliente</button></div>');
+      }
+    };
+  }
+
+  function _sfCreateAutoBackup(reason) {
+    try {
+      var list = DB.get('sf_auto_respaldos') || [];
+      var today = new Date().toISOString().slice(0,10);
+      if (list[0] && list[0].date === today && reason === 'daily') return;
+      list.unshift({ id:uid(), date:today, created_at:new Date().toISOString(), reason:reason||'auto', data:{ articulos:DB.get('articulos')||[], movimientos:DB.get('movimientos')||[], compras:DB.get('compras')||[], pedidos:DB.get('pedidos')||[], clientes:DB.get('clientes')||[], proveedores:DB.get('proveedores')||[], empresas:DB.get('empresas')||DB.get('sf_empresas')||[] } });
+      DB.set('sf_auto_respaldos', list.slice(0,10));
+    } catch(e) {}
+  }
+  _sfCreateAutoBackup('daily');
+  setInterval(function(){ _sfCreateAutoBackup('interval'); }, 30 * 60 * 1000);
+
+  var _baseFinalPacking2 = typeof _finalizarPacking === 'function' ? _finalizarPacking : null;
+  if (_baseFinalPacking2) {
+    _finalizarPacking = function(idx) {
+      _baseFinalPacking2(idx);
+      try { closeModal(); } catch(e) {}
+      if (currentPage === 'packing' && typeof _renderPackTabContent === 'function') _renderPackTabContent();
+    };
+  }
+  window._sfPackingCam = null;
+  var _baseCapturarPacking2 = typeof _capturarFotoPacking === 'function' ? _capturarFotoPacking : null;
+  _capturarFotoPacking = function(packIdx, fotoIdx) {
+    var packs = DB_packing_load();
+    var p = packs[packIdx];
+    if (p && (p.fotos || []).filter(Boolean).length >= 10 && !p.fotos[fotoIdx]) return showToast('Maximo 10 fotos por packing', 'amber');
+    var box = document.getElementById('sf-pack-camera-box');
+    if (!box) {
+      var modal = document.querySelector('.modal-content') || document.querySelector('.modal');
+      if (modal) {
+        modal.insertAdjacentHTML('beforeend','<div id="sf-pack-camera-box" style="margin-top:10px;padding:10px;border:1px solid var(--border2);border-radius:10px;background:var(--card2)"><video id="sf-pack-video" autoplay playsinline muted style="width:100%;max-height:260px;background:#000;border-radius:8px;object-fit:cover"></video><canvas id="sf-pack-canvas" style="display:none"></canvas><p id="sf-pack-camera-msg" style="font-size:11px;color:var(--muted);margin:6px 0">Abriendo camara...</p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="btn btn-navy btn-sm" onclick="_sfTomarFotoPacking('+packIdx+','+fotoIdx+')">Tomar foto</button><button type="button" class="btn btn-ghost btn-sm" onclick="_sfCerrarCamaraPacking()">Cerrar camara</button><button type="button" class="btn btn-ghost btn-sm" onclick="_sfFallbackFotoPacking('+packIdx+','+fotoIdx+')">Adjuntar</button></div></div>');
+        box = document.getElementById('sf-pack-camera-box');
+      }
+    }
+    var video = document.getElementById('sf-pack-video');
+    var msg = document.getElementById('sf-pack-camera-msg');
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return _sfFallbackFotoPacking(packIdx, fotoIdx);
+    if (window._sfPackingCam) _sfCerrarCamaraPacking(true);
+    navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}).then(function(stream){
+      window._sfPackingCam = stream;
+      if (video) { video.srcObject = stream; video.play().catch(function(){}); }
+      if (msg) msg.textContent = 'Camara activa. Puedes tomar hasta 10 fotos.';
+    }).catch(function(err){ if (msg) msg.textContent = 'No se pudo abrir camara: ' + (err && err.message ? err.message : err); _sfFallbackFotoPacking(packIdx, fotoIdx); });
+  };
+  window._sfFallbackFotoPacking = function(packIdx, fotoIdx) {
+    if (_baseCapturarPacking2) return _baseCapturarPacking2(packIdx, fotoIdx);
+  };
+  window._sfCerrarCamaraPacking = function(keep) {
+    if (window._sfPackingCam) { window._sfPackingCam.getTracks().forEach(function(t){ try{t.stop();}catch(e){} }); window._sfPackingCam = null; }
+    var video = document.getElementById('sf-pack-video');
+    if (video) video.srcObject = null;
+    var box = document.getElementById('sf-pack-camera-box');
+    if (box && !keep) box.remove();
+  };
+  window._sfTomarFotoPacking = function(packIdx, fotoIdx) {
+    var video = document.getElementById('sf-pack-video');
+    if (!video || !video.videoWidth) return showToast('La camara aun no esta lista', 'amber');
+    var canvas = document.getElementById('sf-pack-canvas') || document.createElement('canvas');
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+    var packs = DB_packing_load();
+    var p = packs[packIdx];
+    if (!p) return;
+    p.fotos = p.fotos || [];
+    if (p.fotos.filter(Boolean).length >= 10 && !p.fotos[fotoIdx]) return showToast('Maximo 10 fotos por packing', 'amber');
+    p.fotos[fotoIdx] = canvas.toDataURL('image/jpeg', .72);
+    DB_packing_save(packs);
+    _sfCerrarCamaraPacking();
+    closeModal();
+    _ejecutarPacking(packIdx);
+  };
+
+  window.abrirNuevaRemision = function() {
+    var items = loadItems();
+    var clientes = typeof loadClientes === 'function' ? loadClientes() : [];
+    var h = [];
+    h.push('<h3 style="margin-bottom:12px">Nueva remision</h3>');
+    h.push('<div class="form-row"><label>Cliente / destino *</label><input id="rm-cliente" list="rm-clientes-list" oninput="_sfRemisionAutofill()" placeholder="NIT, razon social o destino manual"><datalist id="rm-clientes-list">'+clientes.map(function(c){ return '<option value="'+_sfEsc(c.nit||c.razon_social||c.nombre||'')+'">'+_sfEsc(c.razon_social||c.nombre||'')+'</option>'; }).join('')+'</datalist></div>');
+    h.push('<div class="form-grid"><div class="form-row"><label>NIT</label><input id="rm-nit"></div><div class="form-row"><label>Direccion</label><input id="rm-dir"></div></div>');
+    h.push('<div class="form-grid"><div class="form-row"><label>Fecha</label><input id="rm-fecha" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div><div class="form-row"><label>Transportadora</label><input id="rm-trans" placeholder="Propia / tercero"></div></div>');
+    h.push('<div class="form-row"><label>Articulo *</label><input id="rm-sku" list="rm-items-list" oninput="_sfRemisionPreview()" placeholder="Codigo o producto"><datalist id="rm-items-list">'+items.slice(0,1000).map(function(i){ var c=i.sku||i.codigo||''; return '<option value="'+_sfEsc(c)+'">'+_sfEsc(c+' - '+(i.nombre||i.descripcion||''))+'</option>'; }).join('')+'</datalist></div>');
+    h.push('<div class="form-grid"><div class="form-row"><label>Cantidad *</label><input id="rm-cant" type="number" min="1" value="1" oninput="_sfRemisionPreview()"></div><div class="form-row"><label>Disponible</label><input id="rm-disp" readonly></div></div>');
+    h.push('<div id="rm-preview" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>');
+    h.push('<div class="form-row"><label>Observacion</label><textarea id="rm-obs" rows="2"></textarea></div>');
+    h.push('<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="guardarRemision()">Crear remision</button></div>');
+    openModal(h.join(''), true);
+    _sfRemisionPreview();
+  };
+  window._sfRemisionAutofill = function() {
+    var v = String((document.getElementById('rm-cliente')||{}).value||'').toLowerCase();
+    var c = (typeof loadClientes === 'function' ? loadClientes() : []).find(function(x){ return String(x.nit||'').toLowerCase()===v || String(x.razon_social||x.nombre||'').toLowerCase()===v; });
+    if (!c) return;
+    var nit=document.getElementById('rm-nit'), dir=document.getElementById('rm-dir'), cli=document.getElementById('rm-cliente');
+    if (cli) cli.value = c.razon_social || c.nombre || cli.value;
+    if (nit) nit.value = c.nit || '';
+    if (dir) dir.value = c.direccion || '';
+  };
+  window._sfRemisionPreview = function() {
+    var sku = (document.getElementById('rm-sku')||{}).value || '';
+    var item = loadItems().find(function(i){ return String(i.sku||i.codigo) === String(sku); });
+    var disp = document.getElementById('rm-disp'), prev=document.getElementById('rm-preview');
+    if (disp) disp.value = item ? _sfQty(item) : '';
+    if (prev) prev.innerHTML = item ? ('Producto: <strong>'+_sfEsc(item.nombre||item.descripcion||sku)+'</strong> | Ubicacion: '+_sfEsc(item.ubicacion||'Sin ubicacion')) : 'Puedes escribir datos manualmente si el cliente no existe.';
+  };
+  window.guardarRemision = function() {
+    var sku = (document.getElementById('rm-sku') || {}).value || '';
+    var qty = Number((document.getElementById('rm-cant') || {}).value || 0);
+    var cliente = ((document.getElementById('rm-cliente') || {}).value || '').trim();
+    if (!sku || !qty || !cliente) return showToast('Cliente, articulo y cantidad son obligatorios', 'red');
+    var items = loadItems();
+    var item = items.find(function(i){ return String(i.sku||i.codigo) === String(sku); });
+    if (!item) return showToast('Articulo no encontrado', 'red');
+    if (!item.id) { item.id = item.sku || item.codigo || uid(); saveItems(items); }
+    var rem = { id:uid(), numero:'REM-' + String((DB.get('sf_remision_seq')||0)+1).padStart(5,'0'), cliente:cliente, nit:((document.getElementById('rm-nit')||{}).value||''), direccion:((document.getElementById('rm-dir')||{}).value||''), fecha:(document.getElementById('rm-fecha')||{}).value, sku:sku, articulo:item.nombre||item.descripcion||sku, cantidad:qty, transportadora:((document.getElementById('rm-trans')||{}).value||''), observacion:((document.getElementById('rm-obs')||{}).value||''), estado:'EMITIDA', usuario:SESSION.user&&SESSION.user.nombre, empresa_id:typeof _getEmpresaId==='function'&&_getEmpresaId()!=='__SA__'?_getEmpresaId():null };
+    var mov = registrarMov('SALIDA', item.id, qty, { observacion:'Remision '+rem.numero+' - '+cliente, usuario:rem.usuario });
+    if (!mov || mov.ok === false) return showToast((mov && mov.msg) || 'No se pudo registrar la salida de inventario', 'red');
+    DB.set('sf_remision_seq', Number((DB.get('sf_remision_seq')||0)+1));
+    var out = DB_remisiones_load(); out.unshift(rem); DB_remisiones_save(out);
+    auditLog('CREAR_REMISION', rem.numero + ' | ' + sku + ' x ' + qty, rem.usuario);
+    closeModal();
+    showToast('Remision creada y salida registrada', 'green');
+    if (currentPage === 'logistica') renders.logistica();
+  };
+
+  function _sfFixPlanSelectOptions(selectId, current) {
+    var sel = document.getElementById(selectId);
+    if (!sel) return;
+    var val = _sfNormPlan(current || sel.value);
+    sel.innerHTML = '<option value="STARTER">Starter</option><option value="PRO">Pro</option><option value="ENTERPRISE">Empresarial WMS</option>';
+    sel.value = val;
+  }
+  var _baseAbrirNuevaEmpresaFinal = typeof abrirNuevaEmpresa === 'function' ? abrirNuevaEmpresa : null;
+  if (_baseAbrirNuevaEmpresaFinal) {
+    abrirNuevaEmpresa = function() {
+      _baseAbrirNuevaEmpresaFinal();
+      setTimeout(function(){
+        var hidden = document.getElementById('ne-plan');
+        if (hidden) hidden.value = 'STARTER';
+        ['FREE','LITE','WMS'].forEach(function(p){ var card=document.getElementById('ne-plan-'+p); if(card) card.style.display='none'; });
+        var pro = document.getElementById('ne-plan-PRO');
+        if (pro) {
+          pro.onclick = function(){ _selPlanNuevaEmpresa('PRO'); };
+          pro.querySelector('div:last-child').textContent = 'PRO';
+        }
+        var box = pro && pro.parentNode;
+        if (box && !document.getElementById('ne-plan-STARTER')) {
+          box.insertAdjacentHTML('afterbegin','<div id="ne-plan-STARTER" onclick="_selPlanNuevaEmpresa(\'STARTER\')" style="padding:10px 6px;border:2px solid var(--muted);border-radius:10px;cursor:pointer;background:rgba(100,116,139,.12);text-align:center;transition:all .2s"><div style="font-size:18px">S</div><div style="font-size:11px;font-weight:700;color:var(--muted)">STARTER</div></div>');
+          box.insertAdjacentHTML('beforeend','<div id="ne-plan-ENTERPRISE" onclick="_selPlanNuevaEmpresa(\'ENTERPRISE\')" style="padding:10px 6px;border:2px solid var(--border2);border-radius:10px;cursor:pointer;background:rgba(255,255,255,.02);text-align:center;transition:all .2s"><div style="font-size:18px">WMS</div><div style="font-size:11px;font-weight:700;color:var(--text2)">ENTERPRISE</div></div>');
+        }
+      },0);
+    };
+  }
+  _selPlanNuevaEmpresa = function(planId) {
+    planId = _sfNormPlan(planId);
+    var hidden = document.getElementById('ne-plan');
+    if (hidden) hidden.value = planId;
+    ['STARTER','PRO','ENTERPRISE'].forEach(function(p){
+      var el = document.getElementById('ne-plan-'+p);
+      if (!el) return;
+      var on = p === planId;
+      var clr = p==='ENTERPRISE' ? 'var(--electric)' : p==='PRO' ? 'var(--purple)' : 'var(--muted)';
+      el.style.borderColor = on ? clr : 'var(--border2)';
+      el.style.background = on ? 'rgba(59,130,246,.1)' : 'rgba(255,255,255,.02)';
+      var label = el.querySelector('div:last-child');
+      if (label) label.style.color = on ? clr : 'var(--text2)';
+    });
+  };
+  var _baseConfirmEmpresaFinal = typeof _confirmarNuevaEmpresa === 'function' ? _confirmarNuevaEmpresa : null;
+  if (_baseConfirmEmpresaFinal) {
+    _confirmarNuevaEmpresa = function() {
+      var hidden = document.getElementById('ne-plan');
+      if (hidden) hidden.value = _sfNormPlan(hidden.value);
+      return _baseConfirmEmpresaFinal();
+    };
+  }
+  var _baseEditarEmpresaFinal = typeof _editarEmpresa === 'function' ? _editarEmpresa : null;
+  if (_baseEditarEmpresaFinal) {
+    _editarEmpresa = function(empId) {
+      _baseEditarEmpresaFinal(empId);
+      setTimeout(function(){
+        var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+        var emp = empresas.find(function(e){ return e.id === empId; });
+        _sfFixPlanSelectOptions('ee-plan', emp && emp.plan);
+      },0);
+    };
+  }
+  var _baseGuardarEdicionEmpresaFinal = typeof _guardarEdicionEmpresa === 'function' ? _guardarEdicionEmpresa : null;
+  if (_baseGuardarEdicionEmpresaFinal) {
+    _guardarEdicionEmpresa = function(empId) {
+      var sel = document.getElementById('ee-plan');
+      if (sel) sel.value = _sfNormPlan(sel.value);
+      return _baseGuardarEdicionEmpresaFinal(empId);
+    };
+  }
 })();
 
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
