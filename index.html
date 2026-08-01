@@ -21596,6 +21596,100 @@ goto = function(page, param) {
   setTimeout(function(){ if(SESSION&&SESSION.user) applyPlanUI(); },0);
 })();
 
+/* Ajuste final: temas consistentes, volver desde ROOT y soporte compacto */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var ROOT_PAGES = ['dashboard','empresas','root'];
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function isSA(){ return !!(SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR'); }
+  function supportId(){ try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) { return ''; } }
+  function inSupport(){ return !!supportId(); }
+  function supportEmpresa(){
+    var id = supportId();
+    return (typeof loadEmpresas === 'function' ? loadEmpresas() : []).find(function(e){ return e && e.id === id; }) || null;
+  }
+  function installThemeFixes(){
+    if (document.getElementById('sf-final-theme-fixes')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-final-theme-fixes';
+    st.textContent =
+      'body.sf-platform-admin,body.sf-platform-admin #app-view,body.sf-platform-admin .page,body.sf-platform-admin .page-inner{background:var(--bg-deep)!important;color:var(--text)!important}' +
+      'body.sf-platform-admin .sidebar,body.sf-platform-admin .topbar{background:var(--bg-card)!important;color:var(--text)!important;border-color:var(--border2)!important}' +
+      'body.sf-platform-admin nav a{color:var(--text)!important;background:transparent!important}' +
+      'body.sf-platform-admin nav a.active{background:var(--card2)!important;color:var(--electric)!important;border-color:var(--border2)!important}' +
+      'body.sf-platform-admin .brand-name,body.sf-platform-admin .sf-sa-title,body.sf-platform-admin h1,body.sf-platform-admin h2,body.sf-platform-admin h3,body.sf-platform-admin strong{color:var(--white)!important}' +
+      'body.sf-platform-admin .brand-sub,body.sf-platform-admin .sf-sa-sub,body.sf-platform-admin .sf-sa-label,body.sf-platform-admin small{color:var(--muted)!important}' +
+      'body.sf-platform-admin .sf-sa-wrap{color:var(--text)!important}' +
+      'body.sf-platform-admin .sf-sa-kpi,body.sf-platform-admin .sf-sa-panel,body.sf-platform-admin .sf-root-card{background:var(--bg-card)!important;color:var(--text)!important;border-color:var(--border2)!important}' +
+      'body.sf-platform-admin .sf-sa-panel-title,body.sf-platform-admin .sf-sa-table th{background:var(--card2)!important;color:var(--white)!important;border-color:var(--border2)!important}' +
+      'body.sf-platform-admin .sf-sa-table td{color:var(--text)!important;border-color:var(--border2)!important}' +
+      'body.sf-platform-admin .sf-root-card span{color:var(--muted)!important}' +
+      'body.sf-platform-admin input,body.sf-platform-admin select,body.sf-platform-admin textarea{background:var(--card2)!important;color:var(--white)!important;border-color:var(--border2)!important}' +
+      '#sf-support-banner{position:sticky!important;top:0!important;z-index:999!important;margin:0 0 10px 0!important;padding:10px 14px!important;border:1px solid rgba(245,158,11,.75)!important;border-radius:8px!important;background:linear-gradient(90deg,rgba(15,23,42,.96),rgba(31,41,55,.9))!important;color:#fff!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;width:100%!important;box-sizing:border-box!important;min-height:54px!important;max-height:none!important;overflow:hidden!important}' +
+      '#sf-support-banner *{color:#fff!important}#sf-support-banner .sf-support-sub{color:#fde68a!important;font-size:11px!important;line-height:1.25!important}' +
+      '.sf-root-backbar{display:flex;align-items:center;gap:8px;margin:0 0 12px 0;padding:8px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--bg-card);color:var(--text)}';
+    document.head.appendChild(st);
+  }
+  function fixSupportBanner(){
+    var old = document.getElementById('sf-support-banner');
+    if (!isSA() || !inSupport()) { if (old) old.remove(); return; }
+    var topbar = document.getElementById('topbar');
+    if (!topbar) return;
+    if (!old) {
+      old = document.createElement('div');
+      old.id = 'sf-support-banner';
+    }
+    if (old.parentNode !== topbar.parentNode || old.previousElementSibling !== topbar) {
+      topbar.parentNode.insertBefore(old, topbar.nextSibling);
+    }
+    var emp = supportEmpresa();
+    old.innerHTML = '<div style="display:flex;align-items:flex-start;gap:10px;min-width:0"><span style="color:#facc15!important;font-size:17px;line-height:1">◇</span><div style="min-width:0"><strong style="display:block;font-size:13px;line-height:1.2">Modo de soporte de superadministrador</strong><span class="sf-support-sub">Estas corrigiendo los datos de '+esc(emp && emp.nombre || 'empresa cliente')+'. Los cambios afectan solamente a esta empresa.</span></div></div><button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.14)!important;border-color:rgba(255,255,255,.25)!important;color:#fff!important;flex-shrink:0" onclick="_volverSuperadmin()">Volver a ROOT</button>';
+  }
+  function addRootBack(page){
+    if (!isSA() || inSupport() || ROOT_PAGES.indexOf(page) >= 0 || page === 'detalle') return;
+    var pg = document.getElementById('pg-' + page);
+    if (!pg || pg.querySelector('.sf-root-backbar')) return;
+    pg.insertAdjacentHTML('afterbegin','<div class="sf-root-backbar"><button class="btn btn-ghost btn-sm" onclick="goto(&quot;root&quot;)">← Volver a ROOT</button><span style="font-size:12px;color:var(--muted)">Editando modulo desde ROOT</span></div>');
+  }
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  goto = function(page, param){
+    if (isSA() && !inSupport() && ROOT_PAGES.indexOf(currentPage) >= 0 && ROOT_PAGES.indexOf(page) < 0) {
+      window._lastRootPage = currentPage || 'root';
+    }
+    var out = baseGoto ? baseGoto(page, param) : undefined;
+    setTimeout(function(){ installThemeFixes(); fixSupportBanner(); addRootBack(page); }, 0);
+    return out;
+  };
+  window.goto = goto;
+  var baseApply = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function(){
+    if (baseApply) baseApply();
+    installThemeFixes();
+    fixSupportBanner();
+    if (typeof currentPage !== 'undefined') addRootBack(currentPage);
+  };
+  window.applyPlanUI = applyPlanUI;
+  var baseRootConfirm = window._confirmarAbrirSoporteCliente;
+  if (baseRootConfirm) {
+    window._confirmarAbrirSoporteCliente = function(empId){
+      var out = baseRootConfirm.apply(this, arguments);
+      setTimeout(fixSupportBanner, 30);
+      return out;
+    };
+  }
+  var baseVolver = window._volverSuperadmin;
+  if (baseVolver) {
+    window._volverSuperadmin = function(){
+      var out = baseVolver.apply(this, arguments);
+      setTimeout(function(){ if (typeof goto === 'function') goto('root'); }, 0);
+      return out;
+    };
+    window._cerrarModoSoporte = window._volverSuperadmin;
+  }
+  installThemeFixes();
+  setTimeout(function(){ fixSupportBanner(); if (typeof currentPage !== 'undefined') addRootBack(currentPage); }, 0);
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
