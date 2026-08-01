@@ -20379,6 +20379,284 @@ goto = function(page, param) {
   setTimeout(applySupportNav, 0);
 })();
 
+/* Correccion final: conteos multiusuario y soporte como workspace cliente */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var SUPPORT_RETURN_KEY = 'sf_support_return_page';
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function isSA(){ return !!(SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR'); }
+  function supportId(){ try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) { return ''; } }
+  function setSupportId(id){ try { id ? sessionStorage.setItem(SUPPORT_KEY, id) : sessionStorage.removeItem(SUPPORT_KEY); } catch(e){} }
+  function supportEmpresa(){
+    var id = supportId();
+    return (typeof loadEmpresas === 'function' ? loadEmpresas() : []).find(function(e){ return e && e.id === id; }) || null;
+  }
+  function normPlan(p) {
+    p = String(p || 'PRO').toUpperCase();
+    if (p === 'FREE' || p === 'LITE') return 'STARTER';
+    if (p === 'WMS' || p === 'EMPRESARIAL_WMS' || p === 'ENTERPRISE') return 'ENTERPRISE';
+    return p === 'PRO' ? 'PRO' : 'STARTER';
+  }
+  function planMods(plan) {
+    if (typeof PLANES !== 'undefined' && PLANES[plan] && Array.isArray(PLANES[plan].modulos)) return PLANES[plan].modulos.slice();
+    var starter = ['dashboard','inventario','clientes','movimientos','historial'];
+    var pro = starter.concat(['compras','pedidos','comercial','proveedores','logistica','ubicaciones','generar-qr','escaner','reportes','importar','ciclicos','conciliacion','picking','packing']);
+    return plan === 'STARTER' ? starter : plan === 'PRO' ? pro : pro.concat(['auditoria','usuarios','integraciones','respaldos','traslados','mis-inventarios']);
+  }
+  function supportPlan(){ return normPlan((supportEmpresa() || {}).plan); }
+  function supportMods(){ return planMods(supportPlan()); }
+  function setSupportSessionVisual() {
+    if (!isSA() || !supportId()) return;
+    var emp = supportEmpresa();
+    SESSION.soporte_activo = true;
+    SESSION.empresa_id = supportId();
+    SESSION.empresa = emp && emp.nombre || 'Empresa cliente';
+    SESSION.plan = supportPlan();
+    var empName = document.getElementById('empresa-nombre');
+    if (empName) empName.textContent = SESSION.empresa;
+    var ni = document.getElementById('nav-user-info');
+    if (ni) ni.textContent = 'Soporte SA - ' + SESSION.empresa;
+    var badge = document.getElementById('plan-badge');
+    if (badge) { badge.style.display = ''; badge.textContent = SESSION.plan; }
+  }
+  function resetSupportSessionVisual() {
+    SESSION.soporte_activo = false;
+    SESSION.empresa_id = null;
+    SESSION.empresa = 'StockFlow Platform';
+    SESSION.plan = 'WMS';
+    var empName = document.getElementById('empresa-nombre');
+    if (empName) empName.textContent = 'StockFlow Platform';
+    var ni = document.getElementById('nav-user-info');
+    if (ni && SESSION.user) ni.textContent = SESSION.user.nombre + ' - ' + SESSION.user.rol;
+  }
+  function renderSupportBannerFinal() {
+    var old = document.getElementById('sf-support-banner');
+    if (!isSA() || !supportId()) { if (old) old.remove(); document.body.classList.remove('sf-support-active'); return; }
+    var emp = supportEmpresa();
+    var topbar = document.getElementById('topbar');
+    if (!topbar) return;
+    document.body.classList.add('sf-support-active');
+    if (!old) {
+      old = document.createElement('div');
+      old.id = 'sf-support-banner';
+      topbar.parentNode.insertBefore(old, topbar.nextSibling);
+    }
+    old.style.cssText = 'position:sticky;top:0;z-index:90;margin:0 0 10px;padding:12px 16px;border:1px solid rgba(245,158,11,.7);border-radius:8px;background:linear-gradient(90deg,rgba(15,23,42,.97),rgba(31,41,55,.9));color:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;box-shadow:0 10px 24px rgba(15,23,42,.22)';
+    old.innerHTML = '<div style="display:flex;gap:10px;align-items:flex-start;min-width:0"><span style="color:#facc15;font-size:18px;line-height:1">◇</span><div style="min-width:0"><strong style="display:block;font-size:13px;color:#fff">Modo de soporte de superadministrador</strong><span style="display:block;font-size:11px;color:#fde68a">Estas corrigiendo los datos de '+esc(emp && emp.nombre || 'empresa cliente')+'. Los cambios afectan solamente a esta empresa.</span></div></div><button class="btn btn-ghost btn-sm" style="background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.2);color:#fff" onclick="_volverSuperadmin()">Volver a superadmin</button>';
+  }
+  function applyClientWorkspaceNav() {
+    if (!isSA() || !supportId()) { renderSupportBannerFinal(); return; }
+    setSupportSessionVisual();
+    var mods = supportMods();
+    var navIds = ['dashboard','inventario','importar','historial','proveedores','clientes','pedidos','comercial','movimientos','traslados','reportes','ubicaciones','generar-qr','escaner','compras','logistica','gerencial','ciclicos','conciliacion','mis-inventarios','auditoria','empresas','usuarios','integraciones','respaldos','centro-pruebas','salud-sistema','picking','packing','soporte'];
+    navIds.forEach(function(id){
+      var el = document.getElementById('nav-' + id);
+      if (!el) return;
+      var show = mods.indexOf(id) >= 0;
+      if (['empresas','soporte','centro-pruebas','salud-sistema','gerencial'].indexOf(id) >= 0) show = false;
+      el.style.display = show ? '' : 'none';
+    });
+    var secMap = {
+      'nav-sec-principal':['dashboard'],
+      'nav-sec-operacion':['inventario','importar','proveedores','clientes','pedidos','comercial','compras','logistica','movimientos','traslados'],
+      'nav-sec-analitica':['reportes'],
+      'nav-sec-bodegas':['ubicaciones','generar-qr','escaner'],
+      'nav-sec-seguridad':['auditoria'],
+      'nav-sec-admin':['usuarios','integraciones','respaldos'],
+      'nav-sec-sistema':[]
+    };
+    Object.keys(secMap).forEach(function(id){
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.style.display = secMap[id].some(function(m){ return mods.indexOf(m) >= 0; }) ? '' : 'none';
+    });
+    renderSupportBannerFinal();
+  }
+
+  var baseApplyPlanSupportFinal = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function() {
+    if (baseApplyPlanSupportFinal) baseApplyPlanSupportFinal();
+    applyClientWorkspaceNav();
+  };
+  window.applyPlanUI = applyPlanUI;
+
+  var baseGetEmpresaPlanSupportFinal = typeof getEmpresaPlan === 'function' ? getEmpresaPlan : null;
+  getEmpresaPlan = function() {
+    if (isSA() && supportId()) return supportPlan();
+    return baseGetEmpresaPlanSupportFinal ? baseGetEmpresaPlanSupportFinal() : 'STARTER';
+  };
+  window.getEmpresaPlan = getEmpresaPlan;
+
+  var baseGetModsSupportFinal = typeof getModulosDisponibles === 'function' ? getModulosDisponibles : null;
+  getModulosDisponibles = function() {
+    if (isSA() && supportId()) return supportMods();
+    return baseGetModsSupportFinal ? baseGetModsSupportFinal() : [];
+  };
+  window.getModulosDisponibles = getModulosDisponibles;
+
+  window._confirmarAbrirSoporteCliente = function(empId) {
+    var emp = (typeof loadEmpresas === 'function' ? loadEmpresas() : []).find(function(e){ return e && e.id === empId; });
+    if (!emp) { showToast('Empresa no encontrada', 'red'); return; }
+    try { sessionStorage.setItem(SUPPORT_RETURN_KEY, 'empresas'); } catch(e) {}
+    setSupportId(empId);
+    closeModal();
+    setSupportSessionVisual();
+    applyClientWorkspaceNav();
+    try { auditLog('MODO_SOPORTE_ABIERTO', 'Empresa: ' + emp.nombre, SESSION.user && SESSION.user.nombre); } catch(e) {}
+    showToast('Entraste al workspace de ' + emp.nombre, 'green');
+    var mods = supportMods();
+    goto(mods.indexOf('dashboard') >= 0 ? 'dashboard' : (mods[0] || 'inventario'));
+  };
+
+  window._volverSuperadmin = function() {
+    var emp = supportEmpresa();
+    setSupportId('');
+    renderSupportBannerFinal();
+    resetSupportSessionVisual();
+    try { auditLog('MODO_SOPORTE_CERRADO', 'Empresa: ' + (emp && emp.nombre || ''), SESSION.user && SESSION.user.nombre); } catch(e) {}
+    showToast('Volviste al panel de superadmin', 'green');
+    applyPlanUI();
+    goto('empresas');
+  };
+  window._cerrarModoSoporte = window._volverSuperadmin;
+
+  var baseGotoSupportFinal = typeof goto === 'function' ? goto : null;
+  goto = function(page, param) {
+    if (isSA() && supportId()) {
+      var mods = supportMods();
+      if (['empresas','soporte','centro-pruebas','salud-sistema','gerencial'].indexOf(page) >= 0 || mods.indexOf(page) < 0) {
+        page = mods.indexOf('dashboard') >= 0 ? 'dashboard' : (mods[0] || 'inventario');
+      }
+    }
+    var out = baseGotoSupportFinal ? baseGotoSupportFinal(page, param) : undefined;
+    setTimeout(applyClientWorkspaceNav, 0);
+    return out;
+  };
+  window.goto = goto;
+
+  function activeUsersForConteo() {
+    return (typeof loadUsers === 'function' ? loadUsers() : []).filter(function(u){ return String(u.estado || 'ACTIVO').toUpperCase() === 'ACTIVO'; });
+  }
+  function enhanceRespMulti() {
+    var resp = document.getElementById('ci-resp');
+    var multi = document.getElementById('ci-multiuser');
+    if (!resp || !multi || document.getElementById('ci-resp-multi')) return;
+    var users = activeUsersForConteo();
+    resp.insertAdjacentHTML('afterend',
+      '<div id="ci-resp-multi" style="display:none;margin-top:8px;border:1px solid var(--border2);border-radius:10px;padding:10px;background:var(--surface2)">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px">'+
+          '<strong style="font-size:12px;color:var(--text)">Usuarios asignados</strong>'+
+          '<div style="display:flex;gap:6px"><button type="button" class="btn btn-ghost btn-xs" onclick="_ciSelectUsers(true)">Todos</button><button type="button" class="btn btn-ghost btn-xs" onclick="_ciSelectUsers(false)">Ninguno</button></div>'+
+        '</div>'+
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px">'+
+          users.map(function(u){ return '<label style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;font-size:12px"><input type="checkbox" class="ci-user-check" value="'+esc(u.nombre)+'" data-role="'+esc(u.rol||'')+'" style="accent-color:var(--electric)"> <span><strong>'+esc(u.nombre)+'</strong><br><small style="color:var(--muted)">'+esc(u.rol||'')+'</small></span></label>'; }).join('')+
+        '</div>'+
+      '</div>');
+    function toggleMode() {
+      var on = !!multi.checked;
+      resp.style.display = on ? 'none' : '';
+      document.getElementById('ci-resp-multi').style.display = on ? '' : 'none';
+    }
+    multi.onchange = toggleMode;
+    toggleMode();
+  }
+  window._ciSelectUsers = function(checked) {
+    Array.prototype.forEach.call(document.querySelectorAll('.ci-user-check'), function(cb){ cb.checked = checked; });
+  };
+  function selectedConteoUsers() {
+    return Array.prototype.map.call(document.querySelectorAll('.ci-user-check:checked'), function(cb){
+      return { nombre: cb.value, rol: cb.getAttribute('data-role') || '' };
+    });
+  }
+  function buildUbicacionCard(bodegaId, pasillo, estante) {
+    var value = [bodegaId, pasillo.nombre, estante.nombre].join('|');
+    return '<label class="sf-ubi-card" style="display:flex;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--surface);cursor:pointer;min-height:56px">'+
+      '<input type="checkbox" class="ci-ubi-check" value="'+esc(value)+'" checked onchange="actualizarResumenUbicaciones()" style="accent-color:var(--electric);width:16px;height:16px">'+
+      '<span style="min-width:0"><strong style="display:block;font-size:12px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(estante.nombre)+'</strong><small style="display:block;color:var(--muted);font-size:11px">'+esc(pasillo.nombre)+'</small></span>'+
+    '</label>';
+  }
+  cargarUbicacionesCiclico = function() {
+    var sel = document.getElementById('ci-bodega');
+    var wrap = document.getElementById('ci-ubi-wrap');
+    var list = document.getElementById('ci-ubi-list');
+    if (!sel || !wrap || !list) return;
+    var val = sel.value;
+    if (!val) { wrap.style.display = 'none'; return; }
+    var bodegaId = val.split('|')[0];
+    var bodega = (typeof loadUbicaciones === 'function' ? loadUbicaciones() : []).find(function(b){ return b && String(b.id || b.codigo) === String(bodegaId); });
+    wrap.style.display = '';
+    list.style.cssText = 'background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:12px;max-height:300px;overflow:auto;margin-top:8px';
+    if (!bodega || !Array.isArray(bodega.pasillos) || !bodega.pasillos.length) {
+      list.innerHTML = '<p style="color:var(--muted);font-size:12px;text-align:center;padding:14px">Esta bodega no tiene ubicaciones configuradas. Se inventariara completa.</p>';
+      actualizarResumenUbicaciones();
+      return;
+    }
+    list.innerHTML = bodega.pasillos.map(function(p, idx){
+      var pid = 'pasillo-' + idx;
+      var cards = (p.estantes || []).map(function(e){ return buildUbicacionCard(bodegaId, p, e); }).join('');
+      return '<section style="margin-bottom:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:var(--surface2);border-bottom:1px solid var(--border)">'+
+          '<label style="display:flex;align-items:center;gap:8px;font-weight:800;color:var(--text);cursor:pointer"><input type="checkbox" class="ci-pasillo-check" checked onchange="togglePasilloChecks(this,&quot;'+pid+'&quot;)" style="accent-color:var(--electric)"> '+esc(p.nombre)+'</label>'+
+          '<small style="color:var(--muted)">'+(p.estantes || []).length+' ubicaciones</small>'+
+        '</div>'+
+        '<div id="est-'+pid+'" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;padding:10px">'+(cards || '<p style="color:var(--muted);font-size:12px">Sin estanterias</p>')+'</div>'+
+      '</section>';
+    }).join('');
+    actualizarResumenUbicaciones();
+  };
+  window.cargarUbicacionesCiclico = cargarUbicacionesCiclico;
+
+  var baseOpenCiclico = typeof openNuevoCiclico === 'function' ? openNuevoCiclico : null;
+  if (baseOpenCiclico) {
+    openNuevoCiclico = function() {
+      baseOpenCiclico();
+      setTimeout(function(){
+        enhanceRespMulti();
+        var list = document.getElementById('ci-ubi-list');
+        if (list) list.style.maxHeight = '300px';
+      }, 0);
+    };
+    window.openNuevoCiclico = openNuevoCiclico;
+  }
+  var baseGuardarCiclico = typeof guardarCiclico === 'function' ? guardarCiclico : null;
+  if (baseGuardarCiclico) {
+    guardarCiclico = function() {
+      var multi = document.getElementById('ci-multiuser');
+      var resp = document.getElementById('ci-resp');
+      var selected = selectedConteoUsers();
+      if (multi && multi.checked) {
+        if (!selected.length) { alert('Debes asignar al menos un responsable'); return; }
+        if (resp) {
+          var joined = selected.map(function(u){ return u.nombre; }).join(', ');
+          if (!Array.prototype.some.call(resp.options, function(o){ return o.value === joined; })) resp.insertAdjacentHTML('beforeend','<option value="'+esc(joined)+'">'+esc(joined)+'</option>');
+          resp.value = joined;
+        }
+      }
+      var before = (typeof loadCiclicos === 'function' ? loadCiclicos() : []).length;
+      var ret = baseGuardarCiclico();
+      var cics = typeof loadCiclicos === 'function' ? loadCiclicos() : [];
+      if (multi && multi.checked && cics.length > before && selected.length) {
+        cics[0].responsables = selected;
+        cics[0].responsable = selected.map(function(u){ return u.nombre; }).join(', ');
+        if (typeof saveCiclicos === 'function') saveCiclicos(cics);
+      }
+      return ret;
+    };
+    window.guardarCiclico = guardarCiclico;
+  }
+
+  setTimeout(function(){
+    if (isSA() && supportId()) {
+      setSupportSessionVisual();
+      applyClientWorkspaceNav();
+    }
+  }, 0);
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
