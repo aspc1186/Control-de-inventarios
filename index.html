@@ -21409,6 +21409,193 @@ goto = function(page, param) {
   }, 0);
 })();
 
+/* Super Admin refinado: Dashboard, Empresas, ROOT y tema consistente */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var ROOT_MODULES = [
+    ['Inventario','inventario','Operacion'],
+    ['Compras','compras','Operacion'],
+    ['Pedidos','pedidos','Operacion'],
+    ['Comercial','comercial','Operacion'],
+    ['Proveedores','proveedores','Operacion'],
+    ['Clientes','clientes','Operacion'],
+    ['Logistica WMS','logistica','Operacion'],
+    ['Bodegas y ubicaciones','ubicaciones','Bodegas'],
+    ['Generar QR','generar-qr','Bodegas'],
+    ['Escaner QR','escaner','Bodegas'],
+    ['Kardex / Movimientos','movimientos','Inventario'],
+    ['Conteos ciclicos','ciclicos','Inventario'],
+    ['Conciliacion','conciliacion','Inventario'],
+    ['Auditoria','auditoria','Seguridad'],
+    ['Usuarios','usuarios','Administracion'],
+    ['Integraciones ERP','integraciones','Administracion'],
+    ['Respaldos','respaldos','Administracion'],
+    ['Centro de pruebas','centro-pruebas','Sistema'],
+    ['Salud del sistema','salud-sistema','Sistema']
+  ];
+  var PLAN_MATRIX = [
+    ['Dashboard', true, true, true],
+    ['Productos y servicios', true, true, true],
+    ['Ventas y caja', true, true, true],
+    ['Clientes', true, true, true],
+    ['Inventario y kardex', true, true, true],
+    ['Reportes basicos', true, true, true],
+    ['Recetas, costos y utilidad', false, true, true],
+    ['Compras y abastecimiento', false, true, true],
+    ['Reportes e indicadores avanzados', false, true, true],
+    ['Codigos QR', false, true, true],
+    ['Conteos ciclicos', false, true, true],
+    ['Multiples bodegas', false, true, true],
+    ['Multiples sedes', false, false, true],
+    ['Multiempresa', false, false, true],
+    ['Auditoria avanzada', false, false, true],
+    ['Integracion mediante API', false, false, true],
+    ['Conexion con ERP y facturacion electronica', false, false, true],
+    ['Soporte prioritario', false, false, true]
+  ];
+  function esc(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+  function isSA(){ return !!(SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR'); }
+  function inSupport(){ try { return !!sessionStorage.getItem(SUPPORT_KEY); } catch(e) { return false; } }
+  function normPlan(plan) {
+    plan = String(plan || 'FREE').toUpperCase();
+    if (plan === 'STARTER' || plan === 'LITE') return 'FREE';
+    if (plan === 'ENTERPRISE' || plan === 'EMPRESARIAL' || plan === 'EMPRESARIAL_WMS') return 'WMS';
+    return ['FREE','PRO','WMS'].indexOf(plan) >= 0 ? plan : 'FREE';
+  }
+  function planLabel(plan){ plan = normPlan(plan); return plan === 'WMS' ? 'Enterprise / WMS' : plan; }
+  function empresasData(){
+    var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    var users = (typeof DB !== 'undefined' && DB.get) ? (DB.get('usuarios') || []) : [];
+    return empresas.map(function(e){
+      e.plan = normPlan(e.plan);
+      e._users = users.filter(function(u){ return u && u.empresa_id === e.id; });
+      return e;
+    });
+  }
+  function activeEmp(e){
+    return String(e.estado || 'ACTIVO').toUpperCase() !== 'INACTIVO' && String(e.plan_estado || 'ACTIVO').toUpperCase() !== 'SUSPENDIDO';
+  }
+  function installStyle(){
+    if (document.getElementById('sf-sa-refined-style')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-sa-refined-style';
+    st.textContent =
+      'body.sf-platform-admin,body.sf-platform-admin #app-view,body.sf-platform-admin .page-inner{background:#0f172a!important;color:#dbeafe!important}' +
+      'body.sf-platform-admin .sidebar{background:#1e293b!important;border-right:1px solid #334155!important;color:#dbeafe!important}' +
+      'body.sf-platform-admin .topbar{background:#0f172a!important;border-bottom:1px solid #1e293b!important;color:#f8fafc!important}' +
+      'body.sf-platform-admin .nav-section{display:none!important}' +
+      'body.sf-platform-admin nav a{color:#9fb3cf!important;background:transparent!important;display:flex!important}' +
+      'body.sf-platform-admin nav a.active{background:#312e81!important;color:#c4b5fd!important}' +
+      'body.sf-platform-admin nav a:not(#nav-dashboard):not(#nav-empresas):not(#nav-root){display:none!important}' +
+      'body.sf-platform-admin .brand-name{color:#fff!important}.sf-sa-wrap{max-width:1220px;margin:0 auto;padding:20px;color:#dbeafe}' +
+      '.sf-sa-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;margin-bottom:22px}.sf-sa-title{margin:0;color:#fff;font-size:22px;font-weight:900}.sf-sa-sub{margin-top:4px;color:#93a4bd;font-size:12px}' +
+      '.sf-sa-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;margin-bottom:22px}.sf-sa-kpi{background:#1f2937;border:1px solid #334155;border-radius:10px;padding:18px;display:flex;align-items:center;gap:12px}.sf-sa-icon{width:40px;height:40px;border-radius:10px;background:#312e81;color:#a5b4fc;display:flex;align-items:center;justify-content:center;font-weight:900}.sf-sa-value{color:#fff;font-size:24px;font-weight:900;line-height:1}.sf-sa-label{color:#94a3b8;font-size:12px;margin-top:5px}' +
+      '.sf-sa-panel{background:#1f2937;border:1px solid #334155;border-radius:10px;overflow:hidden;margin-bottom:16px}.sf-sa-panel-title{padding:14px 16px;border-bottom:1px solid #334155;color:#cbd5e1;font-size:13px;font-weight:900;text-transform:uppercase}.sf-sa-table{width:100%;border-collapse:collapse}.sf-sa-table th{padding:14px 16px;border-bottom:1px solid #334155;color:#94a3b8;text-align:left;font-size:11px;text-transform:uppercase}.sf-sa-table td{padding:14px 16px;border-bottom:1px solid #2b3648;color:#cfe0ff;font-size:12px}.sf-sa-pill{display:inline-flex;padding:4px 8px;border-radius:6px;background:#312e81;color:#a5b4fc;font-size:11px}.sf-sa-ok{background:#065f46!important;color:#6ee7b7!important}.sf-sa-bad{background:#7f1d1d!important;color:#fecaca!important}.sf-sa-actions{display:flex;gap:8px;justify-content:flex-end}.sf-sa-ico{border:0;background:transparent;color:#94a3b8;cursor:pointer;padding:6px;border-radius:6px}.sf-sa-ico:hover{background:#334155;color:#fff}' +
+      '.sf-root-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;padding:14px}.sf-root-card{border:1px solid #334155;background:#172033;border-radius:9px;padding:12px;cursor:pointer;color:#dbeafe}.sf-root-card:hover{border-color:#6366f1;background:#1e2b45}.sf-root-card strong{display:block;color:#fff;font-size:13px}.sf-root-card span{display:block;color:#94a3b8;font-size:11px;margin-top:4px}' +
+      '.sf-plan-grid{display:grid;grid-template-columns:1fr 90px 90px 130px}.sf-plan-grid div{padding:10px 12px;border-bottom:1px solid #334155;font-size:12px;color:#dbeafe}.sf-plan-grid .head{background:#172033;font-weight:900;color:#fff}.sf-plan-grid .yes{color:#34d399;font-weight:900;text-align:center}.sf-plan-grid .no{color:#64748b;text-align:center}' +
+      'body.sf-platform-admin .modal-content,body.sf-platform-admin .modal{background:#1f2937!important;color:#f8fafc!important;border-color:#334155!important}body.sf-platform-admin input,body.sf-platform-admin select,body.sf-platform-admin textarea{background:#111827!important;color:#f8fafc!important;border-color:#334155!important}body.sf-platform-admin label,body.sf-platform-admin small{color:#cbd5e1!important}';
+    document.head.appendChild(st);
+  }
+  function ensureShell(){
+    if (typeof PAGE_TITLES !== 'undefined') PAGE_TITLES.root = 'ROOT';
+    var inner = document.querySelector('.page-inner');
+    if (inner && !document.getElementById('pg-root')) {
+      var pg = document.createElement('div'); pg.id = 'pg-root'; pg.style.display = 'none'; inner.appendChild(pg);
+    }
+    if (!document.getElementById('nav-root')) {
+      var navEmp = document.getElementById('nav-empresas') || document.getElementById('nav-dashboard');
+      var a = document.createElement('a');
+      a.id = 'nav-root';
+      a.onclick = function(){ goto('root'); };
+      a.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-4z"/><path d="M9 12h6"/><path d="M12 9v6"/></svg>ROOT';
+      if (navEmp && navEmp.parentNode) navEmp.parentNode.insertBefore(a, navEmp.nextSibling);
+    }
+  }
+  function applyPlatformMode(){
+    var on = isSA() && !inSupport();
+    document.body.classList.toggle('sf-platform-admin', on);
+    var brand = document.querySelector('.brand-name'), sub = document.querySelector('.brand-sub');
+    if (brand) brand.textContent = on ? 'Super Admin' : 'StockFlow';
+    if (sub) sub.textContent = on ? 'Control total' : 'Inventarios que fluyen contigo';
+    ['dashboard','empresas','root'].forEach(function(id){ var el = document.getElementById('nav-' + id); if (el) el.style.display = on ? '' : el.style.display; });
+    if (on) {
+      ['nav-sec-principal','nav-sec-operacion','nav-sec-analitica','nav-sec-bodegas','nav-sec-seguridad','nav-sec-admin','nav-sec-sistema'].forEach(function(id){ var el=document.getElementById(id); if(el) el.style.display='none'; });
+      Array.prototype.forEach.call(document.querySelectorAll('nav a'), function(a){ a.style.display = ['nav-dashboard','nav-empresas','nav-root'].indexOf(a.id) >= 0 ? '' : 'none'; });
+      var badge = document.getElementById('plan-badge'); if (badge) badge.style.display = 'none';
+      var user = document.getElementById('nav-user-info'); if (user) user.textContent = 'Super Administrador';
+    }
+  }
+  function kpis(empresas){
+    var active = empresas.filter(activeEmp).length, users = empresas.reduce(function(n,e){ return n + (e._users || []).length; }, 0);
+    return '<div class="sf-sa-kpis"><div class="sf-sa-kpi"><div class="sf-sa-icon">E</div><div><div class="sf-sa-value">'+empresas.length+'</div><div class="sf-sa-label">Total empresas</div></div></div><div class="sf-sa-kpi"><div class="sf-sa-icon" style="background:#064e3b;color:#34d399">✓</div><div><div class="sf-sa-value">'+active+'</div><div class="sf-sa-label">Activas</div></div></div><div class="sf-sa-kpi"><div class="sf-sa-icon" style="background:#075985;color:#7dd3fc">U</div><div><div class="sf-sa-value">'+users+'</div><div class="sf-sa-label">Usuarios</div></div></div></div>';
+  }
+  function header(t,s,action){ return '<div class="sf-sa-head"><div><h1 class="sf-sa-title">'+esc(t)+'</h1><div class="sf-sa-sub">'+esc(s)+'</div></div>'+(action||'')+'</div>'; }
+  function empresaRows(empresas){
+    return empresas.map(function(e){
+      var sedes = Array.isArray(e.sedes) && e.sedes.length ? e.sedes.length : 1;
+      return '<tr><td><strong style="color:#fff">'+esc(e.nombre||'Empresa')+'</strong><div style="color:#64748b;font-size:11px">'+esc(e.ciudad||e.nit||'Sin ciudad')+'</div></td><td><span class="sf-sa-pill">'+esc(e.tipo_negocio||e.tipo||'Inventarios')+'</span></td><td>'+esc(planLabel(e.plan))+'<div style="color:#64748b;font-size:11px">'+esc(e.plan_vence||'Sin limite')+'</div></td><td>'+((e._users||[]).length)+'</td><td>'+sedes+'</td><td>$ 0</td><td><span class="sf-sa-pill '+(activeEmp(e)?'sf-sa-ok':'sf-sa-bad')+'">'+(activeEmp(e)?'Activa':'Inactiva')+'</span></td><td><div class="sf-sa-actions"><button class="sf-sa-ico" title="Ver empresa" onclick="_verEmpresaSuperAdmin(&quot;'+esc(e.id)+'&quot;)">◉</button><button class="sf-sa-ico" title="Editar empresa" onclick="_editarEmpresa(&quot;'+esc(e.id)+'&quot;)">✎</button></div></td></tr>';
+    }).join('') || '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:28px">No hay empresas registradas.</td></tr>';
+  }
+  function table(empresas){
+    return '<div class="sf-sa-panel"><div class="sf-sa-panel-title">Empresas registradas</div><div style="overflow:auto"><table class="sf-sa-table"><thead><tr><th>Empresa</th><th>Tipo</th><th>Plan / vencimiento</th><th>Usuarios</th><th>Sedes</th><th>Ventas hoy</th><th>Estado</th><th style="text-align:right">Acciones</th></tr></thead><tbody>'+empresaRows(empresas)+'</tbody></table></div></div>';
+  }
+  function renderDashboard(){
+    var pg=document.getElementById('pg-dashboard'), empresas=empresasData(); if(!pg) return;
+    pg.innerHTML='<div class="sf-sa-wrap">'+header('Super Admin','Vista global de la plataforma')+kpis(empresas)+table(empresas)+'</div>';
+  }
+  function renderEmpresas(){
+    var pg=document.getElementById('pg-empresas'), all=empresasData(); if(!pg) return;
+    var q=String(window._saEmpSearch||'').toLowerCase();
+    var rows=all.filter(function(e){ return !q || [e.nombre,e.nit,e.ciudad,e.plan,e.tipo_negocio,e.tipo].join(' ').toLowerCase().indexOf(q)>=0; });
+    pg.innerHTML='<div class="sf-sa-wrap">'+header('Empresas',rows.length+' registradas · '+rows.filter(activeEmp).length+' activas','<button class="btn btn-navy" onclick="abrirNuevaEmpresa()">+ Nueva empresa</button>')+kpis(all)+'<div style="margin-bottom:20px"><input placeholder="Buscar empresa..." value="'+esc(window._saEmpSearch||'')+'" oninput="window._saEmpSearch=this.value;renders.empresas()" style="width:360px;max-width:100%;background:#111827;border:1px solid #334155;color:#dbeafe;border-radius:8px;padding:10px 12px"></div>'+table(rows)+'</div>';
+  }
+  function matrix(){
+    return '<div class="sf-plan-grid"><div class="head">Modulo o capacidad</div><div class="head" style="text-align:center">FREE</div><div class="head" style="text-align:center">PRO</div><div class="head" style="text-align:center">Enterprise / WMS</div>'+PLAN_MATRIX.map(function(r){ return '<div>'+esc(r[0])+'</div><div class="'+(r[1]?'yes':'no')+'">'+(r[1]?'✓':'-')+'</div><div class="'+(r[2]?'yes':'no')+'">'+(r[2]?'✓':'-')+'</div><div class="'+(r[3]?'yes':'no')+'">'+(r[3]?'✓':'-')+'</div>'; }).join('')+'</div>';
+  }
+  function renderRoot(){
+    var pg=document.getElementById('pg-root'), empresas=empresasData(); if(!pg) return;
+    var cards=ROOT_MODULES.map(function(m){ return '<button class="sf-root-card" onclick="goto(&quot;'+esc(m[1])+'&quot;)"><strong>'+esc(m[0])+'</strong><span>'+esc(m[2])+'</span></button>'; }).join('');
+    var clients=empresas.map(function(e){ return '<label style="display:flex;gap:8px;align-items:center;padding:8px 0;color:#dbeafe"><input type="checkbox" class="sf-root-client-check" value="'+esc(e.id)+'" checked> '+esc(e.nombre)+' <span class="sf-sa-pill">'+esc(planLabel(e.plan))+'</span></label>'; }).join('');
+    pg.innerHTML='<div class="sf-sa-wrap">'+header('ROOT','Centro tecnico para cambios, modulos y actualizaciones de clientes','<button class="btn btn-navy" onclick="_rootAutorizarSeleccionadas()">Actualizar versiones empresas seleccionadas</button>')+'<div class="sf-sa-panel"><div class="sf-sa-panel-title">Modulos de plataforma</div><div class="sf-root-grid">'+cards+'</div></div><div class="sf-sa-panel"><div class="sf-sa-panel-title">Actualizar versiones en clientes seleccionados</div><div style="padding:14px 16px">'+(clients||'<p style="color:#94a3b8">No hay empresas cliente.</p>')+'</div></div><div class="sf-sa-panel"><div class="sf-sa-panel-title">Matriz de planes y accesos</div>'+matrix()+'</div></div>';
+  }
+  window._rootAutorizarSeleccionadas = function(){
+    var ids = Array.prototype.map.call(document.querySelectorAll('.sf-root-client-check:checked'), function(cb){ return cb.value; });
+    if (!ids.length) return showToast('Selecciona al menos una empresa cliente', 'amber');
+    var version = 'v' + new Date().toISOString().replace(/[-:T.Z]/g,'').slice(0,12);
+    var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    empresas.forEach(function(e){
+      if (ids.indexOf(e.id) >= 0) {
+        e.plan = normPlan(e.plan);
+        e.version_autorizada = version;
+        e.version_pendiente = false;
+        e.root_actualizado_at = new Date().toISOString();
+      }
+    });
+    if (typeof saveEmpresas === 'function') saveEmpresas(empresas);
+    if (typeof DB !== 'undefined' && DB.set) DB.set('sf_platform_version', version);
+    try { auditLog('ROOT_ACTUALIZACION_CLIENTES', version + ' | empresas: ' + ids.length, SESSION.user && SESSION.user.nombre); } catch(e) {}
+    showToast('Version ' + version + ' autorizada para ' + ids.length + ' empresa(s)', 'green');
+    renderRoot();
+  };
+  window._verEmpresaSuperAdmin = function(empId){
+    var pg=document.getElementById('pg-empresas'), emp=empresasData().find(function(e){return e.id===empId;}); if(!pg||!emp) return;
+    var users=(emp._users||[]).map(function(u){ return '<tr><td><strong style="color:#fff">'+esc(u.nombre||u.username)+'</strong><div style="color:#64748b;font-size:11px">@'+esc(u.username||'')+'</div></td><td>'+esc(u.correo||'')+'</td><td><span class="sf-sa-pill">'+esc(u.rol||'')+'</span></td><td>'+esc(u.ultimo_acceso||'Nunca')+'</td><td><span class="sf-sa-pill sf-sa-ok">'+esc(u.estado||'ACTIVO')+'</span></td><td><button class="btn btn-ghost btn-sm" onclick="_cambiarPwdUsuario&&_cambiarPwdUsuario(&quot;'+esc(u.id)+'&quot;)">Contraseña</button></td></tr>'; }).join('');
+    pg.innerHTML='<div class="sf-sa-wrap">'+header(emp.nombre, (emp.tipo_negocio||emp.tipo||'Inventarios')+' · '+(emp.ciudad||''), '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-navy" onclick="_abrirModoSoporte(&quot;'+esc(emp.id)+'&quot;)">Abrir modo soporte</button><button class="btn btn-ghost" onclick="_editarEmpresa(&quot;'+esc(emp.id)+'&quot;)">Editar empresa</button><button class="btn btn-ghost" style="color:#fca5a5" onclick="_eliminarEmpresa&&_eliminarEmpresa(&quot;'+esc(emp.id)+'&quot;)">Desactivar</button></div>')+'<button class="sf-sa-ico" style="margin-bottom:12px" onclick="renders.empresas()">← Volver</button><div class="sf-sa-kpis"><div class="sf-sa-kpi"><div><div class="sf-sa-label">Estado</div><div class="sf-sa-value" style="font-size:16px;color:#34d399">'+(activeEmp(emp)?'Activa':'Inactiva')+'</div></div></div><div class="sf-sa-kpi"><div><div class="sf-sa-label">Plan</div><div class="sf-sa-value" style="font-size:16px">'+esc(planLabel(emp.plan))+'</div></div></div><div class="sf-sa-kpi"><div><div class="sf-sa-label">Usuarios</div><div class="sf-sa-value" style="font-size:16px">'+(emp._users||[]).length+'</div></div></div><div class="sf-sa-kpi"><div><div class="sf-sa-label">Licencia hasta</div><div class="sf-sa-value" style="font-size:16px">'+esc(emp.plan_vence||'Sin limite')+'</div></div></div></div><div class="sf-sa-panel"><div class="sf-sa-panel-title">Usuarios ('+(emp._users||[]).length+')</div><div style="overflow:auto"><table class="sf-sa-table"><thead><tr><th>Usuario</th><th>Email</th><th>Rol</th><th>Ultimo acceso</th><th>Estado</th><th></th></tr></thead><tbody>'+(users||'<tr><td colspan="6" style="color:#94a3b8;text-align:center;padding:20px">Sin usuarios registrados</td></tr>')+'</tbody></table></div></div></div>';
+  };
+  var baseApply=typeof applyPlanUI==='function'?applyPlanUI:null;
+  applyPlanUI=function(){ ensureShell(); if(baseApply) baseApply(); applyPlatformMode(); };
+  window.applyPlanUI=applyPlanUI;
+  var baseGoto=typeof goto==='function'?goto:null;
+  goto=function(page,param){ ensureShell(); if(page==='root'&&(!isSA()||inSupport())) page='dashboard'; var out=baseGoto?baseGoto(page,param):undefined; setTimeout(applyPlatformMode,0); return out; };
+  window.goto=goto;
+  var bd=renders&&renders.dashboard, be=renders&&renders.empresas;
+  renders.dashboard=function(){ if(isSA()&&!inSupport()) return renderDashboard(); return bd?bd.apply(this,arguments):undefined; };
+  renders.empresas=function(){ if(isSA()&&!inSupport()) return renderEmpresas(); return be?be.apply(this,arguments):undefined; };
+  renders.root=renderRoot;
+  installStyle(); ensureShell();
+  setTimeout(function(){ if(SESSION&&SESSION.user) applyPlanUI(); },0);
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
