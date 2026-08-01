@@ -21008,6 +21008,407 @@ goto = function(page, param) {
   }, 0);
 })();
 
+/* Super Admin Platform: dashboard, ROOT, planes y multiples sedes */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var PLAN_MATRIX = [
+    ['Dashboard', true, true, true],
+    ['Productos y servicios', true, true, true],
+    ['Ventas y caja', true, true, true],
+    ['Clientes', true, true, true],
+    ['Inventario y kardex', true, true, true],
+    ['Reportes basicos', true, true, true],
+    ['Recetas, costos y utilidad', false, true, true],
+    ['Compras y abastecimiento', false, true, true],
+    ['Reportes e indicadores avanzados', false, true, true],
+    ['Codigos QR', false, true, true],
+    ['Conteos ciclicos', false, true, true],
+    ['Multiples bodegas', false, true, true],
+    ['Multiples sedes', false, false, true],
+    ['Multiempresa', false, false, true],
+    ['Auditoria avanzada', false, false, true],
+    ['Integracion mediante API', false, false, true],
+    ['Conexion con ERP y facturacion electronica', false, false, true],
+    ['Soporte prioritario', false, false, true]
+  ];
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function isSA() {
+    return !!(SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR');
+  }
+  function inSupport() {
+    try { return !!sessionStorage.getItem(SUPPORT_KEY); } catch(e) { return false; }
+  }
+  function normPlan(plan) {
+    plan = String(plan || 'FREE').toUpperCase();
+    if (plan === 'STARTER' || plan === 'LITE') return 'FREE';
+    if (plan === 'ENTERPRISE' || plan === 'EMPRESARIAL' || plan === 'EMPRESARIAL_WMS') return 'WMS';
+    return ['FREE','PRO','WMS'].indexOf(plan) >= 0 ? plan : 'FREE';
+  }
+  function modulesByPlan(plan) {
+    plan = normPlan(plan);
+    var free = [
+      'dashboard','inventario','clientes','movimientos','historial','reportes',
+      'productos','servicios','pos','caja','kardex','reportes-basicos'
+    ];
+    var pro = free.concat([
+      'compras','pedidos','comercial','proveedores','logistica','ubicaciones','generar-qr',
+      'escaner','importar','ciclicos','conciliacion','picking','packing','recetas','costos',
+      'utilidad','reportes-avanzados','indicadores','multi-bodegas'
+    ]);
+    var wms = pro.concat([
+      'auditoria','usuarios','integraciones','respaldos','traslados','mis-inventarios',
+      'multi-sedes','multiempresa','api','erp','facturacion','soporte-prioritario'
+    ]);
+    return plan === 'FREE' ? free : (plan === 'PRO' ? pro : wms);
+  }
+  function installPlanMatrix() {
+    if (typeof PLANES === 'undefined') return;
+    PLANES.FREE = { nombre:'FREE', modulos:modulesByPlan('FREE'), limites:{ sedes:1, bodegas:1, usuarios:2, referencias:-1 }, precio:'Gratis', trialDias:30 };
+    PLANES.PRO = { nombre:'PRO', modulos:modulesByPlan('PRO'), limites:{ sedes:1, bodegas:-1, usuarios:-1, referencias:-1 }, precio:'99.900 / mes', trialDias:30 };
+    PLANES.WMS = { nombre:'Empresarial WMS', modulos:modulesByPlan('WMS'), limites:{ sedes:-1, bodegas:-1, usuarios:-1, referencias:-1 }, precio:'Desde 249.900 / mes', trialDias:30 };
+    PLANES.STARTER = PLANES.FREE;
+    PLANES.LITE = PLANES.FREE;
+    PLANES.ENTERPRISE = PLANES.WMS;
+    PLANES.EMPRESARIAL_WMS = PLANES.WMS;
+  }
+  function ensurePlatformShell() {
+    if (typeof PAGE_TITLES !== 'undefined') PAGE_TITLES.root = 'ROOT';
+    var inner = document.querySelector('.page-inner');
+    if (inner && !document.getElementById('pg-root')) {
+      var pg = document.createElement('div');
+      pg.id = 'pg-root';
+      pg.style.display = 'none';
+      inner.appendChild(pg);
+    }
+    var navAdmin = document.getElementById('nav-sec-admin');
+    if (navAdmin && !document.getElementById('nav-root')) {
+      var a = document.createElement('a');
+      a.id = 'nav-root';
+      a.onclick = function(){ goto('root'); };
+      a.style.display = 'none';
+      a.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-4z"/><path d="M9 12h6"/><path d="M12 9v6"/></svg>ROOT';
+      navAdmin.parentNode.insertBefore(a, navAdmin.nextSibling);
+    }
+  }
+  function installStyle() {
+    if (document.getElementById('sf-sa-platform-style')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-sa-platform-style';
+    st.textContent =
+      'body.sf-platform-admin #app-view{background:#0f172a!important;color:#dbeafe!important}' +
+      'body.sf-platform-admin .sidebar{background:#1e293b!important;border-right:1px solid #334155!important}' +
+      'body.sf-platform-admin .topbar{background:#0f172a!important;border-bottom:1px solid #1e293b!important;color:#f8fafc!important}' +
+      'body.sf-platform-admin .page-inner{background:#0f172a!important}' +
+      '.sf-sa-wrap{max-width:1200px;margin:0 auto;padding:18px;color:#dbeafe}' +
+      '.sf-sa-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:22px}' +
+      '.sf-sa-title{font-size:22px;font-weight:900;color:#fff;margin:0}.sf-sa-sub{font-size:12px;color:#93a4bd;margin-top:4px}' +
+      '.sf-sa-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:22px}' +
+      '.sf-sa-kpi{background:#1f2937;border:1px solid #334155;border-radius:10px;padding:18px;display:flex;gap:12px;align-items:center}' +
+      '.sf-sa-icon{width:40px;height:40px;border-radius:10px;background:#312e81;color:#8b5cf6;display:flex;align-items:center;justify-content:center;font-weight:900}' +
+      '.sf-sa-value{font-size:24px;line-height:1;font-weight:900;color:#fff}.sf-sa-label{font-size:12px;color:#94a3b8;margin-top:5px}' +
+      '.sf-sa-panel{background:#1f2937;border:1px solid #334155;border-radius:10px;overflow:hidden;margin-bottom:16px}' +
+      '.sf-sa-panel-title{padding:14px 16px;border-bottom:1px solid #334155;font-weight:900;color:#cbd5e1;font-size:13px;text-transform:uppercase}' +
+      '.sf-sa-table{width:100%;border-collapse:collapse}.sf-sa-table th{background:#1f2937;color:#94a3b8;text-align:left;font-size:11px;text-transform:uppercase;padding:14px 16px;border-bottom:1px solid #334155}.sf-sa-table td{padding:14px 16px;border-bottom:1px solid #2b3648;color:#cfe0ff;font-size:12px;vertical-align:middle}.sf-sa-table tr:last-child td{border-bottom:0}' +
+      '.sf-sa-pill{display:inline-flex;align-items:center;border-radius:6px;padding:4px 8px;font-size:11px;background:#312e81;color:#a5b4fc}.sf-sa-ok{background:#065f46;color:#6ee7b7}.sf-sa-bad{background:#7f1d1d;color:#fecaca}' +
+      '.sf-sa-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}.sf-sa-ico{border:0;background:transparent;color:#94a3b8;cursor:pointer;padding:6px;border-radius:6px}.sf-sa-ico:hover{background:#334155;color:#fff}' +
+      '.sf-plan-grid{display:grid;grid-template-columns:1fr 90px 90px 130px}.sf-plan-grid div{padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:12px}.sf-plan-grid .head{background:#eef2f7;font-weight:900;color:#0f172a}.sf-plan-grid .yes{color:#059669;font-weight:900;text-align:center}.sf-plan-grid .no{color:#94a3b8;text-align:center}' +
+      '.sf-root-update{display:grid;grid-template-columns:24px 1fr 110px 150px;gap:8px;align-items:center;padding:10px 12px;border:1px solid #334155;border-radius:8px;background:#172033;margin-bottom:8px}';
+    document.head.appendChild(st);
+  }
+  function platformMode(on) {
+    document.body.classList.toggle('sf-platform-admin', !!on);
+    var brand = document.querySelector('.brand-name');
+    var sub = document.querySelector('.brand-sub');
+    if (brand && on) brand.textContent = 'Super Admin';
+    if (sub && on) sub.textContent = 'Control total';
+    if (brand && !on) brand.textContent = 'StockFlow';
+    if (sub && !on) sub.textContent = 'Inventarios que fluyen contigo';
+  }
+  function empresasData() {
+    var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    var users = (typeof DB !== 'undefined' && DB.get) ? (DB.get('usuarios') || []) : [];
+    return empresas.map(function(e){
+      e.plan = normPlan(e.plan);
+      e._users = users.filter(function(u){ return u && u.empresa_id === e.id; }).length;
+      e._sedes = Array.isArray(e.sedes) ? e.sedes : [];
+      return e;
+    });
+  }
+  function empresaActive(emp) {
+    return String(emp.estado || emp.plan_estado || 'ACTIVO').toUpperCase() !== 'INACTIVO' && String(emp.plan_estado || 'ACTIVO').toUpperCase() !== 'SUSPENDIDO';
+  }
+  function renderPlanMatrix() {
+    var h = ['<div class="sf-plan-grid">'];
+    h.push('<div class="head">Modulo o capacidad</div><div class="head" style="text-align:center">FREE</div><div class="head" style="text-align:center">PRO</div><div class="head" style="text-align:center">Enterprise / WMS</div>');
+    PLAN_MATRIX.forEach(function(r){
+      h.push('<div>'+esc(r[0])+'</div>');
+      h.push('<div class="'+(r[1]?'yes':'no')+'">'+(r[1]?'✓':'-')+'</div>');
+      h.push('<div class="'+(r[2]?'yes':'no')+'">'+(r[2]?'✓':'-')+'</div>');
+      h.push('<div class="'+(r[3]?'yes':'no')+'">'+(r[3]?'✓':'-')+'</div>');
+    });
+    h.push('</div>');
+    return h.join('');
+  }
+  function renderSAHeader(title, sub, action) {
+    return '<div class="sf-sa-head"><div><h1 class="sf-sa-title">'+esc(title)+'</h1><div class="sf-sa-sub">'+esc(sub)+'</div></div>'+(action||'')+'</div>';
+  }
+  function renderSAKpis(empresas) {
+    var active = empresas.filter(empresaActive).length;
+    var inactive = Math.max(0, empresas.length - active);
+    var users = empresas.reduce(function(sum,e){ return sum + (e._users || 0); }, 0);
+    return '<div class="sf-sa-kpis">' +
+      '<div class="sf-sa-kpi"><div class="sf-sa-icon">□</div><div><div class="sf-sa-value">'+empresas.length+'</div><div class="sf-sa-label">Total empresas</div></div></div>' +
+      '<div class="sf-sa-kpi"><div class="sf-sa-icon" style="background:#064e3b;color:#34d399">✓</div><div><div class="sf-sa-value">'+active+'</div><div class="sf-sa-label">Activas</div></div></div>' +
+      '<div class="sf-sa-kpi"><div class="sf-sa-icon" style="background:#7f1d1d;color:#fca5a5">×</div><div><div class="sf-sa-value">'+inactive+'</div><div class="sf-sa-label">Inactivas</div></div></div>' +
+      '<div class="sf-sa-kpi"><div class="sf-sa-icon" style="background:#075985;color:#7dd3fc">U</div><div><div class="sf-sa-value">'+users+'</div><div class="sf-sa-label">Usuarios</div></div></div>' +
+    '</div>';
+  }
+  function planDisplay(p) {
+    p = normPlan(p);
+    return p === 'WMS' ? 'Empresarial WMS' : p;
+  }
+  function renderEmpresaRows(empresas, withSelect) {
+    if (!empresas.length) return '<tr><td colspan="'+(withSelect?9:8)+'" style="text-align:center;color:#94a3b8;padding:26px">No hay empresas registradas.</td></tr>';
+    return empresas.map(function(e){
+      var active = empresaActive(e);
+      var vence = e.plan_vence ? e.plan_vence : 'Sin limite';
+      var sedes = Array.isArray(e.sedes) && e.sedes.length ? e.sedes.length : 1;
+      return '<tr>' +
+        (withSelect ? '<td><input type="checkbox" class="sf-root-client-check" value="'+esc(e.id)+'" checked></td>' : '') +
+        '<td><strong style="color:#fff">'+esc(e.nombre || 'Empresa sin nombre')+'</strong><div style="color:#64748b;font-size:11px;margin-top:3px">'+esc(e.ciudad || e.nit || 'Sin ciudad')+'</div></td>' +
+        '<td><span class="sf-sa-pill">'+esc(e.tipo_negocio || e.tipo || 'Inventarios')+'</span></td>' +
+        '<td>'+esc(planDisplay(e.plan))+'<div style="color:#64748b;font-size:11px;margin-top:3px">'+esc(vence)+'</div></td>' +
+        '<td>'+Number(e._users || 0)+'</td>' +
+        '<td>'+sedes+'</td>' +
+        '<td>$ 0</td>' +
+        '<td><span class="sf-sa-pill '+(active?'sf-sa-ok':'sf-sa-bad')+'">'+(active?'Activa':'Inactiva')+'</span></td>' +
+        '<td><div class="sf-sa-actions">' +
+          '<button class="sf-sa-ico" title="Abrir modo soporte" onclick="_abrirModoSoporte(&quot;'+esc(e.id)+'&quot;)">◉</button>' +
+          '<button class="sf-sa-ico" title="Editar empresa" onclick="_editarEmpresa(&quot;'+esc(e.id)+'&quot;)">✎</button>' +
+          '<button class="sf-sa-ico" title="Gestionar plan" onclick="_gestionarPlan(&quot;'+esc(e.id)+'&quot;)">▣</button>' +
+          (normPlan(e.plan)==='WMS' ? '<button class="sf-sa-ico" title="Multiples sedes" onclick="_gestionarSedesEmpresa(&quot;'+esc(e.id)+'&quot;)">⌂</button>' : '') +
+        '</div></td>' +
+      '</tr>';
+    }).join('');
+  }
+  function renderSATable(empresas, withSelect) {
+    return '<div class="sf-sa-panel"><div class="sf-sa-panel-title">Empresas registradas</div><div style="overflow:auto"><table class="sf-sa-table"><thead><tr>' +
+      (withSelect ? '<th><input type="checkbox" checked onchange="_rootToggleClients(this.checked)"></th>' : '') +
+      '<th>Empresa</th><th>Tipo</th><th>Plan / vencimiento</th><th>Usuarios</th><th>Sedes</th><th>Ventas hoy</th><th>Estado</th><th style="text-align:right">Acciones</th>' +
+      '</tr></thead><tbody>'+renderEmpresaRows(empresas, withSelect)+'</tbody></table></div></div>';
+  }
+  function renderSADashboard() {
+    var pg = document.getElementById('pg-dashboard');
+    if (!pg) return;
+    var empresas = empresasData();
+    pg.innerHTML = '<div class="sf-sa-wrap">' +
+      renderSAHeader('Super Admin', 'Vista global de la plataforma') +
+      renderSAKpis(empresas) +
+      renderSATable(empresas, false) +
+    '</div>';
+  }
+  function renderSAEmpresas() {
+    var pg = document.getElementById('pg-empresas');
+    if (!pg) return;
+    var q = String(window._saEmpSearch || '').toLowerCase();
+    var empresas = empresasData().filter(function(e){
+      return !q || [e.nombre,e.nit,e.ciudad,e.plan,e.tipo,e.tipo_negocio].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    pg.innerHTML = '<div class="sf-sa-wrap">' +
+      renderSAHeader('Empresas', empresas.length + ' registradas · ' + empresas.filter(empresaActive).length + ' activas', '<button class="btn btn-navy" onclick="abrirNuevaEmpresa()">+ Nueva empresa</button>') +
+      renderSAKpis(empresasData()) +
+      '<div style="margin-bottom:20px"><input placeholder="Buscar empresa..." value="'+esc(window._saEmpSearch || '')+'" oninput="window._saEmpSearch=this.value;renders.empresas()" style="width:340px;max-width:100%;background:#111827;border:1px solid #334155;color:#dbeafe;border-radius:8px;padding:10px 12px"></div>' +
+      renderSATable(empresas, false) +
+    '</div>';
+  }
+  function rootUpdates() {
+    var list = (typeof DB !== 'undefined' && DB.get) ? (DB.get('sf_root_updates') || []) : [];
+    if (!list.length) {
+      list = [
+        { id:'upd-plans-access', titulo:'Planes y accesos actualizados', estado:'PENDIENTE', alcance:'Planes' },
+        { id:'upd-support-client', titulo:'Modo soporte por empresa cliente', estado:'PENDIENTE', alcance:'Soporte' },
+        { id:'upd-multisite', titulo:'Multiples sedes para Empresarial WMS', estado:'PENDIENTE', alcance:'Sedes' }
+      ];
+      if (typeof DB !== 'undefined' && DB.set) DB.set('sf_root_updates', list);
+    }
+    return list;
+  }
+  function saveRootUpdates(list) {
+    if (typeof DB !== 'undefined' && DB.set) DB.set('sf_root_updates', list);
+  }
+  function renderRoot() {
+    var pg = document.getElementById('pg-root');
+    if (!pg) return;
+    var empresas = empresasData();
+    var updates = rootUpdates();
+    pg.innerHTML = '<div class="sf-sa-wrap">' +
+      renderSAHeader('ROOT', 'Actualizaciones de plataforma controladas por superadministrador', '<button class="btn btn-navy" onclick="_rootAutorizarSeleccionadas()">Actualizar versiones empresas seleccionadas</button>') +
+      '<div class="sf-sa-panel"><div class="sf-sa-panel-title">Actualizaciones pendientes</div><div style="padding:14px 16px">' +
+      updates.map(function(u){ return '<label class="sf-root-update"><input type="checkbox" class="sf-root-update-check" value="'+esc(u.id)+'" '+(u.estado!=='APROBADA'?'checked':'')+'><strong style="color:#fff">'+esc(u.titulo)+'</strong><span class="sf-sa-pill">'+esc(u.alcance)+'</span><span class="sf-sa-pill '+(u.estado==='APROBADA'?'sf-sa-ok':'')+'">'+esc(u.estado)+'</span></label>'; }).join('') +
+      '</div></div>' +
+      '<div class="sf-sa-panel"><div class="sf-sa-panel-title">Empresas destino</div><div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" onclick="_rootToggleClients(true)">Seleccionar todas</button><button class="btn btn-ghost btn-sm" onclick="_rootToggleClients(false)">Ninguna</button></div><div style="overflow:auto"><table class="sf-sa-table"><thead><tr><th><input type="checkbox" checked onchange="_rootToggleClients(this.checked)"></th><th>Empresa</th><th>Plan / vencimiento</th><th>Sedes</th><th>Version</th><th>Estado</th></tr></thead><tbody>' +
+      empresas.map(function(e){ return '<tr><td><input type="checkbox" class="sf-root-client-check" value="'+esc(e.id)+'" checked></td><td><strong style="color:#fff">'+esc(e.nombre)+'</strong><div style="color:#64748b;font-size:11px">'+esc(e.nit||e.ciudad||'')+'</div></td><td>'+esc(planDisplay(e.plan))+'<div style="color:#64748b;font-size:11px">'+esc(e.plan_vence||'Sin limite')+'</div></td><td>'+((e.sedes||[]).length||1)+'</td><td>'+esc(e.version_autorizada||'Sin publicar')+'</td><td><span class="sf-sa-pill '+(empresaActive(e)?'sf-sa-ok':'sf-sa-bad')+'">'+(empresaActive(e)?'Activa':'Inactiva')+'</span></td></tr>'; }).join('') +
+      '</tbody></table></div></div>' +
+      '<div class="sf-sa-panel"><div class="sf-sa-panel-title">Matriz de planes</div>'+renderPlanMatrix()+'</div>' +
+    '</div>';
+  }
+  window._rootToggleClients = function(checked) {
+    Array.prototype.forEach.call(document.querySelectorAll('.sf-root-client-check'), function(cb){ cb.checked = !!checked; });
+  };
+  window._rootAutorizarSeleccionadas = function() {
+    var ids = Array.prototype.map.call(document.querySelectorAll('.sf-root-client-check:checked'), function(cb){ return cb.value; });
+    if (!ids.length) return showToast('Selecciona al menos una empresa cliente', 'amber');
+    var selectedUpdates = Array.prototype.map.call(document.querySelectorAll('.sf-root-update-check:checked'), function(cb){ return cb.value; });
+    if (!selectedUpdates.length) return showToast('Selecciona al menos una actualizacion', 'amber');
+    var version = 'v' + new Date().toISOString().replace(/[-:T.Z]/g,'').slice(0,12);
+    var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    empresas.forEach(function(e){
+      if (ids.indexOf(e.id) >= 0) {
+        e.plan = normPlan(e.plan);
+        e.version_autorizada = version;
+        e.version_pendiente = false;
+        e.actualizaciones_autorizadas = selectedUpdates.slice();
+        e.updated_at = new Date().toISOString();
+      }
+    });
+    if (typeof saveEmpresas === 'function') saveEmpresas(empresas);
+    var updates = rootUpdates().map(function(u){
+      if (selectedUpdates.indexOf(u.id) >= 0) return Object.assign({}, u, { estado:'APROBADA', version:version, approved_at:new Date().toISOString() });
+      return u;
+    });
+    saveRootUpdates(updates);
+    try { auditLog('ROOT_ACTUALIZACION_CLIENTES', version + ' | empresas: ' + ids.length, SESSION.user && SESSION.user.nombre); } catch(e) {}
+    showToast('Version ' + version + ' autorizada para ' + ids.length + ' empresa(s)', 'green');
+    renderRoot();
+  };
+  var baseAutorizar = window._autorizarActualizacionClientes;
+  window._autorizarActualizacionClientes = function(ids) {
+    if (Array.isArray(ids) && ids.length) {
+      Array.prototype.forEach.call(document.querySelectorAll('.sf-root-client-check'), function(cb){ cb.checked = ids.indexOf(cb.value) >= 0; });
+      return window._rootAutorizarSeleccionadas();
+    }
+    return baseAutorizar ? baseAutorizar() : window._rootAutorizarSeleccionadas();
+  };
+  function renderSedesModal(empId, emp, sedes) {
+    var rows = sedes.map(function(s, idx){
+      return '<tr><td><input id="sede-n-'+idx+'" value="'+esc(s.nombre||'')+'"></td><td><input id="sede-c-'+idx+'" value="'+esc(s.ciudad||'')+'"></td><td><input id="sede-d-'+idx+'" value="'+esc(s.direccion||'')+'"></td><td><button class="btn btn-ghost btn-sm" onclick="_eliminarSedeTemp('+idx+')">Eliminar</button></td></tr>';
+    }).join('');
+    openModal('<h3 style="margin-bottom:12px">Multiples sedes - '+esc(emp.nombre)+'</h3><div class="tbl-overflow"><table><thead><tr><th>Nombre</th><th>Ciudad</th><th>Direccion</th><th></th></tr></thead><tbody id="sedes-body">'+rows+'</tbody></table></div><div style="margin-top:10px"><button class="btn btn-ghost btn-sm" onclick="_agregarSedeTemp()">+ Agregar sede</button></div><div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_guardarSedesEmpresa(&quot;'+esc(empId)+'&quot;)">Guardar sedes</button></div>', 'modal-lg');
+  }
+  function collectTempSedes() {
+    if (!document.getElementById('sedes-body')) return;
+    window._sfTmpSedes = Array.prototype.map.call(document.querySelectorAll('#sedes-body tr'), function(tr, i){
+      var base = window._sfTmpSedes && window._sfTmpSedes[i] || {};
+      return {
+        id: base.id || ('sede-' + i),
+        nombre: (document.getElementById('sede-n-'+i) || {value:''}).value.trim(),
+        ciudad: (document.getElementById('sede-c-'+i) || {value:''}).value.trim(),
+        direccion: (document.getElementById('sede-d-'+i) || {value:''}).value.trim()
+      };
+    });
+  }
+  window._gestionarSedesEmpresa = function(empId) {
+    var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    var emp = empresas.find(function(e){ return e && e.id === empId; });
+    if (!emp) return showToast('Empresa no encontrada', 'red');
+    if (normPlan(emp.plan) !== 'WMS') return showToast('Multiples sedes solo esta disponible en Empresarial WMS', 'amber');
+    emp.sedes = Array.isArray(emp.sedes) && emp.sedes.length ? emp.sedes : [{ id:'sede-principal', nombre:'Sede principal', ciudad:emp.ciudad || '', direccion:'' }];
+    window._sfTmpSedesEmpId = empId;
+    window._sfTmpSedesEmpName = emp.nombre;
+    window._sfTmpSedes = emp.sedes.slice();
+    renderSedesModal(empId, emp, window._sfTmpSedes);
+  };
+  window._agregarSedeTemp = function() {
+    collectTempSedes();
+    window._sfTmpSedes = window._sfTmpSedes || [];
+    window._sfTmpSedes.push({ id:'sede-' + Date.now(), nombre:'Nueva sede', ciudad:'', direccion:'' });
+    renderSedesModal(window._sfTmpSedesEmpId, { nombre:window._sfTmpSedesEmpName || 'Empresa' }, window._sfTmpSedes);
+  };
+  window._eliminarSedeTemp = function(idx) {
+    collectTempSedes();
+    window._sfTmpSedes = window._sfTmpSedes || [];
+    window._sfTmpSedes.splice(idx, 1);
+    renderSedesModal(window._sfTmpSedesEmpId, { nombre:window._sfTmpSedesEmpName || 'Empresa' }, window._sfTmpSedes);
+  };
+  window._guardarSedesEmpresa = function(empId) {
+    var empresas = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    var idx = empresas.findIndex(function(e){ return e && e.id === empId; });
+    if (idx < 0) return;
+    var rows = Array.prototype.map.call(document.querySelectorAll('#sedes-body tr'), function(tr, i){
+      return {
+        id: (window._sfTmpSedes && window._sfTmpSedes[i] && window._sfTmpSedes[i].id) || ('sede-' + i),
+        nombre: (document.getElementById('sede-n-'+i) || {value:''}).value.trim() || ('Sede ' + (i+1)),
+        ciudad: (document.getElementById('sede-c-'+i) || {value:''}).value.trim(),
+        direccion: (document.getElementById('sede-d-'+i) || {value:''}).value.trim()
+      };
+    });
+    empresas[idx].sedes = rows.length ? rows : [{ id:'sede-principal', nombre:'Sede principal', ciudad:empresas[idx].ciudad || '', direccion:'' }];
+    empresas[idx].plan = normPlan(empresas[idx].plan);
+    saveEmpresas(empresas);
+    closeModal();
+    showToast('Sedes actualizadas', 'green');
+    if (currentPage === 'empresas') renders.empresas();
+  };
+  function wirePlanModalSedes() {
+    var sel = document.getElementById('gp-plan');
+    if (!sel || document.getElementById('gp-sedes-hint')) return;
+    sel.insertAdjacentHTML('afterend','<small id="gp-sedes-hint" style="display:block;margin-top:6px;color:var(--muted);font-size:11px">Multiples sedes se habilita solo con Empresarial WMS.</small>');
+  }
+  var baseGestionPlanSA = typeof _gestionarPlan === 'function' ? _gestionarPlan : null;
+  if (baseGestionPlanSA) {
+    _gestionarPlan = function(empId) {
+      var out = baseGestionPlanSA.apply(this, arguments);
+      setTimeout(wirePlanModalSedes, 0);
+      return out;
+    };
+    window._gestionarPlan = _gestionarPlan;
+  }
+  var baseApplyPlanSA = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function() {
+    installPlanMatrix();
+    ensurePlatformShell();
+    if (baseApplyPlanSA) baseApplyPlanSA();
+    var platform = isSA() && !inSupport();
+    platformMode(platform);
+    var root = document.getElementById('nav-root');
+    if (root) root.style.display = platform ? '' : 'none';
+    var adminSec = document.getElementById('nav-sec-admin');
+    if (adminSec && platform) adminSec.style.display = '';
+  };
+  window.applyPlanUI = applyPlanUI;
+  var baseGotoSA = typeof goto === 'function' ? goto : null;
+  goto = function(page, param) {
+    ensurePlatformShell();
+    if (page === 'root' && (!isSA() || inSupport())) page = 'dashboard';
+    var out = baseGotoSA ? baseGotoSA(page, param) : undefined;
+    setTimeout(function(){ if (typeof applyPlanUI === 'function') applyPlanUI(); }, 0);
+    return out;
+  };
+  window.goto = goto;
+  var baseDashboardSA = renders && renders.dashboard;
+  renders.dashboard = function() {
+    if (isSA() && !inSupport()) return renderSADashboard();
+    return baseDashboardSA ? baseDashboardSA.apply(this, arguments) : undefined;
+  };
+  var baseEmpresasSA = renders && renders.empresas;
+  renders.empresas = function() {
+    if (isSA() && !inSupport()) return renderSAEmpresas();
+    return baseEmpresasSA ? baseEmpresasSA.apply(this, arguments) : undefined;
+  };
+  renders.root = renderRoot;
+  installStyle();
+  ensurePlatformShell();
+  installPlanMatrix();
+  setTimeout(function(){
+    if (SESSION && SESSION.user) applyPlanUI();
+    if (isSA() && !inSupport() && currentPage === 'root') renderRoot();
+  }, 0);
+})();
+
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
