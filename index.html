@@ -22478,5 +22478,84 @@ goto = function(page, param) {
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);
 
 </script>
+<style id="sf-stockflow-login-theme">
+/* StockFlow branded login and 2FA shell */
+#login-view {
+  background:
+    radial-gradient(circle at 78% 18%, rgba(0,255,135,.14), transparent 30%),
+    radial-gradient(circle at 66% 78%, rgba(0,168,255,.18), transparent 34%),
+    linear-gradient(135deg, #07111f 0%, #0b1d33 48%, #081421 100%) !important;
+  color: #eaf6ff !important;
+}
+#login-view .login-left {
+  background: #070e1c !important;
+}
+#login-view .login-left::after {
+  background:
+    linear-gradient(90deg, rgba(7,14,28,.18) 0%, rgba(7,14,28,.08) 55%, rgba(7,14,28,.72) 100%),
+    linear-gradient(0deg, rgba(7,14,28,.72), rgba(7,14,28,.12) 48%, rgba(7,14,28,.48)) !important;
+}
+#login-view .login-right {
+  background:
+    linear-gradient(135deg, rgba(13,27,46,.96), rgba(7,14,28,.92)) !important;
+}
+#login-view .login-right .card {
+  background: rgba(13, 27, 46, .94) !important;
+  color: #f1f5f9 !important;
+  border: 1px solid rgba(0,168,255,.28) !important;
+  box-shadow: 0 24px 70px rgba(0,0,0,.32), 0 0 34px rgba(0,168,255,.12) !important;
+}
+#login-view .login-right h1,
+#login-view .login-right h2,
+#login-view .login-right h3,
+#login-view .login-right strong {
+  color: #f8fafc !important;
+}
+#login-view .login-right p,
+#login-view .login-right label,
+#login-view .login-right span,
+#login-view .login-right small {
+  color: #b8c7d9 !important;
+}
+#login-view .login-right input {
+  background: #071526 !important;
+  color: #f8fafc !important;
+  border-color: rgba(0,168,255,.32) !important;
+}
+#login-view .login-right input::placeholder {
+  color: #8ea3b8 !important;
+}
+#login-view .login-right input:focus {
+  border-color: #00a8ff !important;
+  box-shadow: 0 0 0 3px rgba(0,168,255,.22), 0 0 18px rgba(0,168,255,.18) !important;
+}
+#login-view .login-right .btn-navy {
+  background: linear-gradient(135deg, #00a8ff, #0070cc) !important;
+  color: #ffffff !important;
+  border-color: rgba(0,168,255,.45) !important;
+  box-shadow: 0 14px 28px rgba(0,168,255,.22) !important;
+}
+#login-view .login-right .btn-navy:hover {
+  filter: brightness(1.06);
+}
+#login-view .login-right .btn-ghost,
+#login-view .login-right button:not(.btn-navy) {
+  background: #10233d !important;
+  color: #f1f5f9 !important;
+  border-color: rgba(0,255,135,.22) !important;
+}
+#login-view .login-right a {
+  color: #00ff87 !important;
+}
+#login-view .login-right code,
+#login-view .login-right .badge {
+  color: #00ff87 !important;
+}
+#login-view .login-right .card > div:first-child,
+#login-view .login-right .card .brand,
+#login-view .login-right .card img {
+  color: #f8fafc !important;
+}
+</style>
 </body>
 </html>
