@@ -102,6 +102,15 @@ async function setupTables(sql) {
       correo TEXT,
       ciudad TEXT,
       plan TEXT DEFAULT 'FREE',
+      industry_type TEXT DEFAULT 'GENERIC',
+      sector TEXT,
+      subsector TEXT,
+      pais TEXT DEFAULT 'Colombia',
+      moneda TEXT DEFAULT 'COP',
+      timezone TEXT DEFAULT 'America/Bogota',
+      settings JSONB DEFAULT '{}',
+      modules_enabled JSONB DEFAULT '[]',
+      features_enabled JSONB DEFAULT '[]',
       estado TEXT DEFAULT 'ACTIVO',
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -205,9 +214,19 @@ async function setupTables(sql) {
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS correo TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS ciudad TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'FREE'`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS industry_type TEXT DEFAULT 'GENERIC'`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS sector TEXT`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS subsector TEXT`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS pais TEXT DEFAULT 'Colombia'`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS moneda TEXT DEFAULT 'COP'`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS timezone TEXT DEFAULT 'America/Bogota'`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS settings JSONB DEFAULT '{}'`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS modules_enabled JSONB DEFAULT '[]'`;
+  await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS features_enabled JSONB DEFAULT '[]'`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'ACTIVO'`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
+  await sql`UPDATE empresas SET industry_type='GENERIC' WHERE industry_type IS NULL OR industry_type=''`;
 
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_reservado NUMERIC(12,2) DEFAULT 0`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_seguridad NUMERIC(14,2) DEFAULT 0`;
@@ -224,6 +243,8 @@ async function setupTables(sql) {
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS metodo_seguridad TEXT DEFAULT 'automatico'`;
 
   await sql`ALTER TABLE movimientos ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE ciclicos ADD COLUMN IF NOT EXISTS empresa_id TEXT`.catch(()=>{});
 
   await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS numero TEXT`;
   await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS proveedor TEXT`;

@@ -12,7 +12,10 @@ module.exports = async (req, res) => {
   await sql`ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS responsable TEXT`.catch(()=>{});
 
   if (req.method === 'GET') {
-    const rows = await sql`SELECT * FROM ubicaciones ORDER BY nombre`;
+    const { empresa_id } = req.query;
+    const rows = empresa_id && empresa_id !== '__SA__'
+      ? await sql`SELECT * FROM ubicaciones WHERE empresa_id = ${empresa_id} OR empresa_id IS NULL ORDER BY nombre`
+      : await sql`SELECT * FROM ubicaciones ORDER BY nombre`;
     return res.json({ ok: true, data: rows, total: rows.length });
   }
   if (req.method === 'POST') {

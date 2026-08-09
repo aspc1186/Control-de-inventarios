@@ -8511,6 +8511,14 @@ function abrirNuevaEmpresa() {
     h.push('</div>');
   });
   h.push('</div><input type="hidden" id="ne-plan" value="FREE"></div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Tipo de empresa *</label><select id="ne-industry"><option value="GENERIC">Generica</option><option value="HARDWARE_STORE">Ferreteria</option><option value="METALWORKING">Metalmecanica</option><option value="CHEMICAL">Quimica</option><option value="IMPORTS">Importacion</option><option value="AUTO_PARTS">Repuestos</option><option value="TRANSPORT">Transporte</option><option value="FOOD">Alimentos</option></select></div>');
+  h.push('<div class="form-row"><label>Sector</label><input id="ne-sector" placeholder="Ej: Industrial, comercio, servicios"></div>');
+  h.push('</div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Pais</label><input id="ne-pais" value="Colombia"></div>');
+  h.push('<div class="form-row"><label>Moneda</label><input id="ne-moneda" value="COP"></div>');
+  h.push('</div>');
 
   // Preview credenciales admin
   h.push('<div id="ne-admin-preview" style="margin-top:14px;padding:12px;background:rgba(0,168,255,.07);border:1px solid rgba(0,168,255,.2);border-radius:10px;display:none">');
@@ -8559,6 +8567,10 @@ function _confirmarNuevaEmpresa() {
   var correo = (document.getElementById('ne-correo')||{value:''}).value.trim();
   var ciudad = (document.getElementById('ne-ciudad')||{value:''}).value.trim();
   var plan   = (document.getElementById('ne-plan')  ||{value:'FREE'}).value;
+  var industry = (document.getElementById('ne-industry')||{value:'GENERIC'}).value;
+  var sector = (document.getElementById('ne-sector')||{value:''}).value.trim();
+  var pais = (document.getElementById('ne-pais')||{value:'Colombia'}).value.trim();
+  var moneda = (document.getElementById('ne-moneda')||{value:'COP'}).value.trim();
 
   if (!nombre) { showToast('El nombre de la empresa es obligatorio','red'); return; }
 
@@ -8580,6 +8592,14 @@ function _confirmarNuevaEmpresa() {
   var empresa = {
     id: empId, nombre: nombre, nit: nit, correo: correo, ciudad: ciudad,
     plan: plan, estado: 'ACTIVO', created_at: hoy,
+    industry_type: industry || 'GENERIC',
+    sector: sector,
+    pais: pais || 'Colombia',
+    moneda: moneda || 'COP',
+    timezone: 'America/Bogota',
+    settings: {},
+    modules_enabled: [],
+    features_enabled: [],
     admin_username: creds.username,
     plan_estado: 'ACTIVO',
     plan_vence:  trialVence.toISOString().slice(0,10),
@@ -8844,6 +8864,16 @@ function _editarEmpresa(empId) {
   h.push('<div class="form-row"><label>Correo</label><input id="ee-correo" value="'+(emp.correo||'')+'"></div>');
   h.push('<div class="form-row"><label>Ciudad</label><input id="ee-ciudad" value="'+(emp.ciudad||'')+'"></div>');
   h.push('</div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Tipo de empresa</label><select id="ee-industry">');
+  [['GENERIC','Generica'],['HARDWARE_STORE','Ferreteria'],['METALWORKING','Metalmecanica'],['CHEMICAL','Quimica'],['IMPORTS','Importacion'],['AUTO_PARTS','Repuestos'],['TRANSPORT','Transporte'],['FOOD','Alimentos']].forEach(function(opt){ h.push('<option value="'+opt[0]+'"'+((emp.industry_type||'GENERIC')===opt[0]?' selected':'')+'>'+opt[1]+'</option>'); });
+  h.push('</select></div>');
+  h.push('<div class="form-row"><label>Sector</label><input id="ee-sector" value="'+(emp.sector||'')+'"></div>');
+  h.push('</div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>Pais</label><input id="ee-pais" value="'+(emp.pais||'Colombia')+'"></div>');
+  h.push('<div class="form-row"><label>Moneda</label><input id="ee-moneda" value="'+(emp.moneda||'COP')+'"></div>');
+  h.push('</div>');
   h.push('<div class="form-row"><label>Plan</label><select id="ee-plan" style="background:var(--card2);border:1px solid var(--border2);color:var(--text2);padding:8px;border-radius:8px;width:100%">');
   ['FREE','LITE','PRO','WMS'].forEach(function(p){
     h.push('<option value="'+p+'"'+(emp.plan===p?' selected':'')+'>'+p+'</option>');
@@ -8865,7 +8895,19 @@ function _guardarEdicionEmpresa(empId) {
   empresas[idx].correo  = (document.getElementById('ee-correo')||{value:''}).value;
   empresas[idx].ciudad  = (document.getElementById('ee-ciudad')||{value:''}).value;
   empresas[idx].plan    = (document.getElementById('ee-plan')  ||{value:'FREE'}).value;
+  empresas[idx].industry_type = (document.getElementById('ee-industry')||{value:'GENERIC'}).value || 'GENERIC';
+  empresas[idx].sector  = (document.getElementById('ee-sector')||{value:''}).value;
+  empresas[idx].pais    = (document.getElementById('ee-pais')||{value:'Colombia'}).value || 'Colombia';
+  empresas[idx].moneda  = (document.getElementById('ee-moneda')||{value:'COP'}).value || 'COP';
+  empresas[idx].timezone = empresas[idx].timezone || 'America/Bogota';
   saveEmpresas(empresas);
+  fetch('/api/empresas', {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify(empresas[idx])
+  }).then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(res){ if (res && res.ok) _syncEmpresasFromAPI(function(){ if (currentPage === 'empresas') renders.empresas(); }); })
+    .catch(function(){ showToast('Empresa actualizada localmente; pendiente sincronizar nube', 'amber'); });
   closeModal();
   showToast('✅ Empresa actualizada','green');
   renders.empresas();
@@ -22291,8 +22333,18 @@ goto = function(page, param) {
     map[selected]=Array.prototype.map.call(document.querySelectorAll('.sf-extra-module:checked'),function(cb){return cb.value;});
     saveExtrasMap(map);
     var empresas=typeof loadEmpresas==='function'?loadEmpresas():[];
-    empresas.forEach(function(e){if(e.id===selected)e.modulos_extra=map[selected];});
+    var selectedEmpresa=null;
+    empresas.forEach(function(e){if(e.id===selected){e.modulos_extra=map[selected];e.features_enabled=map[selected];selectedEmpresa=e;}});
     if(typeof saveEmpresas==='function') saveEmpresas(empresas);
+    if(selectedEmpresa){
+      fetch('/api/empresas', {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(selectedEmpresa)
+      }).then(function(r){return r.ok?r.json():null;})
+        .then(function(res){if(res&&res.ok&&typeof _syncEmpresasFromAPI==='function')_syncEmpresasFromAPI();})
+        .catch(function(){showToast('Extra guardado localmente; pendiente sincronizar nube','amber');});
+    }
     showToast('Modulos extra guardados','green');
   };
   window._sfToggleExtraModule=function(id){
@@ -22328,6 +22380,99 @@ goto = function(page, param) {
   goto=function(page,param){var out=baseGoto?baseGoto(page,param):undefined;setTimeout(function(){if(page==='root')renderRootFull();installSuperAdminThemeButton();},0);return out;};
   window.goto=goto;
   setTimeout(function(){if(typeof currentPage!=='undefined'&&currentPage==='root')renderRootFull();installSuperAdminThemeButton();},0);
+})();
+
+/* Industry configuration engine: declarative company type + plan resolver */
+(function(){
+  var INDUSTRY_TYPES = {
+    GENERIC: {label:'Generica', modules:null, inventoryTypes:['GENERAL'], fields:[]},
+    HARDWARE_STORE: {label:'Ferreteria', modules:['dashboard','inventario','movimientos','ubicaciones','proveedores','clientes','compras','pedidos','ciclicos','conciliacion','reportes','generar-qr','escaner','importar'], inventoryTypes:['TORNILLERIA','HERRAMIENTAS','ELECTRICOS','PINTURAS','PVC','SEGURIDAD_INDUSTRIAL'], fields:['marca','referencia','presentacion','calibre','medida','color','material','unidad_empaque','codigo_barras','compatibilidad']},
+    METALWORKING: {label:'Metalmecanica', modules:['dashboard','inventario','movimientos','ubicaciones','proveedores','clientes','compras','pedidos','logistica','traslados','ciclicos','conciliacion','reportes','generar-qr','escaner','importar'], inventoryTypes:['INSUMOS_REPUESTOS','LAMINAS_TUBERIAS','GASES_INDUSTRIALES'], fields:['tipo_insumo','equipo_compatible','familia_material','material','norma','aleacion','espesor','calibre','diametro','largo','ancho','alto','peso_teorico','peso_real','estado_material','lote','certificado','tipo_gas','cilindro_id','psi_actual']},
+    CHEMICAL: {label:'Quimica', modules:['dashboard','inventario','movimientos','ubicaciones','proveedores','clientes','compras','ciclicos','conciliacion','reportes','generar-qr','escaner','importar'], inventoryTypes:['MATERIAS_PRIMAS','REACTIVOS','PROCESO','TERMINADOS','RESIDUOS'], fields:['nombre_quimico','formula','concentracion','densidad','pureza','estado_fisico','riesgo','cas','lote','vencimiento','compatibilidad','hoja_seguridad']},
+    IMPORTS: {label:'Importacion', modules:['dashboard','inventario','movimientos','ubicaciones','proveedores','clientes','compras','pedidos','ciclicos','conciliacion','reportes','integraciones','importar'], inventoryTypes:['IMPORTADOS','TRANSITO','NACIONALIZADOS'], fields:['pais_origen','moneda','trm','incoterm','codigo_hs','peso_bruto','peso_neto','volumen','embarque','contenedor','costo_nacionalizado']},
+    AUTO_PARTS: {label:'Repuestos', modules:['dashboard','inventario','movimientos','ubicaciones','proveedores','clientes','compras','pedidos','comercial','ciclicos','conciliacion','reportes','generar-qr','escaner','importar'], inventoryTypes:['REPUESTOS','CONSUMIBLES','ACCESORIOS'], fields:['referencia_oem','referencias_alternas','marca_compatible','modelo_compatible','anio_inicial','anio_final','motor','cilindraje','posicion','lado']},
+    TRANSPORT: {label:'Transporte', modules:['dashboard','inventario','movimientos','ubicaciones','proveedores','clientes','compras','logistica','traslados','ciclicos','conciliacion','reportes','importar'], inventoryTypes:['BODEGA','TALLER','LLANTAS','BATERIAS','COMBUSTIBLE'], fields:['placa','vehiculo','orden_trabajo','kilometraje','horas_motor','mecanico','centro_costo']},
+    FOOD: {label:'Alimentos', modules:['dashboard','inventario','movimientos','ubicaciones','proveedores','clientes','compras','pedidos','comercial','ciclicos','conciliacion','reportes','importar'], inventoryTypes:['MATERIAS_PRIMAS','INGREDIENTES','EMPAQUE','PROCESO','TERMINADOS','REFRIGERADOS','CONGELADOS'], fields:['lote','fabricacion','vencimiento','temperatura','almacenamiento','conversion','alergenos','receta','rendimiento','merma']}
+  };
+  function uniq(arr){var out=[];(arr||[]).forEach(function(v){if(v&&out.indexOf(v)<0)out.push(v);});return out;}
+  function normIndustry(v){v=String(v||'GENERIC').toUpperCase();return INDUSTRY_TYPES[v]?v:'GENERIC';}
+  function normPlan(v){v=String(v||'FREE').toUpperCase();if(v==='ENTERPRISE')v='WMS';return PLANES&&PLANES[v]?v:'FREE';}
+  function extrasForCompany(emp){
+    var map={}; try{map=DB.get('sf_modulos_extra')||{};}catch(e){}
+    return uniq([].concat(emp&&emp.features_enabled||[], emp&&emp.modulos_extra||[], map[emp&&emp.id]||[]));
+  }
+  function normalizeCompany(emp){
+    if(!emp) return emp;
+    if(!emp.industry_type) emp.industry_type='GENERIC';
+    if(!emp.pais) emp.pais='Colombia';
+    if(!emp.moneda) emp.moneda='COP';
+    if(!emp.timezone) emp.timezone='America/Bogota';
+    if(!Array.isArray(emp.modules_enabled)) emp.modules_enabled=[];
+    if(!Array.isArray(emp.features_enabled)) emp.features_enabled=Array.isArray(emp.modulos_extra)?emp.modulos_extra:[];
+    if(!emp.settings || typeof emp.settings!=='object') emp.settings={};
+    return emp;
+  }
+  window.SF_INDUSTRY_TYPES = INDUSTRY_TYPES;
+  window._sfNormalizeIndustryCompany = normalizeCompany;
+  window._sfResolveCompanyConfig = function(emp){
+    emp = normalizeCompany(emp||{});
+    var plan = normPlan(emp.plan || (typeof getEmpresaPlan==='function'?getEmpresaPlan():'FREE'));
+    var planModules = ((PLANES&&PLANES[plan])?PLANES[plan].modulos:[]) || [];
+    var industryKey = normIndustry(emp.industry_type);
+    var industry = INDUSTRY_TYPES[industryKey];
+    var industryModules = industryKey==='GENERIC' || !industry.modules ? planModules.slice() : industry.modules.slice();
+    var extras = extrasForCompany(emp).filter(function(m){return planModules.indexOf(m)>=0;});
+    return {
+      plan: plan,
+      industryType: industryKey,
+      industryLabel: industry.label,
+      modules: uniq(industryModules.filter(function(m){return planModules.indexOf(m)>=0;}).concat(extras)),
+      inventoryTypes: industry.inventoryTypes || ['GENERAL'],
+      fields: industry.fields || []
+    };
+  };
+  var baseLoadEmpresas = typeof loadEmpresas==='function' ? loadEmpresas : null;
+  if(baseLoadEmpresas){
+    loadEmpresas=function(){
+      return (baseLoadEmpresas()||[]).map(normalizeCompany);
+    };
+    window.loadEmpresas=loadEmpresas;
+  }
+  var baseSaveEmpresas = typeof saveEmpresas==='function' ? saveEmpresas : null;
+  if(baseSaveEmpresas){
+    saveEmpresas=function(arr){
+      return baseSaveEmpresas((arr||[]).map(normalizeCompany));
+    };
+    window.saveEmpresas=saveEmpresas;
+  }
+  function activeCompany(){
+    var id = (SESSION&&SESSION.user&&SESSION.user.empresa_id) || (function(){try{return sessionStorage.getItem('sf_support_empresa_id');}catch(e){return null;}})();
+    if(!id) return null;
+    return (typeof loadEmpresas==='function'?loadEmpresas():[]).find(function(e){return e&&e.id===id;}) || null;
+  }
+  var baseGetMods = typeof getModulosDisponibles==='function' ? getModulosDisponibles : null;
+  getModulosDisponibles=function(){
+    var mods = baseGetMods ? baseGetMods() : [];
+    if(SESSION&&SESSION.user&&SESSION.user.rol==='SUPER ADMINISTRADOR') return mods;
+    var emp = activeCompany();
+    if(!emp) return mods;
+    var resolved = window._sfResolveCompanyConfig(emp).modules;
+    return mods.filter(function(m){return resolved.indexOf(m)>=0;});
+  };
+  window.getModulosDisponibles=getModulosDisponibles;
+  var baseApplyIndustry = typeof applyPlanUI==='function' ? applyPlanUI : null;
+  applyPlanUI=function(){
+    if(baseApplyIndustry) baseApplyIndustry();
+    if(!SESSION||!SESSION.user||SESSION.user.rol==='SUPER ADMINISTRADOR') return;
+    var emp=activeCompany(); if(!emp) return;
+    var allowed=window._sfResolveCompanyConfig(emp).modules;
+    Array.prototype.forEach.call(document.querySelectorAll('nav a[id^="nav-"]'), function(a){
+      var id=a.id.replace(/^nav-/,'');
+      if(id==='dashboard') return;
+      if(allowed.indexOf(id)<0) a.style.display='none';
+    });
+  };
+  window.applyPlanUI=applyPlanUI;
 })();
 
 setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch(e){} }, 0);

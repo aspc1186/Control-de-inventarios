@@ -35,6 +35,7 @@ module.exports = async (req, res) => {
       movement_policy TEXT DEFAULT 'LOCK_LOCATIONS',
       tolerance     NUMERIC(12,4) DEFAULT 0,
       prioridad     TEXT DEFAULT 'NORMAL',
+      empresa_id    TEXT,
       updated_at   TIMESTAMPTZ DEFAULT NOW()
     )
   `.catch(()=>{});
@@ -47,13 +48,24 @@ module.exports = async (req, res) => {
   await sql`ALTER TABLE ciclicos ADD COLUMN IF NOT EXISTS movement_policy TEXT DEFAULT 'LOCK_LOCATIONS'`.catch(()=>{});
   await sql`ALTER TABLE ciclicos ADD COLUMN IF NOT EXISTS tolerance NUMERIC(12,4) DEFAULT 0`.catch(()=>{});
   await sql`ALTER TABLE ciclicos ADD COLUMN IF NOT EXISTS prioridad TEXT DEFAULT 'NORMAL'`.catch(()=>{});
+  await sql`ALTER TABLE ciclicos ADD COLUMN IF NOT EXISTS empresa_id TEXT`.catch(()=>{});
 
   // GET — list all
   if (req.method === 'GET') {
     try {
-      const { responsable } = req.query;
+      const { responsable, empresa_id } = req.query;
       let rows;
-      if (responsable) {
+      if (responsable && empresa_id && empresa_id !== '__SA__') {
+        rows = await sql`
+          SELECT * FROM ciclicos
+          WHERE empresa_id = ${empresa_id} AND responsable = ${responsable}
+          ORDER BY creado_en DESC`;
+      } else if (empresa_id && empresa_id !== '__SA__') {
+        rows = await sql`
+          SELECT * FROM ciclicos
+          WHERE empresa_id = ${empresa_id}
+          ORDER BY creado_en DESC`;
+      } else if (responsable) {
         rows = await sql`
           SELECT * FROM ciclicos
           WHERE responsable = ${responsable}
@@ -78,7 +90,7 @@ module.exports = async (req, res) => {
            observacion, estado, creado_por, creado_en,
            iniciado_en, finalizado_en, cerrado_en, cancelado_en, conteo,
            ubicaciones, ubic_estados, asignaciones, multi_usuario, blind_mode,
-           double_count, movement_policy, tolerance, prioridad)
+           double_count, movement_policy, tolerance, prioridad, empresa_id)
         VALUES (
           ${b.id || null}, ${b.codigo}, ${b.nombre}, ${b.tipo||'CICLICO'},
           ${b.fecha||null}, ${b.hora||null}, ${b.bodega||null}, ${b.responsable||null},
@@ -95,7 +107,8 @@ module.exports = async (req, res) => {
           ${!!(b.doubleCount||b.double_count)},
           ${b.movementPolicy||b.movement_policy||'LOCK_LOCATIONS'},
           ${Number(b.tolerance||b.tolerancia||0)},
-          ${b.prioridad||b.priority||'NORMAL'}
+          ${b.prioridad||b.priority||'NORMAL'},
+          ${b.empresa_id||null}
         )
         ON CONFLICT (id) DO UPDATE SET
           nombre       = EXCLUDED.nombre,
@@ -120,6 +133,7 @@ module.exports = async (req, res) => {
           movement_policy = EXCLUDED.movement_policy,
           tolerance    = EXCLUDED.tolerance,
           prioridad    = EXCLUDED.prioridad,
+          empresa_id   = EXCLUDED.empresa_id,
           updated_at   = NOW()
         RETURNING *`;
       return res.status(201).json({ ok: true, data: rows[0] });
