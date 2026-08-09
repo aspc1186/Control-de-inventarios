@@ -1,7 +1,14 @@
 // api/empresas/index.js - StockFlow cloud companies API
 const { getSQL, cors } = require('../_db');
 const { randomUUID } = require('crypto');
-const { normalizeIndustry, normalizePlan } = require('../config/industry');
+const {
+  INDUSTRY_CONFIGS,
+  MODULE_REGISTRY,
+  PLAN_MODULES,
+  normalizeIndustry,
+  normalizePlan,
+  resolveCompanyConfig,
+} = require('../../lib/industry');
 
 function text(v, fallback = null) {
   if (v === undefined || v === null || v === '') return fallback;
@@ -150,6 +157,30 @@ module.exports = async (req, res) => {
     await ensureEmpresas(sql);
 
     if (req.method === 'GET') {
+      if (req.query && req.query.config === '1') {
+        const { id } = req.query;
+        if (id) {
+          if (!isUuid(id)) return res.status(400).json({ ok: false, error: 'id uuid requerido' });
+          const company = await sql`SELECT * FROM empresas WHERE id=${id} LIMIT 1`;
+          if (!company.length) return res.status(404).json({ ok: false, error: 'empresa no encontrada' });
+          return res.status(200).json({
+            ok: true,
+            company: company[0],
+            config: resolveCompanyConfig(company[0]),
+            industryTypes: INDUSTRY_CONFIGS,
+            moduleRegistry: MODULE_REGISTRY,
+            planModules: PLAN_MODULES,
+          });
+        }
+
+        return res.status(200).json({
+          ok: true,
+          industryTypes: INDUSTRY_CONFIGS,
+          moduleRegistry: MODULE_REGISTRY,
+          planModules: PLAN_MODULES,
+        });
+      }
+
       const rows = await sql`SELECT * FROM empresas ORDER BY nombre ASC`;
       return res.status(200).json({ ok: true, data: rows, total: rows.length });
     }
