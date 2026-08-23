@@ -181,6 +181,30 @@ module.exports = async (req, res) => {
 
     if (req.method === 'POST') {
       const body = req.body || {};
+      if (!Array.isArray(body) && body.action === 'bulk_replace') {
+        const proveedores = Array.isArray(body.proveedores) ? body.proveedores : [];
+        const targetEmpresaId = text(body.empresa_id) || text(empresaId) || text(proveedores[0] && proveedores[0].empresa_id);
+        if (!targetEmpresaId) {
+          return res.status(400).json({ ok: false, error: 'empresa_id requerido para importacion maestra de proveedores' });
+        }
+        await sql`
+          DELETE FROM proveedores
+          WHERE empresa_id = ${targetEmpresaId}
+            AND COALESCE(origen_registro, 'IMPORTADO') = 'IMPORTADO'`;
+
+        const results = [];
+        for (const item of proveedores) {
+          results.push(await saveProveedor(sql, { ...item, empresa_id: targetEmpresaId, origen_registro: 'IMPORTADO' }, targetEmpresaId));
+        }
+        return res.status(200).json({
+          ok: true,
+          mode: 'bulk_replace',
+          count: results.length,
+          inserted: results.filter(r => r.inserted).length,
+          updated: results.filter(r => r.updated).length
+        });
+      }
+
       const items = Array.isArray(body) ? body : [body];
       if (!items.length) return res.status(200).json({ ok: true, count: 0 });
 

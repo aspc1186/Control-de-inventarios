@@ -1540,7 +1540,22 @@ function _pushUsuarioCloud(u, plainPassword) {
   else if (u.password) body.password_hash = u.password;
   fetch('/api/usuarios', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) }).catch(function(){});
 }
-function saveProveedores(v){ DB.set('proveedores', v); }  // API sync done in guardarProveedor
+function saveProveedores(v){
+  var rows = Array.isArray(v) ? v : [];
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  if (eid === '__SA__') {
+    DB.set('proveedores', rows);
+    return;
+  }
+  if (!eid) {
+    DB.set('proveedores', rows);
+    return;
+  }
+  var all = DB.get('proveedores') || [];
+  var other = all.filter(function(p){ return String(p && p.empresa_id || '') !== String(eid); });
+  var mine = rows.map(function(p){ return Object.assign({}, p, { empresa_id:eid }); });
+  DB.set('proveedores', other.concat(mine));
+}  // API sync done in guardarProveedor
 function _syncClientesFromAPI(done) {
   if (window._clientesFetching) return;
   window._clientesFetching = true;
@@ -1568,7 +1583,9 @@ function _pushClienteCloud(c) {
 function _syncProveedoresFromAPI(done) {
   if (window._proveedoresFetching) return;
   window._proveedoresFetching = true;
-  fetch('/api/proveedores')
+  var eid = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var url = '/api/proveedores' + (eid && eid !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eid) : '');
+  fetch(url)
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res){
       if (res && Array.isArray(res.data)) {
@@ -10181,7 +10198,9 @@ renders.proveedores = function() {
   _buildProvUI(provs, canW, pg);
 
   // ── Sincronizar con API en background ────────────────────────────────
-  fetch('/api/proveedores')
+  var eidProv = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var urlProv = '/api/proveedores' + (eidProv && eidProv !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eidProv) : '');
+  fetch(urlProv)
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res) {
       if (res && Array.isArray(res.data)) {
@@ -10461,7 +10480,9 @@ function guardarProveedor(idx) {
     provs.push(data);
   }
   saveProveedores(provs);
-  fetch('/api/proveedores', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
+  var eidProvSave = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var urlProvSave = '/api/proveedores' + (eidProvSave && eidProvSave !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eidProvSave) : '');
+  fetch(urlProvSave, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data) })
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res){
       if (res && res.ok && res.id) {
@@ -10918,6 +10939,7 @@ function _ejecutarImportacionProveedores() {
 
     // Generate fresh ID for each imported record
     cleanP.id = 'prov-imp-' + Date.now() + '-' + i;
+    cleanP.empresa_id = typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (cleanP.empresa_id || null);
 
     // Skip if NIT already seen in this file (intra-file duplicate)
     if (cleanP.nit && nitVistos[cleanP.nit.trim()]) return;
@@ -10935,10 +10957,12 @@ function _ejecutarImportacionProveedores() {
   var importadosParaNeon = nuevosProvs.filter(function(p){
     return p.origen_registro === 'IMPORTADO';
   });
-  fetch('/api/proveedores', {
+  var eidImportProv = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var urlImportProv = '/api/proveedores' + (eidImportProv && eidImportProv !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eidImportProv) : '');
+  fetch(urlImportProv, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action: 'bulk_replace', proveedores: importadosParaNeon })
+    body: JSON.stringify({ action: 'bulk_replace', empresa_id: eidImportProv && eidImportProv !== '__SA__' ? eidImportProv : null, proveedores: importadosParaNeon })
   }).then(function(r){ return r.json(); })
     .then(function(res){ console.log('Neon sync:', res.inserted, 'inserted'); })
     .catch(function(err){ console.error('Neon sync error:', err); });
@@ -16443,6 +16467,7 @@ function _crearRespaldo() {
     var respaldo = {
       nombre:  'Respaldo_' + new Date().toISOString().slice(0,19).replace(/[T:]/g,'_'),
       fecha:   new Date().toISOString(),
+      empresa_id: typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : null,
       size:    json.length,
       modulos: Object.keys(datos).filter(function(k){return (datos[k]&&datos[k].length)||typeof datos[k]==='object';}),
       data:    json,
@@ -16554,7 +16579,7 @@ function _dashSyncCloud(done) {
   Promise.all([
     fetch('/api/articulos?limit=5000' + suffix).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
     fetch('/api/movimientos?limit=3000' + suffix).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
-    fetch('/api/proveedores').then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
+    fetch('/api/proveedores' + (eid && eid !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eid) : '')).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; }),
     fetch('/api/movimientos?recurso=compras' + suffix).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; })
   ]).then(function(res){
     if (!_sfIsDirty('articulos') && res[0] && Array.isArray(res[0].data)) { _invItems = res[0].data; saveItems(res[0].data); }
@@ -16970,7 +16995,9 @@ function _sfIntegrarCatalogosDesdeItems(items) {
     var provs = Object.keys(provMap).map(function(k){ return provMap[k]; });
     saveProveedores(provs);
     provs.forEach(function(p){
-      fetch('/api/proveedores', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p) }).catch(function(){});
+      var eidProvSeed = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+      var urlProvSeed = '/api/proveedores' + (eidProvSeed && eidProvSeed !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eidProvSeed) : '');
+      fetch(urlProvSeed, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(p) }).catch(function(){});
     });
   }
 
@@ -23713,6 +23740,117 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
   window._sfApplySidebarAuthority = applySidebarAuthority;
   setInterval(applySidebarAuthority, 300);
   setTimeout(applySidebarAuthority, 0);
+})();
+</script>
+<script>
+/* Final support route guard: usuarios y respaldos no vuelven al dashboard */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var DIRECT = ['usuarios','respaldos'];
+
+  function esc(v){
+    return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function isSA(){
+    return !!(window.SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR');
+  }
+  function supportId(){
+    try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) { return ''; }
+  }
+  function inSupport(){
+    return isSA() && !!supportId();
+  }
+  function supportEmpresa(){
+    var id = supportId();
+    var rows = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    return rows.find(function(e){ return e && String(e.id) === String(id); }) || null;
+  }
+  function scoped(key){
+    var id = supportId();
+    var rows = [];
+    try { rows = DB.get(key) || []; } catch(e) {}
+    return (Array.isArray(rows) ? rows : []).filter(function(r){ return r && String(r.empresa_id || '') === String(id); });
+  }
+  function shell(title, body){
+    var emp = supportEmpresa();
+    return '<div class="sf-sa-wrap sf-support-module-wrap">' +
+      '<div class="sf-sa-head"><div><h1 class="sf-sa-title">'+esc(title)+'</h1><div class="sf-sa-sub">'+esc(emp && emp.nombre || 'Empresa cliente')+' · Modo soporte de superadministrador</div></div><button class="btn btn-ghost" onclick="_volverSuperadmin&&_volverSuperadmin()">Volver a superadmin</button></div>' +
+      body +
+    '</div>';
+  }
+  function table(title, cols, rows, empty){
+    return '<div class="sf-sa-panel"><div class="sf-sa-panel-title">'+esc(title)+'</div><div style="overflow:auto"><table class="sf-sa-table"><thead><tr>' +
+      cols.map(function(c){ return '<th>'+esc(c)+'</th>'; }).join('') +
+      '</tr></thead><tbody>' +
+      (rows.length ? rows.join('') : '<tr><td colspan="'+cols.length+'" style="text-align:center;color:var(--muted);padding:24px">'+esc(empty)+'</td></tr>') +
+      '</tbody></table></div></div>';
+  }
+  function renderUsersDirect(){
+    var pg = document.getElementById('pg-usuarios');
+    if (!pg) return false;
+    var rows = scoped('usuarios').map(function(u){
+      return '<tr><td><strong>'+esc(u.username || '')+'</strong><div style="color:var(--muted);font-size:11px">'+esc(u.nombre || '')+'</div></td><td>'+esc(u.correo || '')+'</td><td>'+esc(u.rol || '')+'</td><td>'+esc(u.estado || 'ACTIVO')+'</td><td><button class="sf-sa-ico" onclick="editarUsuario&&editarUsuario(&quot;'+esc(u.id || u.username)+'&quot;)">Editar</button> <button class="sf-sa-ico" onclick="cambiarClaveUsuario&&cambiarClaveUsuario(&quot;'+esc(u.id || u.username)+'&quot;)">Clave</button></td></tr>';
+    });
+    pg.innerHTML = shell('Usuarios cliente', table('Usuarios registrados', ['Usuario','Correo','Rol','Estado','Acciones'], rows, 'Sin usuarios registrados para esta empresa.'));
+    return true;
+  }
+  function renderBackupsDirect(){
+    var pg = document.getElementById('pg-respaldos');
+    if (!pg) return false;
+    var id = supportId();
+    var allBackups = typeof _loadRespaldos === 'function' ? _loadRespaldos() : [];
+    var list = (Array.isArray(allBackups) ? allBackups : []).map(function(r, idx){ return { r:r, idx:idx }; }).filter(function(x){ return !x.r.empresa_id || String(x.r.empresa_id) === String(id); });
+    var rows = list.map(function(x){
+      var r = x.r;
+      return '<tr><td>'+esc(r.nombre || '')+'</td><td>'+esc(r.fecha || '')+'</td><td>'+esc((r.size || 0).toLocaleString ? r.size.toLocaleString('es-CO') : r.size || '')+'</td><td><button class="sf-sa-ico" onclick="_descargarRespaldo&&_descargarRespaldo('+x.idx+')">Descargar</button> <button class="sf-sa-ico" onclick="_restaurarRespaldo&&_restaurarRespaldo('+x.idx+')">Restaurar</button></td></tr>';
+    });
+    pg.innerHTML = shell('Respaldos cliente',
+      '<div style="display:flex;gap:8px;margin-bottom:12px"><button class="btn btn-navy" onclick="_crearRespaldo&&_crearRespaldo()">Crear respaldo</button><button class="btn btn-ghost" onclick="_importarRespaldo&&_importarRespaldo()">Importar respaldo</button></div>' +
+      table('Historial de respaldos', ['Nombre','Fecha','Tamano','Acciones'], rows, 'Aun no hay respaldos visibles para esta empresa.'));
+    return true;
+  }
+  function renderDirect(page){
+    if (page === 'usuarios') return renderUsersDirect();
+    if (page === 'respaldos') return renderBackupsDirect();
+    return false;
+  }
+  function showPage(page){
+    Array.prototype.forEach.call(document.querySelectorAll('[id^="pg-"]'), function(el){ el.style.display = 'none'; });
+    var pg = document.getElementById('pg-' + page);
+    if (pg) pg.style.display = 'block';
+    Array.prototype.forEach.call(document.querySelectorAll('nav a[id^="nav-"]'), function(a){ a.classList.remove('active'); });
+    var nav = document.getElementById('nav-' + page);
+    if (nav) nav.classList.add('active');
+    if (typeof currentPage !== 'undefined') currentPage = page;
+    try { localStorage.setItem('sf_last_page', page); } catch(e) {}
+    var title = document.getElementById('page-title');
+    if (title) title.textContent = page === 'usuarios' ? 'Usuarios' : 'Respaldos';
+    if (typeof _sfApplySidebarAuthority === 'function') _sfApplySidebarAuthority();
+    renderDirect(page);
+  }
+
+  DIRECT.forEach(function(page){
+    if (!window.renders) return;
+    var oldRender = renders[page];
+    renders[page] = function(){
+      if (inSupport()) return renderDirect(page);
+      return oldRender ? oldRender.apply(this, arguments) : undefined;
+    };
+  });
+
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  if (baseGoto) {
+    goto = function(page, param){
+      if (inSupport() && DIRECT.indexOf(page) >= 0) {
+        showPage(page);
+        return;
+      }
+      return baseGoto.call(this, page, param);
+    };
+    window.goto = goto;
+  }
 })();
 </script>
 <script>
