@@ -70,9 +70,9 @@ async function ensureProveedores(sql) {
 
 async function saveProveedor(sql, p, empresaId) {
   const incomingId = text(p.id);
-  const id = isUuid(incomingId) ? incomingId : randomUUID();
+  const id = incomingId || randomUUID();
   const incomingEmpresaId = text(p.empresa_id) || empresaId;
-  let resolvedEmpresaId = isUuid(incomingEmpresaId) ? incomingEmpresaId : null;
+  let resolvedEmpresaId = text(incomingEmpresaId);
   if (!resolvedEmpresaId) {
     const empresas = await sql`SELECT id FROM empresas LIMIT 1`.catch(() => []);
     resolvedEmpresaId = empresas[0] && empresas[0].id ? String(empresas[0].id) : null;
@@ -87,7 +87,7 @@ async function saveProveedor(sql, p, empresaId) {
     contacto: text(p.contacto),
     telefono: text(p.telefono),
     correo: text(p.correo),
-    direccion: text(p.direccion),
+    direccion: text(p.direccion) || text(p.direccion_proveedor),
     ciudad: text(p.ciudad),
     pais: text(p.pais, 'Colombia'),
     estado: text(p.estado, 'ACTIVO'),

@@ -4363,7 +4363,7 @@ function _renderPackTab() {
   h.push('<div style="display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border2);padding-bottom:0">');
   tabs.forEach(function(t){
     var active = _packTab===t.id;
-    h.push('<button style="padding:8px 16px;border:none;cursor:pointer;font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'var(--electric)':'var(--muted)')+';background:none;border-bottom:2px solid '+(active?'var(--electric)':'transparent')+';margin-bottom:-1px;transition:all .2s">'+t.label+'</button>');
+    h.push('<button type="button" onclick="_switchPackTab(&quot;'+t.id+'&quot;)" style="padding:8px 16px;border:none;cursor:pointer;font-size:12px;font-weight:'+(active?'700':'500')+';color:'+(active?'var(--electric)':'var(--muted)')+';background:none;border-bottom:2px solid '+(active?'var(--electric)':'transparent')+';margin-bottom:-1px;transition:all .2s">'+t.label+'</button>');
   });
   h.push('</div>');
   h.push('<div id="pack-tab-content"></div>');
@@ -10964,8 +10964,18 @@ function _ejecutarImportacionProveedores() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action: 'bulk_replace', empresa_id: eidImportProv && eidImportProv !== '__SA__' ? eidImportProv : null, proveedores: importadosParaNeon })
   }).then(function(r){ return r.json(); })
-    .then(function(res){ console.log('Neon sync:', res.inserted, 'inserted'); })
-    .catch(function(err){ console.error('Neon sync error:', err); });
+    .then(function(res){
+      if (!res || res.ok === false) throw new Error((res && res.error) || 'No se pudo sincronizar proveedores');
+      console.log('Neon sync:', res.inserted, 'inserted');
+      if (typeof _syncProveedoresFromAPI === 'function') {
+        _syncProveedoresFromAPI(function(){ try { if (renders && renders.proveedores) renders.proveedores(); } catch(e) {} });
+      }
+      showToast('Proveedores sincronizados en la nube: ' + (res.count || creados), 'green');
+    })
+    .catch(function(err){
+      console.error('Neon sync error:', err);
+      showToast('Importado localmente, pero fallo la nube: ' + (err && err.message ? err.message : err), 'red');
+    });
 
   // ── PASO 6: Auditoría ─────────────────────────────────────────────────
   auditLog('IMPORTAR_PROVEEDORES_MAESTRO',
@@ -23863,6 +23873,48 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
         return;
       }
       return baseGoto.call(this, page, param);
+    };
+    window.goto = goto;
+  }
+})();
+</script>
+<script>
+/* Final WMS route guard: traslados no debe caer al dashboard */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  function isSA(){ return !!(window.SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR'); }
+  function inSupport(){ try { return isSA() && !!sessionStorage.getItem(SUPPORT_KEY); } catch(e) { return false; } }
+  function canOpenTraslados(){
+    if (!window.SESSION || !SESSION.user) return false;
+    if (inSupport()) return true;
+    var rol = String(SESSION.user.rol || '').toUpperCase();
+    if (rol === 'SUPER ADMINISTRADOR' || rol === 'ADMINISTRADOR' || rol === 'ALMACENISTA') return true;
+    var badge = document.getElementById('plan-badge');
+    var plan = String((badge && badge.textContent) || SESSION.plan || '').toUpperCase();
+    return plan.indexOf('PRO') >= 0 || plan.indexOf('WMS') >= 0 || plan.indexOf('ENTERPRISE') >= 0;
+  }
+  function showTraslados(){
+    Array.prototype.forEach.call(document.querySelectorAll('[id^="pg-"]'), function(el){ el.style.display = 'none'; });
+    var pg = document.getElementById('pg-traslados');
+    if (pg) pg.style.display = 'block';
+    Array.prototype.forEach.call(document.querySelectorAll('nav a[id^="nav-"]'), function(a){ a.classList.remove('active'); });
+    var nav = document.getElementById('nav-traslados');
+    if (nav) nav.classList.add('active');
+    if (typeof currentPage !== 'undefined') currentPage = 'traslados';
+    try { DB.set('last_page', 'traslados'); localStorage.setItem('sf_last_page', 'traslados'); } catch(e) {}
+    var title = document.getElementById('page-title');
+    if (title) title.textContent = 'Traslados';
+    if (typeof renders !== 'undefined' && typeof renders.traslados === 'function') renders.traslados();
+    if (typeof _sfApplySidebarAuthority === 'function') _sfApplySidebarAuthority();
+  }
+  var baseGotoTraslados = typeof goto === 'function' ? goto : null;
+  if (baseGotoTraslados) {
+    goto = function(page, param){
+      if (page === 'traslados' && canOpenTraslados()) {
+        showTraslados();
+        return;
+      }
+      return baseGotoTraslados.call(this, page, param);
     };
     window.goto = goto;
   }
