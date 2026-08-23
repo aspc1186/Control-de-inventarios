@@ -1589,10 +1589,11 @@ function _syncProveedoresFromAPI(done) {
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res){
       if (res && Array.isArray(res.data)) {
-        saveProveedores(res.data.map(function(p){
+        var cloudRows = res.data.map(function(p){
           if (!p.razon_social && p.nombre) p.razon_social = p.nombre;
           return p;
-        }));
+        });
+        if (cloudRows.length || !(loadProveedores() || []).length) saveProveedores(cloudRows);
         window._proveedoresCloudLoaded = true;
         if (typeof done === 'function') done(loadProveedores());
       }
@@ -10204,10 +10205,11 @@ renders.proveedores = function() {
     .then(function(r){ return r.ok ? r.json() : null; })
     .then(function(res) {
       if (res && Array.isArray(res.data)) {
-        saveProveedores(res.data.map(function(p){
+        var cloudRows = res.data.map(function(p){
           if (!p.razon_social && p.nombre) p.razon_social = p.nombre;
           return p;
-        }));
+        });
+        if (cloudRows.length || !(loadProveedores() || []).length) saveProveedores(cloudRows);
         window._proveedoresCloudLoaded = true;
         if (currentPage === 'proveedores') _buildProvUI(loadProveedores(), canW, pg);
       }
@@ -11034,15 +11036,18 @@ function _ejecutarImportacionProveedores() {
     .then(function(res){
       if (!res || res.ok === false) throw new Error((res && res.error) || 'No se pudo sincronizar proveedores');
       console.log('Neon sync:', res.inserted, 'inserted');
-      if (typeof _syncProveedoresFromAPI === 'function') {
-        _syncProveedoresFromAPI(function(){
-          try {
-            var actual = typeof loadProveedores === 'function' ? loadProveedores() : [];
-            if (!actual.length && importadosParaNeon.length) _sfReplaceEmpresaProveedoresAfterImport(targetEmpresaProv, manuales, importadosParaNeon);
-            if (renders && renders.proveedores) renders.proveedores();
-          } catch(e) {}
+      fetch(urlImportProv)
+        .then(function(r){ return r.ok ? r.json() : null; })
+        .then(function(fetchRes){
+          var cloudRows = fetchRes && Array.isArray(fetchRes.data) ? fetchRes.data : [];
+          _sfReplaceEmpresaProveedoresAfterImport(targetEmpresaProv, manuales, cloudRows.length ? cloudRows : importadosParaNeon);
+          window._proveedoresCloudLoaded = true;
+          if (renders && renders.proveedores) renders.proveedores();
+        })
+        .catch(function(){
+          _sfReplaceEmpresaProveedoresAfterImport(targetEmpresaProv, manuales, importadosParaNeon);
+          if (renders && renders.proveedores) renders.proveedores();
         });
-      }
       showToast('Proveedores sincronizados en la nube: ' + (res.count || creados), 'green');
     })
     .catch(function(err){
@@ -11063,7 +11068,8 @@ function _ejecutarImportacionProveedores() {
 
   // ── PASO 7: Actualizar UI ─────────────────────────────────────────────
   closeModal();
-  renders.proveedores();
+  _sfReplaceEmpresaProveedoresAfterImport(targetEmpresaProv, manuales, importadosParaNeon);
+  if (renders && renders.proveedores) renders.proveedores();
 
   showToast(
     creados + ' proveedores importados · ' +
@@ -13544,6 +13550,7 @@ function _renderBodegaCard(b, i, canEdit) {
       (canEdit ?
         '<div style="display:flex;gap:6px">' +
           '<button class="btn-icon" onclick="openEditBodega(' + i + ')" title="Editar">✏️</button>' +
+          '<button class="btn-icon" style="color:var(--red)" onclick="eliminarBodega(' + i + ')" title="Eliminar bodega">🗑️</button>' +
         '</div>' : '') +
       '</div>';
 }
