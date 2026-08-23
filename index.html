@@ -10906,13 +10906,21 @@ function _confirmarImportacionProveedores() {
 
 function _sfReplaceEmpresaProveedoresAfterImport(targetEmpresaProv, manuales, importados) {
   var empresaId = targetEmpresaProv ? String(targetEmpresaProv) : null;
+  function uuidFallback(prefix, i) {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      var r = Math.random() * 16 | 0;
+      var v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
   var manualRows = (manuales || []).map(function(p){
     return Object.assign({}, p, empresaId ? { empresa_id: empresaId } : {});
   });
   var importRows = (importados || []).map(function(p, i){
     var row = Object.assign({}, p);
     row.origen_registro = 'IMPORTADO';
-    if (!row.id) row.id = 'prov-imp-local-' + Date.now() + '-' + i;
+    if (!row.id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(row.id))) row.id = uuidFallback('prov-local', i);
     if (empresaId) row.empresa_id = empresaId;
     return row;
   });
@@ -10975,8 +10983,14 @@ function _ejecutarImportacionProveedores() {
     // Tag as IMPORTADO
     cleanP.origen_registro = 'IMPORTADO';
 
-    // Generate fresh ID for each imported record
-    cleanP.id = 'prov-imp-' + Date.now() + '-' + i;
+    // Generate a database-safe UUID for each imported record.
+    cleanP.id = (window.crypto && typeof window.crypto.randomUUID === 'function')
+      ? window.crypto.randomUUID()
+      : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+          var r = Math.random() * 16 | 0;
+          var v = c === 'x' ? r : (r & 0x3 | 0x8);
+          return v.toString(16);
+        });
     cleanP.empresa_id = targetEmpresaProv || (cleanP.empresa_id || null);
 
     // Skip if NIT already seen in this file (intra-file duplicate)
@@ -21581,6 +21595,159 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
       }
       if (WMS_PAGES.indexOf(page) >= 0 && document.getElementById('pg-' + page)) {
         setPage(page, page === 'packing' ? 'Packing' : page);
+        return;
+      }
+      return baseGoto.call(this, page, param);
+    };
+    window.goto = goto;
+  }
+})();
+</script>
+<script>
+/* Final module routing + WMS hub cleanup */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var DIRECT_PAGES = [
+    'dashboard','inventario','compras','pedidos','comercial','proveedores','clientes','logistica',
+    'ubicaciones','generar-qr','escaner','movimientos','traslados','reportes','ciclicos',
+    'conciliacion','auditoria','usuarios','integraciones','respaldos','centro-pruebas',
+    'salud-sistema','picking','packing','mis-inventarios'
+  ];
+  var WMS_TABS = [
+    ['Picking', "goto('picking')", 'picking'],
+    ['Packing', "_packTab='packing';goto('packing')", 'packing'],
+    ['Guias', "_packTab='guias';goto('packing')", 'guias'],
+    ['Despacho', "_packTab='despacho';goto('packing')", 'despacho'],
+    ['Traslados', "goto('traslados')", 'traslados'],
+    ['Remisiones', "goto('logistica')", 'remisiones'],
+    ['Config', "_packTab='config';goto('packing')", 'config']
+  ];
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function isSA(){ return !!(window.SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR'); }
+  function inSupport(){ try { return isSA() && !!sessionStorage.getItem(SUPPORT_KEY); } catch(e) { return false; } }
+  function navVisible(page) {
+    var nav = document.getElementById('nav-' + page);
+    if (!nav) return true;
+    return window.getComputedStyle(nav).display !== 'none';
+  }
+  function pageAllowed(page) {
+    if (inSupport()) return DIRECT_PAGES.indexOf(page) >= 0;
+    if (isSA()) return ['dashboard','empresas','root'].indexOf(page) >= 0;
+    return navVisible(page);
+  }
+  function showPage(page) {
+    Array.prototype.forEach.call(document.querySelectorAll('[id^="pg-"]'), function(el){ el.style.display = 'none'; });
+    var pg = document.getElementById('pg-' + page);
+    if (pg) pg.style.display = 'block';
+    Array.prototype.forEach.call(document.querySelectorAll('nav a[id^="nav-"]'), function(a){ a.classList.remove('active'); });
+    var nav = document.getElementById('nav-' + page);
+    if (nav) nav.classList.add('active');
+    if (typeof currentPage !== 'undefined') currentPage = page;
+    try { DB.set('last_page', page); localStorage.setItem('sf_last_page', page); } catch(e) {}
+    var title = document.getElementById('page-title');
+    if (title) title.textContent = (PAGE_TITLES && PAGE_TITLES[page]) || page;
+    if (window.renders && typeof renders[page] === 'function') renders[page]();
+    setTimeout(function(){
+      installSupportDashboardStyles();
+      if (typeof _sfApplySidebarAuthority === 'function') _sfApplySidebarAuthority();
+      if (typeof applyPlanUI === 'function') applyPlanUI();
+    }, 0);
+  }
+  function installSupportDashboardStyles() {
+    if (document.getElementById('sf-sa-shell-style')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-sa-shell-style';
+    st.textContent =
+      '.sf-sa-wrap{padding:16px;display:flex;flex-direction:column;gap:14px;color:var(--text)!important}' +
+      '.sf-sa-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px}' +
+      '.sf-sa-title{font-size:24px;line-height:1.1;margin:0;color:var(--white)!important;font-weight:900}' +
+      '.sf-sa-sub{font-size:12px;color:var(--muted)!important;margin-top:4px}' +
+      '.sf-sa-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}' +
+      '.sf-sa-kpi{display:flex!important;align-items:center!important;gap:14px!important;padding:16px!important;border:1px solid var(--border2)!important;border-radius:8px!important;background:var(--bg-card)!important;color:var(--text)!important;text-align:left!important;min-height:76px!important}' +
+      '.sf-sa-icon{width:40px;height:40px;border-radius:8px;background:#3730a3;color:#c4b5fd;display:flex;align-items:center;justify-content:center;font-weight:900;flex-shrink:0}' +
+      '.sf-sa-value{font-size:24px;line-height:1;font-weight:900;color:var(--white)!important}' +
+      '.sf-sa-label{font-size:12px;color:var(--muted)!important;margin-top:4px}' +
+      '.sf-sa-panel{border:1px solid var(--border2)!important;border-radius:8px!important;background:var(--bg-card)!important;overflow:hidden!important}' +
+      '.sf-sa-panel-title{padding:13px 16px;border-bottom:1px solid var(--border2);color:var(--white)!important;font-size:13px;font-weight:900;text-transform:none}' +
+      '.sf-sa-table{width:100%;border-collapse:collapse}.sf-sa-table th,.sf-sa-table td{padding:11px 14px;border-bottom:1px solid var(--border2);color:var(--text)!important;font-size:12px;text-align:left}.sf-sa-table th{color:var(--white)!important;background:var(--card2)!important;text-transform:uppercase;font-size:11px;font-weight:900}';
+    document.head.appendChild(st);
+  }
+  function installWmsStyles(){
+    if (document.getElementById('sf-wms-final-style')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-wms-final-style';
+    st.textContent =
+      '.sf-wms-entry-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}.sf-wms-entry{border:1px solid var(--border2);background:var(--bg-card);border-radius:8px;padding:16px;text-align:left;cursor:pointer;color:var(--text)!important}.sf-wms-entry:hover{border-color:var(--electric);background:rgba(0,168,255,.08)}.sf-wms-entry .lbl{display:block;color:var(--muted)!important;font-size:11px;text-transform:uppercase;letter-spacing:.08em}.sf-wms-entry .val{display:block;color:var(--electric)!important;font-size:24px;font-weight:900;margin-top:6px}';
+    document.head.appendChild(st);
+  }
+  function wmsTabs(active) {
+    return '<div class="sf-wms-inline-tabs" id="sf-wms-final-tabs">' + WMS_TABS.map(function(t){
+      var isActive = active === t[2] || (active === 'packing' && t[2] === (window._packTab || 'packing'));
+      return '<button type="button" class="sf-wms-inline-tab'+(isActive?' active':'')+'" onclick="'+esc(t[1])+'">'+esc(t[0])+'</button>';
+    }).join('') + '</div>';
+  }
+  function installWmsTabs(page, active) {
+    var pg = document.getElementById('pg-' + page);
+    if (!pg || document.getElementById('sf-wms-final-tabs')) return;
+    pg.insertAdjacentHTML('afterbegin', wmsTabs(active || page));
+  }
+  function countLogistica(){
+    return {
+      picking: (typeof DB_picking_load === 'function' ? DB_picking_load() : []).filter(function(x){return !/COMPLETADO|CANCELADO/.test(String(x.estado||''));}).length,
+      packing: (typeof DB_packing_load === 'function' ? DB_packing_load() : []).filter(function(x){return !/DESPACHADO|CANCELADO/.test(String(x.estado||''));}).length,
+      guias: (typeof DB_guias_load === 'function' ? DB_guias_load() : []).length,
+      despachos: (typeof DB_despachos_load === 'function' ? DB_despachos_load() : []).length,
+      traslados: (typeof DB_traslados_load === 'function' ? DB_traslados_load() : []).length,
+      remisiones: (typeof DB_remisiones_load === 'function' ? DB_remisiones_load() : []).length
+    };
+  }
+  if (window.renders) {
+    renders.logistica = function(){
+      var pg = document.getElementById('pg-logistica');
+      if (!pg) return;
+      installWmsStyles();
+      var c = countLogistica();
+      var cards = [
+        ['Picking', c.picking, "goto('picking')"],
+        ['Packing', c.packing, "_packTab='packing';goto('packing')"],
+        ['Guias', c.guias, "_packTab='guias';goto('packing')"],
+        ['Despachos', c.despachos, "_packTab='despacho';goto('packing')"],
+        ['Traslados', c.traslados, "goto('traslados')"],
+        ['Remisiones', c.remisiones, "abrirNuevaRemision&&abrirNuevaRemision()"]
+      ].map(function(k){
+        return '<button class="sf-wms-entry" onclick="'+esc(k[2])+'"><span class="lbl">'+esc(k[0])+'</span><span class="val">'+k[1]+'</span></button>';
+      }).join('');
+      pg.innerHTML =
+        '<div style="max-width:1120px;margin:0 auto;padding:16px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px"><div><h2 style="font-size:18px;margin:0;color:var(--white)">Logistica WMS</h2><p style="font-size:11px;color:var(--muted);margin:3px 0 0">Picking, packing, guias, despachos, traslados y remisiones.</p></div><button class="btn btn-navy btn-sm" onclick="abrirNuevaRemision&&abrirNuevaRemision()">Nueva remision</button></div>' +
+          '<div class="sf-wms-entry-grid">' + cards + '</div>' +
+        '</div>';
+    };
+    ['picking','traslados'].forEach(function(page){
+      if (typeof renders[page] !== 'function' || renders[page]._sfFinalWmsTabs) return;
+      var base = renders[page];
+      renders[page] = function(){
+        var out = base.apply(this, arguments);
+        setTimeout(function(){ installWmsTabs(page, page); }, 0);
+        return out;
+      };
+      renders[page]._sfFinalWmsTabs = true;
+    });
+  }
+
+  installSupportDashboardStyles();
+  installWmsStyles();
+
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  if (baseGoto) {
+    goto = function(page, param) {
+      if (DIRECT_PAGES.indexOf(page) >= 0 && document.getElementById('pg-' + page) && pageAllowed(page)) {
+        showPage(page);
         return;
       }
       return baseGoto.call(this, page, param);

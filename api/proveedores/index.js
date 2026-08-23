@@ -70,7 +70,7 @@ async function ensureProveedores(sql) {
 
 async function saveProveedor(sql, p, empresaId) {
   const incomingId = text(p.id);
-  const id = incomingId || randomUUID();
+  const id = isUuid(incomingId) ? incomingId : randomUUID();
   const incomingEmpresaId = text(p.empresa_id) || empresaId;
   let resolvedEmpresaId = text(incomingEmpresaId);
   if (!resolvedEmpresaId) {
