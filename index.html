@@ -22730,6 +22730,7 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
     st.id = 'sf-support-top-style';
     st.textContent =
       '.sidebar #sf-support-banner,.sidebar #sf-support-banner-top,.sidebar [data-support-banner="1"]{display:none!important}' +
+      'body #sf-support-banner{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;position:absolute!important;left:-99999px!important;top:auto!important;width:0!important;height:0!important;overflow:hidden!important}' +
       '#sf-support-banner-top{width:100%!important;margin:0 0 14px 0!important;padding:11px 16px!important;border:1px solid rgba(245,158,11,.72)!important;border-radius:8px!important;background:linear-gradient(90deg,rgba(255,247,237,.96),rgba(254,243,199,.92))!important;color:#78350f!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:14px!important;box-sizing:border-box!important;min-height:58px!important;box-shadow:0 10px 24px rgba(0,0,0,.08)!important}' +
       '[data-theme="dark"] #sf-support-banner-top,body:not([data-theme]) #sf-support-banner-top{background:linear-gradient(90deg,rgba(15,23,42,.96),rgba(30,41,59,.93))!important;color:#fff7ed!important}' +
       '#sf-support-banner-top strong{display:block!important;color:inherit!important;font-size:14px!important;line-height:1.2!important}' +
@@ -22742,6 +22743,10 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
   function removeOldSupportBlocks(){
     Array.prototype.slice.call(document.querySelectorAll('#sf-support-banner')).forEach(function(b){ b.remove(); });
     Array.prototype.slice.call(document.querySelectorAll('.sidebar [data-support-banner="1"], .sidebar #sf-support-banner-top')).forEach(function(b){ b.remove(); });
+    Array.prototype.slice.call(document.querySelectorAll('.sidebar *')).forEach(function(el){
+      var txt = (el.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (txt.indexOf('modo de soporte de superadministrador') >= 0 || txt.indexOf('volver a root') >= 0) el.remove();
+    });
   }
   function renderTopSupport(){
     installStyle();
@@ -22795,7 +22800,15 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
     };
   }
 
-  setInterval(renderTopSupport, 700);
+  if (window.MutationObserver && !window._sfSupportTopObserver) {
+    window._sfSupportTopObserver = new MutationObserver(function(){
+      removeOldSupportBlocks();
+      var banner = document.getElementById('sf-support-banner-top');
+      if (isSA() && supportId() && !banner) renderTopSupport();
+    });
+    window._sfSupportTopObserver.observe(document.body, { childList:true, subtree:true });
+  }
+  setInterval(renderTopSupport, 200);
   setTimeout(renderTopSupport, 0);
 })();
 </script>
