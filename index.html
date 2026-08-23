@@ -22981,6 +22981,403 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
 })();
 </script>
 <script>
+/* StockFlow final hardening: animated logo, company normalization, plan scope and session TTL */
+(function(){
+  var LOGO_SRC = '/assets/stockflow-logo-animado.mp4';
+  var SESSION_TTL = 2 * 60 * 1000;
+  var ACTIVITY_KEY = 'sf_last_activity';
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var INDUSTRY_LABELS = {
+    GENERIC:'Generica',
+    HARDWARE_STORE:'Ferreteria',
+    METALWORKING:'Metalmecanica',
+    CHEMICAL:'Quimica',
+    IMPORTS:'Importacion',
+    AUTO_PARTS:'Repuestos',
+    TRANSPORT:'Transporte',
+    FOOD:'Alimentos'
+  };
+  var INDUSTRY_ALIASES = {
+    GENERICA:'GENERIC', GENERAL:'GENERIC', INVENTARIOS:'GENERIC',
+    FERRETERIA:'HARDWARE_STORE', FERRETERÍA:'HARDWARE_STORE',
+    METALMECANICA:'METALWORKING', METALMECÁNICA:'METALWORKING', INDUSTRIAL:'METALWORKING',
+    QUIMICA:'CHEMICAL', QUÍMICA:'CHEMICAL',
+    IMPORTACION:'IMPORTS', IMPORTACIÓN:'IMPORTS',
+    REPUESTOS:'AUTO_PARTS', AUTOPARTES:'AUTO_PARTS',
+    TRANSPORTE:'TRANSPORT',
+    ALIMENTOS:'FOOD'
+  };
+  var PLAN_ALIASES = {
+    STARTER:'FREE',
+    LITE:'FREE',
+    BASICO:'FREE',
+    BASICO_POS:'FREE',
+    BASICO_INVENTARIO:'FREE',
+    FREE:'FREE',
+    PRO:'PRO',
+    PROFESIONAL:'PRO',
+    WMS:'WMS',
+    ENTERPRISE:'WMS',
+    EMPRESARIAL:'WMS',
+    EMPRESARIAL_WMS:'WMS',
+    'EMPRESARIAL WMS':'WMS',
+    'ENTERPRISE / WMS':'WMS'
+  };
+  var PLAN_MODULES = {
+    FREE: ['dashboard','inventario','movimientos','clientes'],
+    PRO: ['dashboard','inventario','movimientos','proveedores','clientes','compras','pedidos','comercial','ubicaciones','generar-qr','escaner','ciclicos','conciliacion','reportes','respaldos'],
+    WMS: ['dashboard','inventario','movimientos','proveedores','clientes','compras','pedidos','comercial','logistica','ubicaciones','generar-qr','escaner','ciclicos','conciliacion','reportes','auditoria','usuarios','integraciones','respaldos','traslados','picking','packing','mis-inventarios']
+  };
+  var SUPPORT_MODULES = ['dashboard','inventario','compras','pedidos','comercial','proveedores','clientes','logistica','ubicaciones','generar-qr','escaner','movimientos','traslados','reportes','ciclicos','conciliacion','auditoria','usuarios','integraciones','respaldos','picking','packing','mis-inventarios'];
+  var SECTION_MAP = {
+    'nav-sec-principal':['dashboard'],
+    'nav-sec-operacion':['inventario','compras','pedidos','comercial','proveedores','clientes','logistica','movimientos','traslados'],
+    'nav-sec-analitica':['reportes'],
+    'nav-sec-bodegas':['ubicaciones','generar-qr','escaner'],
+    'nav-sec-seguridad':['auditoria'],
+    'nav-sec-admin':['empresas','usuarios','integraciones','respaldos','root'],
+    'nav-sec-sistema':['centro-pruebas','salud-sistema']
+  };
+
+  function esc(v){
+    return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function normalizePlan(v){
+    var key = String(v || 'FREE').trim().toUpperCase().replace(/\s+/g, ' ');
+    return PLAN_ALIASES[key] || PLAN_ALIASES[key.replace(/\s+/g, '_')] || 'FREE';
+  }
+  function normalizeIndustry(v){
+    var key = String(v || '').trim().toUpperCase().replace(/\s+/g, '_');
+    if (INDUSTRY_LABELS[key]) return key;
+    var spaced = key.replace(/_/g, ' ');
+    return INDUSTRY_ALIASES[key] || INDUSTRY_ALIASES[spaced] || 'GENERIC';
+  }
+  function industryLabel(v){
+    return INDUSTRY_LABELS[normalizeIndustry(v)] || INDUSTRY_LABELS.GENERIC;
+  }
+  function companyExtras(emp){
+    var map = {};
+    try { map = DB.get('sf_modulos_extra') || {}; } catch(e) {}
+    return []
+      .concat(emp && emp.features_enabled || [])
+      .concat(emp && emp.modulos_extra || [])
+      .concat(map[emp && emp.id] || [])
+      .filter(function(v, i, arr){ return v && arr.indexOf(v) === i; });
+  }
+  function normalizeCompany(emp){
+    if (!emp || typeof emp !== 'object') return emp;
+    var industry = normalizeIndustry(emp.industry_type || emp.tipo_empresa || emp.tipo_industria || emp.tipo_negocio || emp.sector || emp.tipo);
+    emp.industry_type = industry;
+    emp.tipo_empresa = industry;
+    emp.tipo_negocio = industryLabel(industry);
+    emp.tipo = industryLabel(industry);
+    emp.plan = normalizePlan(emp.plan || emp.plan_nombre || emp.subscription_plan);
+    emp.pais = emp.pais || 'Colombia';
+    emp.moneda = emp.moneda || 'COP';
+    emp.timezone = emp.timezone || 'America/Bogota';
+    if (!Array.isArray(emp.features_enabled)) emp.features_enabled = Array.isArray(emp.modulos_extra) ? emp.modulos_extra : [];
+    if (!Array.isArray(emp.modules_enabled)) emp.modules_enabled = [];
+    return emp;
+  }
+  function normalizeCompanies(rows){
+    return (Array.isArray(rows) ? rows : []).map(function(e){ return normalizeCompany(e); });
+  }
+  function isSA(){
+    return !!(window.SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR');
+  }
+  function inSupport(){
+    try { return isSA() && !!sessionStorage.getItem(SUPPORT_KEY); } catch(e) { return false; }
+  }
+  function activeCompany(){
+    var id = '';
+    try { id = inSupport() ? sessionStorage.getItem(SUPPORT_KEY) : (SESSION && SESSION.user && SESSION.user.empresa_id || ''); } catch(e) {}
+    if (!id) return null;
+    var rows = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    return rows.find(function(e){ return e && String(e.id) === String(id); }) || null;
+  }
+  function allowedModules(){
+    if (inSupport()) return SUPPORT_MODULES.slice();
+    if (isSA()) return ['dashboard','empresas','root'];
+    var emp = activeCompany();
+    var plan = normalizePlan((emp && emp.plan) || (SESSION && SESSION.plan) || 'FREE');
+    return (PLAN_MODULES[plan] || PLAN_MODULES.FREE).concat(companyExtras(emp));
+  }
+  function moduleAllowed(page){
+    if (!page) return true;
+    if (inSupport()) return SUPPORT_MODULES.indexOf(page) >= 0;
+    if (isSA()) return ['dashboard','empresas','root'].indexOf(page) >= 0;
+    return allowedModules().indexOf(page) >= 0;
+  }
+  function applyPlanNav(){
+    if (!window.SESSION || !SESSION.user) return;
+    var allowed = allowedModules();
+    Array.prototype.forEach.call(document.querySelectorAll('nav a[id^="nav-"]'), function(a){
+      var id = a.id.replace(/^nav-/, '');
+      a.style.display = allowed.indexOf(id) >= 0 ? '' : 'none';
+    });
+    Object.keys(SECTION_MAP).forEach(function(sec){
+      var el = document.getElementById(sec);
+      if (!el) return;
+      el.style.display = SECTION_MAP[sec].some(function(id){ return allowed.indexOf(id) >= 0; }) ? '' : 'none';
+    });
+    var badge = document.getElementById('plan-badge');
+    if (badge) {
+      var emp = activeCompany();
+      badge.style.display = '';
+      badge.textContent = inSupport() ? normalizePlan(emp && emp.plan) : (isSA() ? 'PLATFORM' : normalizePlan((emp && emp.plan) || SESSION.plan));
+    }
+  }
+
+  var baseLoadEmpresas = typeof loadEmpresas === 'function' ? loadEmpresas : null;
+  if (baseLoadEmpresas) {
+    loadEmpresas = function(){
+      return normalizeCompanies(baseLoadEmpresas.apply(this, arguments));
+    };
+    window.loadEmpresas = loadEmpresas;
+  }
+  var baseSaveEmpresas = typeof saveEmpresas === 'function' ? saveEmpresas : null;
+  if (baseSaveEmpresas) {
+    saveEmpresas = function(rows){
+      return baseSaveEmpresas.call(this, normalizeCompanies(rows));
+    };
+    window.saveEmpresas = saveEmpresas;
+  }
+
+  function persistCurrentCompany(empId){
+    var rows = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    var idx = rows.findIndex(function(e){ return e && String(e.id) === String(empId); });
+    if (idx < 0) return null;
+    var emp = normalizeCompany(rows[idx]);
+    saveEmpresas(rows);
+    fetch('/api/empresas', {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(emp)
+    }).then(function(r){ return r && r.ok ? r.json() : null; })
+      .then(function(res){
+        if (res && res.ok && typeof _syncEmpresasFromAPI === 'function') {
+          _syncEmpresasFromAPI(function(){
+            if (typeof currentPage !== 'undefined' && currentPage === 'empresas' && renders && renders.empresas) renders.empresas();
+            if (typeof currentPage !== 'undefined' && currentPage === 'dashboard' && renders && renders.dashboard) renders.dashboard();
+          });
+        }
+      }).catch(function(){});
+    return emp;
+  }
+
+  var baseEditar = typeof _editarEmpresa === 'function' ? _editarEmpresa : null;
+  if (baseEditar) {
+    _editarEmpresa = function(empId){
+      var rows = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+      var emp = rows.find(function(e){ return e && String(e.id) === String(empId); });
+      if (emp) {
+        normalizeCompany(emp);
+        saveEmpresas(rows);
+      }
+      var out = baseEditar.apply(this, arguments);
+      setTimeout(function(){
+        var selIndustry = document.getElementById('ee-industry');
+        var selPlan = document.getElementById('ee-plan');
+        if (selIndustry && emp) selIndustry.value = emp.industry_type;
+        if (selPlan) {
+          selPlan.innerHTML = '<option value="FREE">FREE</option><option value="PRO">PRO</option><option value="WMS">Empresarial WMS</option>';
+          selPlan.value = normalizePlan((emp && emp.plan) || selPlan.value);
+        }
+      }, 0);
+      return out;
+    };
+    window._editarEmpresa = _editarEmpresa;
+  }
+
+  var baseGuardar = typeof _guardarEdicionEmpresa === 'function' ? _guardarEdicionEmpresa : null;
+  if (baseGuardar) {
+    _guardarEdicionEmpresa = function(empId){
+      var plan = document.getElementById('ee-plan');
+      var ind = document.getElementById('ee-industry');
+      if (plan) plan.value = normalizePlan(plan.value);
+      if (ind) ind.value = normalizeIndustry(ind.value);
+      var out = baseGuardar.apply(this, arguments);
+      var rows = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+      var emp = rows.find(function(e){ return e && String(e.id) === String(empId); });
+      if (emp) {
+        normalizeCompany(emp);
+        saveEmpresas(rows);
+        persistCurrentCompany(empId);
+      }
+      setTimeout(function(){
+        if (typeof currentPage !== 'undefined' && currentPage === 'empresas' && renders && renders.empresas) renders.empresas();
+        applyPlanNav();
+      }, 500);
+      return out;
+    };
+    window._guardarEdicionEmpresa = _guardarEdicionEmpresa;
+  }
+
+  var baseApply = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function(){
+    if (baseApply) baseApply.apply(this, arguments);
+    applyPlanNav();
+    installAnimatedLogo();
+  };
+  window.applyPlanUI = applyPlanUI;
+
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  if (baseGoto) {
+    goto = function(page, param){
+      if (SESSION && SESSION.user && !moduleAllowed(page)) {
+        if (typeof showToast === 'function') showToast('Modulo no habilitado para este plan o usuario', 'amber');
+        page = 'dashboard';
+      }
+      var out = baseGoto.call(this, page, param);
+      try { DB.set('last_page', page); } catch(e) {}
+      setTimeout(function(){ applyPlanNav(); installAnimatedLogo(); }, 0);
+      return out;
+    };
+    window.goto = goto;
+  }
+
+  function touchActivity(){
+    try { localStorage.setItem(ACTIVITY_KEY, String(Date.now())); } catch(e) {}
+  }
+  function sessionFresh(){
+    var last = 0;
+    try { last = Number(localStorage.getItem(ACTIVITY_KEY) || Date.now()); } catch(e) { last = Date.now(); }
+    return Date.now() - last <= SESSION_TTL;
+  }
+  function clearExpiredSession(){
+    try { DB.set('session', null); } catch(e) {}
+    try { localStorage.removeItem(ACTIVITY_KEY); } catch(e) {}
+    if (window.SESSION) {
+      SESSION.user = null;
+      SESSION.empresa = null;
+      SESSION.plan = null;
+    }
+    document.body.classList.remove('app-mode');
+    var lv = document.getElementById('login-view');
+    var av = document.getElementById('app-view');
+    if (lv) lv.classList.remove('hidden');
+    if (av) av.style.display = 'none';
+  }
+  function restoreSessionAfterRefresh(){
+    if (!window.DB || !window.SESSION) return;
+    var saved = null;
+    try { saved = DB.get('session'); } catch(e) {}
+    if (!saved || !saved.user) return;
+    if (!sessionFresh()) {
+      clearExpiredSession();
+      return;
+    }
+    if (!SESSION.user) SESSION.user = saved.user;
+    document.body.classList.add('app-mode');
+    var lv = document.getElementById('login-view');
+    var av = document.getElementById('app-view');
+    if (lv) lv.classList.add('hidden');
+    if (av) av.removeAttribute('style');
+    try { applyRoleUI(); } catch(e) {}
+    try { applyPlanUI(); } catch(e) {}
+    var page = 'dashboard';
+    try { page = DB.get('last_page') || 'dashboard'; } catch(e) {}
+    if (typeof goto === 'function') setTimeout(function(){ goto(moduleAllowed(page) ? page : 'dashboard'); }, 0);
+  }
+  ['click','mousemove','keydown','touchstart','scroll'].forEach(function(evt){
+    document.addEventListener(evt, touchActivity, {passive:true});
+  });
+  var baseCompletar = typeof _completarLogin === 'function' ? _completarLogin : null;
+  if (baseCompletar) {
+    _completarLogin = function(user){
+      touchActivity();
+      var out = baseCompletar.apply(this, arguments);
+      setTimeout(function(){ try { applyPlanUI(); } catch(e) {} }, 0);
+      return out;
+    };
+    window._completarLogin = _completarLogin;
+  }
+  setInterval(function(){
+    if (SESSION && SESSION.user && !sessionFresh()) {
+      if (typeof showToast === 'function') showToast('Sesion cerrada por inactividad', 'amber');
+      clearExpiredSession();
+    }
+  }, 15000);
+
+  function logoVideo(cls){
+    var v = document.createElement('video');
+    v.className = cls || 'sf-logo-video';
+    v.src = LOGO_SRC;
+    v.autoplay = true;
+    v.loop = true;
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.setAttribute('aria-label', 'Logo animado StockFlow');
+    v.addEventListener('click', function(ev){ ev.preventDefault(); ev.stopPropagation(); openAnimatedLogo(); });
+    v.addEventListener('loadeddata', function(){ try { v.play(); } catch(e) {} });
+    return v;
+  }
+  function installAnimatedLogo(){
+    Array.prototype.forEach.call(document.querySelectorAll('.brand-icon'), function(box){
+      if (box.getAttribute('data-sf-video-logo') === '1') return;
+      box.innerHTML = '';
+      box.appendChild(logoVideo('sf-logo-video sf-logo-video-small'));
+      box.setAttribute('data-sf-video-logo','1');
+      box.onclick = openAnimatedLogo;
+      box.title = 'Ver logo StockFlow';
+    });
+    var loginLogo = document.querySelector('#login-view .login-right .card > div:first-child img');
+    if (loginLogo && !loginLogo.closest('[data-sf-login-video-logo]')) {
+      var parent = loginLogo.parentElement;
+      if (parent) {
+        parent.innerHTML = '';
+        parent.appendChild(logoVideo('sf-logo-video sf-logo-video-login'));
+        parent.setAttribute('data-sf-login-video-logo','1');
+        parent.onclick = openAnimatedLogo;
+        parent.title = 'Ver logo StockFlow';
+      }
+    }
+  }
+  function openAnimatedLogo(){
+    var old = document.getElementById('sf-logo-lightbox');
+    if (old) old.remove();
+    var box = document.createElement('div');
+    box.id = 'sf-logo-lightbox';
+    box.innerHTML =
+      '<div class="sf-logo-lightbox-card">' +
+        '<button type="button" class="sf-logo-lightbox-close" aria-label="Cerrar">x</button>' +
+        '<video src="'+esc(LOGO_SRC)+'" autoplay loop muted playsinline controls></video>' +
+      '</div>';
+    box.addEventListener('click', function(ev){ if (ev.target === box) box.remove(); });
+    box.querySelector('button').onclick = function(){ box.remove(); };
+    document.body.appendChild(box);
+  }
+  window.openAnimatedLogo = openAnimatedLogo;
+  window.openLogoModal = openAnimatedLogo;
+
+  var st = document.createElement('style');
+  st.id = 'sf-final-logo-company-session-style';
+  st.textContent =
+    '.sf-logo-video{display:block;width:100%;height:100%;object-fit:cover;object-position:center center;background:#07111f;border:0;cursor:zoom-in}' +
+    '.sf-logo-video-small{width:34px!important;height:34px!important;border-radius:9px!important}' +
+    '.sf-logo-video-login{width:46px!important;height:46px!important;border-radius:12px!important;box-shadow:0 0 18px rgba(0,168,255,.25)}' +
+    '#sf-logo-lightbox{position:fixed;inset:0;z-index:99999;background:rgba(3,7,18,.86);display:flex;align-items:center;justify-content:center;padding:24px}' +
+    '#sf-logo-lightbox .sf-logo-lightbox-card{position:relative;max-width:min(92vw,1080px);max-height:92vh;border-radius:24px;overflow:hidden;background:#07111f;border:1px solid rgba(0,168,255,.35);box-shadow:0 30px 90px rgba(0,0,0,.5)}' +
+    '#sf-logo-lightbox video{display:block;width:min(92vw,1080px);height:min(92vw,1080px);max-height:92vh;object-fit:cover;object-position:center center;background:#07111f}' +
+    '#sf-logo-lightbox .sf-logo-lightbox-close{position:absolute;right:12px;top:12px;z-index:2;width:34px;height:34px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(7,17,31,.78);color:#fff;font-weight:900;cursor:pointer}' +
+    'body:not(.sf-platform-admin) #nav-root,body:not(.sf-platform-admin) #nav-empresas,body:not(.sf-platform-admin) #nav-centro-pruebas,body:not(.sf-platform-admin) #nav-salud-sistema{display:none!important}';
+  document.head.appendChild(st);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function(){ restoreSessionAfterRefresh(); installAnimatedLogo(); applyPlanNav(); });
+  } else {
+    setTimeout(function(){ restoreSessionAfterRefresh(); installAnimatedLogo(); applyPlanNav(); }, 0);
+  }
+  if (window.MutationObserver && !window._sfLogoObserver) {
+    window._sfLogoObserver = new MutationObserver(function(){ installAnimatedLogo(); });
+    window._sfLogoObserver.observe(document.body, {childList:true, subtree:true});
+  }
+})();
+</script>
+<script>
 /* Login final: 2FA auto y fondo StockFlow completo */
 (function(){
   var verifying2FA = false;
