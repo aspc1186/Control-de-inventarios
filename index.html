@@ -22696,6 +22696,109 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
   }, 0);
 })();
 </script>
+<script>
+/* Correccion visual final: soporte SA siempre arriba del modulo, nunca abajo */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+
+  function isSA(){
+    return !!(window.SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR');
+  }
+  function supportId(){
+    try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) { return ''; }
+  }
+  function esc(v){
+    return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function supportEmpresa(){
+    var id = supportId();
+    var rows = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    return rows.find(function(e){ return e && e.id === id; }) || null;
+  }
+  function visiblePage(){
+    var pages = Array.prototype.slice.call(document.querySelectorAll('[id^="pg-"]'));
+    return pages.find(function(pg){
+      var cs = window.getComputedStyle(pg);
+      return cs.display !== 'none' && cs.visibility !== 'hidden';
+    }) || document.querySelector('.page-inner') || document.body;
+  }
+  function installStyle(){
+    if (document.getElementById('sf-support-top-style')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-support-top-style';
+    st.textContent =
+      '.sidebar #sf-support-banner,.sidebar #sf-support-banner-top,.sidebar [data-support-banner="1"]{display:none!important}' +
+      '#sf-support-banner-top{width:100%!important;margin:0 0 14px 0!important;padding:11px 16px!important;border:1px solid rgba(245,158,11,.72)!important;border-radius:8px!important;background:linear-gradient(90deg,rgba(255,247,237,.96),rgba(254,243,199,.92))!important;color:#78350f!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:14px!important;box-sizing:border-box!important;min-height:58px!important;box-shadow:0 10px 24px rgba(0,0,0,.08)!important}' +
+      '[data-theme="dark"] #sf-support-banner-top,body:not([data-theme]) #sf-support-banner-top{background:linear-gradient(90deg,rgba(15,23,42,.96),rgba(30,41,59,.93))!important;color:#fff7ed!important}' +
+      '#sf-support-banner-top strong{display:block!important;color:inherit!important;font-size:14px!important;line-height:1.2!important}' +
+      '#sf-support-banner-top span{display:block!important;color:#b45309!important;font-size:12px!important;line-height:1.25!important}' +
+      '[data-theme="dark"] #sf-support-banner-top span,body:not([data-theme]) #sf-support-banner-top span{color:#fde68a!important}' +
+      '#sf-support-banner-top button{background:#ffffff!important;color:#0f172a!important;border:1px solid rgba(15,23,42,.18)!important;border-radius:8px!important;padding:8px 16px!important;font-weight:800!important;white-space:nowrap!important}' +
+      '[data-theme="dark"] #sf-support-banner-top button,body:not([data-theme]) #sf-support-banner-top button{background:rgba(255,255,255,.12)!important;color:#fff!important;border-color:rgba(255,255,255,.25)!important}';
+    document.head.appendChild(st);
+  }
+  function removeOldSupportBlocks(){
+    Array.prototype.slice.call(document.querySelectorAll('#sf-support-banner')).forEach(function(b){ b.remove(); });
+    Array.prototype.slice.call(document.querySelectorAll('.sidebar [data-support-banner="1"], .sidebar #sf-support-banner-top')).forEach(function(b){ b.remove(); });
+  }
+  function renderTopSupport(){
+    installStyle();
+    removeOldSupportBlocks();
+    var existing = document.getElementById('sf-support-banner-top');
+    if (!isSA() || !supportId()) {
+      if (existing) existing.remove();
+      return;
+    }
+    var pg = visiblePage();
+    if (!pg) return;
+    var banner = existing || document.createElement('div');
+    banner.id = 'sf-support-banner-top';
+    banner.setAttribute('data-support-banner', '1');
+    var emp = supportEmpresa();
+    banner.innerHTML =
+      '<div style="display:flex;align-items:center;gap:12px;min-width:0">' +
+        '<span style="font-size:20px;color:#d97706!important;line-height:1;flex-shrink:0">▣</span>' +
+        '<div style="min-width:0">' +
+          '<strong>Modo de soporte de superadministrador</strong>' +
+          '<span>Estas corrigiendo los datos de '+esc(emp && emp.nombre || 'empresa cliente')+'. Los cambios afectan a esta empresa.</span>' +
+        '</div>' +
+      '</div>' +
+      '<button type="button" onclick="_volverSuperadmin&&_volverSuperadmin()">Volver a superadmin</button>';
+    if (banner.parentNode !== pg) pg.insertBefore(banner, pg.firstChild);
+    else if (pg.firstElementChild !== banner) pg.insertBefore(banner, pg.firstChild);
+  }
+
+  var baseApply = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function(){
+    if (baseApply) baseApply();
+    renderTopSupport();
+  };
+  window.applyPlanUI = applyPlanUI;
+
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  goto = function(page, param){
+    var out = baseGoto ? baseGoto(page, param) : undefined;
+    setTimeout(renderTopSupport, 0);
+    setTimeout(renderTopSupport, 250);
+    return out;
+  };
+  window.goto = goto;
+
+  var baseVolver = window._volverSuperadmin;
+  if (baseVolver) {
+    window._volverSuperadmin = function(){
+      var out = baseVolver.apply(this, arguments);
+      setTimeout(renderTopSupport, 0);
+      return out;
+    };
+  }
+
+  setInterval(renderTopSupport, 700);
+  setTimeout(renderTopSupport, 0);
+})();
+</script>
 <style id="sf-stockflow-login-theme">
 /* StockFlow branded login and 2FA shell */
 #login-view {
