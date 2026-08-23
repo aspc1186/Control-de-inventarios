@@ -22812,6 +22812,174 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
   setTimeout(renderTopSupport, 0);
 })();
 </script>
+<script>
+/* Aislamiento final modo soporte: cliente, modulos y acciones visibles */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var CLIENT_MODULES = [
+    'dashboard','inventario','compras','pedidos','comercial','proveedores','clientes','logistica',
+    'ubicaciones','generar-qr','escaner','movimientos','traslados','reportes','ciclicos',
+    'conciliacion','auditoria','usuarios','integraciones','respaldos','picking','packing'
+  ];
+  var SA_ONLY = ['root','empresas','centro-pruebas','salud-sistema','gerencial','soporte'];
+
+  function esc(v){
+    return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function isSA(){
+    return !!(window.SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR');
+  }
+  function supportId(){
+    try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) { return ''; }
+  }
+  function inSupport(){
+    return isSA() && !!supportId();
+  }
+  function supportEmpresa(){
+    var id = supportId();
+    var rows = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    return rows.find(function(e){ return e && e.id === id; }) || null;
+  }
+  function scopedRows(key){
+    var id = supportId();
+    var rows = [];
+    try { rows = DB.get(key) || []; } catch(e) {}
+    if (!Array.isArray(rows)) return [];
+    return rows.filter(function(r){ return r && String(r.empresa_id || '') === String(id); });
+  }
+  function money(v){
+    return '$' + Number(v || 0).toLocaleString('es-CO', { maximumFractionDigits:0 });
+  }
+  function renderSupportDashboard(){
+    var pg = document.getElementById('pg-dashboard');
+    if (!pg || !inSupport()) return false;
+    var emp = supportEmpresa();
+    var items = scopedRows('articulos');
+    var compras = scopedRows('compras');
+    var movimientos = scopedRows('movimientos');
+    var proveedores = scopedRows('proveedores');
+    var agotados = items.filter(function(i){ return Number(i.stock || i.actual || 0) <= 0; }).length;
+    var criticos = items.filter(function(i){
+      var stock = Number(i.stock || i.actual || 0);
+      var min = Number(i.stock_minimo || i.minimo || i.min || 0);
+      return stock > 0 && min > 0 && stock <= min;
+    }).length;
+    var valor = items.reduce(function(n,i){ return n + Number(i.stock || i.actual || 0) * Number(i.costo || i.precio || 0); }, 0);
+    var abiertas = compras.filter(function(c){ return ['BORRADOR','EN PROCESO','APROBADA'].indexOf(String(c.estado || '').toUpperCase()) >= 0; }).length;
+    var recientes = movimientos.slice(-8).reverse();
+    pg.innerHTML =
+      '<div class="sf-sa-wrap">' +
+        '<div class="sf-sa-head"><div><h1 class="sf-sa-title">Dashboard cliente</h1><div class="sf-sa-sub">'+esc(emp && emp.nombre || 'Empresa cliente')+' · Modo soporte de superadministrador</div></div><button class="btn btn-ghost" onclick="_volverSuperadmin&&_volverSuperadmin()">Volver a superadmin</button></div>' +
+        '<div class="sf-sa-kpis">' +
+          '<div class="sf-sa-kpi"><div class="sf-sa-icon">I</div><div><div class="sf-sa-value">'+items.length+'</div><div class="sf-sa-label">Referencias cliente</div></div></div>' +
+          '<div class="sf-sa-kpi"><div class="sf-sa-icon" style="background:#7f1d1d;color:#fecaca">!</div><div><div class="sf-sa-value">'+agotados+'</div><div class="sf-sa-label">Agotados</div></div></div>' +
+          '<div class="sf-sa-kpi"><div class="sf-sa-icon" style="background:#78350f;color:#fde68a">C</div><div><div class="sf-sa-value">'+criticos+'</div><div class="sf-sa-label">Criticos</div></div></div>' +
+          '<div class="sf-sa-kpi"><div class="sf-sa-icon" style="background:#064e3b;color:#86efac">$</div><div><div class="sf-sa-value" style="font-size:18px">'+money(valor)+'</div><div class="sf-sa-label">Valor inventario</div></div></div>' +
+          '<div class="sf-sa-kpi"><div class="sf-sa-icon">OC</div><div><div class="sf-sa-value">'+abiertas+'</div><div class="sf-sa-label">OC abiertas</div></div></div>' +
+          '<div class="sf-sa-kpi"><div class="sf-sa-icon">P</div><div><div class="sf-sa-value">'+proveedores.length+'</div><div class="sf-sa-label">Proveedores cliente</div></div></div>' +
+        '</div>' +
+        '<div class="sf-sa-panel"><div class="sf-sa-panel-title">Movimientos recientes del cliente</div><div style="overflow:auto"><table class="sf-sa-table"><thead><tr><th>Fecha</th><th>Tipo</th><th>Codigo</th><th>Producto</th><th>Cantidad</th></tr></thead><tbody>' +
+          (recientes.length ? recientes.map(function(m){ return '<tr><td>'+esc(m.fecha || m.created_at || '')+'</td><td>'+esc(m.tipo || '')+'</td><td>'+esc(m.sku || m.codigo || '')+'</td><td>'+esc(m.articulo || m.producto || m.nombre || '')+'</td><td>'+esc(m.cantidad || '')+'</td></tr>'; }).join('') : '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:22px">Sin movimientos registrados para esta empresa.</td></tr>') +
+        '</tbody></table></div></div>' +
+      '</div>';
+    return true;
+  }
+  function applySupportNav(){
+    if (!inSupport()) return;
+    document.body.classList.remove('sf-platform-admin');
+    var brand = document.querySelector('.brand-name');
+    var sub = document.querySelector('.brand-sub');
+    if (brand) brand.textContent = 'StockFlow';
+    if (sub) sub.textContent = 'Inventarios que fluyen contigo';
+    Array.prototype.forEach.call(document.querySelectorAll('nav a[id^="nav-"]'), function(a){
+      var id = a.id.replace(/^nav-/, '');
+      a.style.display = CLIENT_MODULES.indexOf(id) >= 0 ? '' : 'none';
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.nav-section'), function(s){ s.style.display = ''; });
+    SA_ONLY.forEach(function(id){
+      var el = document.getElementById('nav-' + id);
+      if (el) el.style.display = 'none';
+    });
+  }
+  function fixCompanyActionEyes(){
+    Array.prototype.forEach.call(document.querySelectorAll('.sf-sa-ico'), function(btn){
+      var title = String(btn.getAttribute('title') || '').toLowerCase();
+      if (title.indexOf('ver empresa') >= 0 || title.indexOf('abrir modo soporte') >= 0) {
+        btn.innerHTML = '👁';
+        btn.setAttribute('aria-label', 'Ver empresa');
+        btn.style.fontSize = '14px';
+      }
+    });
+  }
+  function installStyle(){
+    if (document.getElementById('sf-support-isolation-style')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-support-isolation-style';
+    st.textContent =
+      '.sf-sa-ico[title*="Ver"],.sf-sa-ico[title*="Abrir"]{font-size:14px!important;line-height:1!important}' +
+      'body:not(.sf-platform-admin) #nav-root,body:not(.sf-platform-admin) #nav-empresas{display:none!important}';
+    document.head.appendChild(st);
+  }
+
+  var baseApply = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function(){
+    if (baseApply) baseApply();
+    installStyle();
+    applySupportNav();
+    fixCompanyActionEyes();
+  };
+  window.applyPlanUI = applyPlanUI;
+
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  goto = function(page, param){
+    if (inSupport() && SA_ONLY.indexOf(page) >= 0) page = 'dashboard';
+    var out = baseGoto ? baseGoto(page, param) : undefined;
+    setTimeout(function(){
+      installStyle();
+      applySupportNav();
+      fixCompanyActionEyes();
+      if (page === 'dashboard') renderSupportDashboard();
+    }, 0);
+    return out;
+  };
+  window.goto = goto;
+
+  if (window.renders) {
+    var oldDashboard = renders.dashboard;
+    renders.dashboard = function(){
+      if (renderSupportDashboard()) return;
+      return oldDashboard ? oldDashboard.apply(this, arguments) : undefined;
+    };
+    var oldEmpresas = renders.empresas;
+    renders.empresas = function(){
+      if (inSupport()) return renderSupportDashboard();
+      var out = oldEmpresas ? oldEmpresas.apply(this, arguments) : undefined;
+      setTimeout(fixCompanyActionEyes, 0);
+      return out;
+    };
+    var oldRoot = renders.root;
+    renders.root = function(){
+      if (inSupport()) return renderSupportDashboard();
+      var out = oldRoot ? oldRoot.apply(this, arguments) : undefined;
+      setTimeout(fixCompanyActionEyes, 0);
+      return out;
+    };
+  }
+
+  setInterval(function(){
+    if (inSupport()) applySupportNav();
+    fixCompanyActionEyes();
+  }, 700);
+  setTimeout(function(){
+    installStyle();
+    applySupportNav();
+    fixCompanyActionEyes();
+    if (inSupport() && currentPage === 'dashboard') renderSupportDashboard();
+  }, 0);
+})();
+</script>
 <style id="sf-stockflow-login-theme">
 /* StockFlow branded login and 2FA shell */
 #login-view {
