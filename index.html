@@ -10226,9 +10226,9 @@ function _clearProvFiltros() {
 function _provEstado(p) {
   var raw = (p && p.estado) ? String(p.estado) : 'Activo';
   var low = raw.toLowerCase();
-  if (low === 'activo') return 'Activo';
-  if (low === 'inactivo') return 'Inactivo';
-  if (low === 'bloqueado') return 'Bloqueado';
+  if (low === 'activo' || low === 'activa' || low === 'active') return 'Activo';
+  if (low === 'inactivo' || low === 'inactiva' || low === 'inactive') return 'Inactivo';
+  if (low === 'bloqueado' || low === 'bloqueada' || low === 'blocked') return 'Bloqueado';
   return raw;
 }
 
@@ -10909,6 +10909,8 @@ function _ejecutarImportacionProveedores() {
   if (!valid.length) return;
 
   var provs    = loadProveedores();
+  var eidImportProv = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
+  var targetEmpresaProv = eidImportProv && eidImportProv !== '__SA__' ? String(eidImportProv) : null;
 
   // ── PASO 1: Separar manuales (conservar siempre) ─────────────────────
   var manuales  = provs.filter(function(p){
@@ -10939,7 +10941,7 @@ function _ejecutarImportacionProveedores() {
 
     // Generate fresh ID for each imported record
     cleanP.id = 'prov-imp-' + Date.now() + '-' + i;
-    cleanP.empresa_id = typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : (cleanP.empresa_id || null);
+    cleanP.empresa_id = targetEmpresaProv || (cleanP.empresa_id || null);
 
     // Skip if NIT already seen in this file (intra-file duplicate)
     if (cleanP.nit && nitVistos[cleanP.nit.trim()]) return;
@@ -10949,6 +10951,21 @@ function _ejecutarImportacionProveedores() {
     creados++;
   });
 
+  // ── PASO 3.1: Si esos NIT quedaron marcados como eliminados antes,
+  // reactivarlos para que la vista no los oculte después de importar.
+  try {
+    var deletedProv = DB.get('sf_deleted_proveedores') || [];
+    var importedNit = {};
+    nuevosProvs.forEach(function(p){
+      if (p && p.origen_registro === 'IMPORTADO' && p.nit) importedNit[String(p.nit).trim().toLowerCase()] = true;
+    });
+    DB.set('sf_deleted_proveedores', deletedProv.filter(function(d){
+      var nit = String(d && d.nit || '').trim().toLowerCase();
+      var sameEmpresa = !targetEmpresaProv || !d || !d.empresa_id || String(d.empresa_id) === targetEmpresaProv;
+      return !(nit && importedNit[nit] && sameEmpresa);
+    }));
+  } catch(e) {}
+
   // ── PASO 4: Guardar en localStorage ──────────────────────────────────
   saveProveedores(nuevosProvs);
 
@@ -10957,7 +10974,6 @@ function _ejecutarImportacionProveedores() {
   var importadosParaNeon = nuevosProvs.filter(function(p){
     return p.origen_registro === 'IMPORTADO';
   });
-  var eidImportProv = typeof _getEmpresaId === 'function' ? _getEmpresaId() : null;
   var urlImportProv = '/api/proveedores' + (eidImportProv && eidImportProv !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eidImportProv) : '');
   fetch(urlImportProv, {
     method: 'POST',
@@ -10968,7 +10984,13 @@ function _ejecutarImportacionProveedores() {
       if (!res || res.ok === false) throw new Error((res && res.error) || 'No se pudo sincronizar proveedores');
       console.log('Neon sync:', res.inserted, 'inserted');
       if (typeof _syncProveedoresFromAPI === 'function') {
-        _syncProveedoresFromAPI(function(){ try { if (renders && renders.proveedores) renders.proveedores(); } catch(e) {} });
+        _syncProveedoresFromAPI(function(){
+          try {
+            var actual = typeof loadProveedores === 'function' ? loadProveedores() : [];
+            if (!actual.length && importadosParaNeon.length) saveProveedores(manuales.concat(importadosParaNeon));
+            if (renders && renders.proveedores) renders.proveedores();
+          } catch(e) {}
+        });
       }
       showToast('Proveedores sincronizados en la nube: ' + (res.count || creados), 'green');
     })
