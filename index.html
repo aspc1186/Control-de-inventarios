@@ -23475,6 +23475,12 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
     return Date.now() - last <= SESSION_TTL;
   }
   function clearExpiredSession(){
+    try {
+      if (SESSION && SESSION.user && typeof _requiere2FA === 'function' && typeof _is2FAEnabled === 'function' && _requiere2FA(SESSION.user.rol) && _is2FAEnabled(SESSION.user.username)) {
+        localStorage.setItem('sf_2fa_resume_user', JSON.stringify(SESSION.user));
+        localStorage.setItem('sf_2fa_resume_at', String(Date.now()));
+      }
+    } catch(e) {}
     try { DB.set('session', null); } catch(e) {}
     try { localStorage.removeItem(ACTIVITY_KEY); } catch(e) {}
     if (window.SESSION) {
@@ -23487,6 +23493,15 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
     var av = document.getElementById('app-view');
     if (lv) lv.classList.remove('hidden');
     if (av) av.style.display = 'none';
+    setTimeout(function(){
+      try {
+        var raw = localStorage.getItem('sf_2fa_resume_user');
+        var ts = Number(localStorage.getItem('sf_2fa_resume_at') || 0);
+        if (raw && Date.now() - ts <= SESSION_TTL && typeof _iniciar2FALogin === 'function') {
+          _iniciar2FALogin(JSON.parse(raw));
+        }
+      } catch(e) {}
+    }, 120);
   }
   function restoreSessionAfterRefresh(){
     if (!window.DB || !window.SESSION) return;
@@ -23880,13 +23895,55 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
         var input = document.getElementById('twofa-code');
         if (!input) return;
         input.setAttribute('inputmode', 'numeric');
-        input.setAttribute('autocomplete', 'one-time-code');
+        input.setAttribute('autocomplete', 'off');
+        input.value = '';
+        input.defaultValue = '';
+        input.placeholder = '000000';
         input.oninput = function(){ window._sfAutoVerify2FA(this); };
         input.onpaste = function(){ var el = this; setTimeout(function(){ window._sfAutoVerify2FA(el); }, 0); };
       }, 120);
       return out;
     };
     window._iniciar2FALogin = _iniciar2FALogin;
+  }
+  var baseVerify2FA = typeof _verificar2FA === 'function' ? _verificar2FA : null;
+  if (baseVerify2FA) {
+    _verificar2FA = function(){
+      var before = !!(window._pending2FAUser);
+      var out = baseVerify2FA.apply(this, arguments);
+      setTimeout(function(){
+        try {
+          if (before && window.SESSION && SESSION.user) {
+            localStorage.removeItem('sf_2fa_resume_user');
+            localStorage.removeItem('sf_2fa_resume_at');
+          }
+        } catch(e) {}
+      }, 50);
+      return out;
+    };
+    window._verificar2FA = _verificar2FA;
+  }
+  var baseCancel2FA = typeof _cancelar2FA === 'function' ? _cancelar2FA : null;
+  if (baseCancel2FA) {
+    _cancelar2FA = function(){
+      try {
+        localStorage.removeItem('sf_2fa_resume_user');
+        localStorage.removeItem('sf_2fa_resume_at');
+      } catch(e) {}
+      return baseCancel2FA.apply(this, arguments);
+    };
+    window._cancelar2FA = _cancelar2FA;
+  }
+  var baseLogoutFinal2FA = typeof logout === 'function' ? logout : null;
+  if (baseLogoutFinal2FA) {
+    logout = function(){
+      try {
+        localStorage.removeItem('sf_2fa_resume_user');
+        localStorage.removeItem('sf_2fa_resume_at');
+      } catch(e) {}
+      return baseLogoutFinal2FA.apply(this, arguments);
+    };
+    window.logout = logout;
   }
 })();
 </script>
