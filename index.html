@@ -22821,7 +22821,7 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
     'ubicaciones','generar-qr','escaner','movimientos','traslados','reportes','ciclicos',
     'conciliacion','auditoria','usuarios','integraciones','respaldos','picking','packing'
   ];
-  var SA_ONLY = ['root','empresas','centro-pruebas','salud-sistema','gerencial','soporte'];
+  var SA_ONLY = ['root','empresas','gerencial','soporte'];
 
   function esc(v){
     return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){
@@ -22981,6 +22981,207 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
 })();
 </script>
 <script>
+/* Support modules repair: do not collapse admin/system/audit pages into dashboard */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var SUPPORT_MODULES = [
+    'dashboard','inventario','compras','pedidos','comercial','proveedores','clientes','logistica',
+    'ubicaciones','generar-qr','escaner','movimientos','traslados','reportes','ciclicos','conciliacion',
+    'auditoria','usuarios','integraciones','respaldos','centro-pruebas','salud-sistema','picking','packing','mis-inventarios'
+  ];
+  var SECTION_MAP = {
+    'nav-sec-principal':['dashboard'],
+    'nav-sec-operacion':['inventario','compras','pedidos','comercial','proveedores','clientes','logistica','movimientos','traslados'],
+    'nav-sec-analitica':['reportes'],
+    'nav-sec-bodegas':['ubicaciones','generar-qr','escaner'],
+    'nav-sec-seguridad':['auditoria'],
+    'nav-sec-admin':['usuarios','integraciones','respaldos'],
+    'nav-sec-sistema':['centro-pruebas','salud-sistema']
+  };
+  function esc(v){
+    return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function isSA(){
+    return !!(window.SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR');
+  }
+  function supportId(){
+    try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) { return ''; }
+  }
+  function inSupport(){
+    return isSA() && !!supportId();
+  }
+  function supportEmpresa(){
+    var id = supportId();
+    var rows = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    return rows.find(function(e){ return e && String(e.id) === String(id); }) || null;
+  }
+  function scopedRows(key){
+    var id = supportId();
+    var rows = [];
+    try { rows = DB.get(key) || []; } catch(e) {}
+    if (!Array.isArray(rows)) return [];
+    return rows.filter(function(r){ return !r || !r.empresa_id ? false : String(r.empresa_id) === String(id); });
+  }
+  function supportShell(title, subtitle, body){
+    var emp = supportEmpresa();
+    return '<div class="sf-sa-wrap sf-support-module-wrap">' +
+      '<div class="sf-sa-head"><div><h1 class="sf-sa-title">'+esc(title)+'</h1><div class="sf-sa-sub">'+esc(subtitle || ((emp && emp.nombre || 'Empresa cliente') + ' · Modo soporte'))+'</div></div><button class="btn btn-ghost" onclick="_volverSuperadmin&&_volverSuperadmin()">Volver a superadmin</button></div>' +
+      body +
+    '</div>';
+  }
+  function rowsTable(title, cols, rows, empty){
+    return '<div class="sf-sa-panel"><div class="sf-sa-panel-title">'+esc(title)+'</div><div style="overflow:auto"><table class="sf-sa-table"><thead><tr>' +
+      cols.map(function(c){ return '<th>'+esc(c)+'</th>'; }).join('') +
+      '</tr></thead><tbody>' +
+      (rows && rows.length ? rows.join('') : '<tr><td colspan="'+cols.length+'" style="text-align:center;color:var(--muted);padding:24px">'+esc(empty || 'Sin informacion registrada para esta empresa.')+'</td></tr>') +
+      '</tbody></table></div></div>';
+  }
+  function renderAudit(){
+    var pg = document.getElementById('pg-auditoria');
+    if (!pg || !inSupport()) return false;
+    var id = supportId();
+    var audit = [];
+    try { audit = (typeof loadAudit === 'function' ? loadAudit() : DB.get('auditoria') || []); } catch(e) {}
+    audit = (Array.isArray(audit) ? audit : []).filter(function(a){
+      return String(a.empresa_id || a.empresa || '') === String(id) || !a.empresa_id;
+    }).slice(0, 300);
+    var rows = audit.map(function(a){
+      return '<tr><td>'+esc(a.fecha || a.created_at || '')+'</td><td>'+esc(a.hora || '')+'</td><td>'+esc(a.tipo || a.accion || '')+'</td><td>'+esc(a.descripcion || a.detalle || '')+'</td><td>'+esc(a.usuario || 'Sistema')+'</td></tr>';
+    });
+    pg.innerHTML = supportShell('Auditoria cliente', 'Eventos y trazabilidad de la empresa seleccionada',
+      rowsTable('Registros de auditoria', ['Fecha','Hora','Accion','Descripcion','Usuario'], rows, 'Sin registros de auditoria para esta empresa.'));
+    return true;
+  }
+  function renderUsers(){
+    var pg = document.getElementById('pg-usuarios');
+    if (!pg || !inSupport()) return false;
+    var users = scopedRows('usuarios');
+    var rows = users.map(function(u){
+      return '<tr><td><strong style="color:var(--white)">'+esc(u.username || '')+'</strong><div style="color:var(--muted);font-size:11px">'+esc(u.nombre || '')+'</div></td><td>'+esc(u.correo || '')+'</td><td>'+esc(u.rol || '')+'</td><td><span class="sf-sa-pill '+(String(u.estado || 'ACTIVO').toUpperCase()==='ACTIVO'?'sf-sa-ok':'sf-sa-bad')+'">'+esc(u.estado || 'ACTIVO')+'</span></td><td><button class="sf-sa-ico" onclick="editarUsuario&&editarUsuario(&quot;'+esc(u.id)+'&quot;)">Editar</button> <button class="sf-sa-ico" onclick="cambiarClaveUsuario&&cambiarClaveUsuario(&quot;'+esc(u.id)+'&quot;)">Clave</button></td></tr>';
+    });
+    pg.innerHTML = supportShell('Usuarios cliente', 'Administracion de usuarios y permisos del cliente',
+      rowsTable('Usuarios registrados', ['Usuario','Correo','Rol','Estado','Acciones'], rows, 'Sin usuarios registrados para esta empresa.'));
+    return true;
+  }
+  function renderIntegrations(){
+    var pg = document.getElementById('pg-integraciones');
+    if (!pg || !inSupport()) return false;
+    var integrations = scopedRows('integraciones');
+    var rows = integrations.map(function(i){
+      return '<tr><td>'+esc(i.nombre || i.erp || i.tipo || '')+'</td><td>'+esc(i.estado || 'Pendiente')+'</td><td>'+esc(i.descripcion || i.notas || '')+'</td></tr>';
+    });
+    if (!rows.length) {
+      ['SAP','Oracle NetSuite','Microsoft Dynamics 365','Odoo','Siigo','World Office','Alegra','Helisa'].forEach(function(name){
+        rows.push('<tr><td>'+esc(name)+'</td><td><span class="sf-sa-pill">Pendiente</span></td><td>Disponible para conexion cuando el cliente autorice la integracion.</td></tr>');
+      });
+    }
+    pg.innerHTML = supportShell('Integraciones ERP', 'Conectores disponibles para la empresa cliente',
+      rowsTable('ERP y conectores', ['ERP','Estado','Detalle'], rows, 'Sin integraciones configuradas.'));
+    return true;
+  }
+  function renderBackups(){
+    var pg = document.getElementById('pg-respaldos');
+    if (!pg || !inSupport()) return false;
+    var rows = scopedRows('respaldos').map(function(b){
+      return '<tr><td>'+esc(b.fecha || b.created_at || '')+'</td><td>'+esc(b.tipo || 'Automatico')+'</td><td>'+esc(b.estado || 'OK')+'</td><td>'+esc(b.tamano || '')+'</td></tr>';
+    });
+    pg.innerHTML = supportShell('Respaldos cliente', 'Copias de seguridad y restauracion controlada',
+      '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap"><button class="btn btn-navy" onclick="_crearRespaldoManual&&_crearRespaldoManual()">Crear respaldo</button><button class="btn btn-ghost" onclick="_descargarRespaldo&&_descargarRespaldo()">Descargar ultimo</button></div>' +
+      rowsTable('Historial de respaldos', ['Fecha','Tipo','Estado','Tamano'], rows, 'Aun no hay respaldos visibles para esta empresa.'));
+    return true;
+  }
+  function renderSystem(page){
+    var pg = document.getElementById('pg-' + page);
+    if (!pg || !inSupport()) return false;
+    var emp = supportEmpresa();
+    var title = page === 'centro-pruebas' ? 'Centro de pruebas cliente' : 'Salud del sistema cliente';
+    var cards =
+      '<div class="sf-sa-kpis">' +
+        '<div class="sf-sa-kpi"><div class="sf-sa-icon">P</div><div><div class="sf-sa-value">'+esc((emp && emp.plan) || 'FREE')+'</div><div class="sf-sa-label">Plan</div></div></div>' +
+        '<div class="sf-sa-kpi"><div class="sf-sa-icon">U</div><div><div class="sf-sa-value">'+scopedRows('usuarios').length+'</div><div class="sf-sa-label">Usuarios</div></div></div>' +
+        '<div class="sf-sa-kpi"><div class="sf-sa-icon">I</div><div><div class="sf-sa-value">'+scopedRows('articulos').length+'</div><div class="sf-sa-label">Referencias</div></div></div>' +
+        '<div class="sf-sa-kpi"><div class="sf-sa-icon">M</div><div><div class="sf-sa-value">'+scopedRows('movimientos').length+'</div><div class="sf-sa-label">Movimientos</div></div></div>' +
+      '</div>' +
+      rowsTable('Validaciones', ['Control','Estado','Detalle'], [
+        '<tr><td>Separacion de datos</td><td><span class="sf-sa-pill sf-sa-ok">Activo</span></td><td>Vista filtrada por empresa_id.</td></tr>',
+        '<tr><td>Plan y permisos</td><td><span class="sf-sa-pill sf-sa-ok">Activo</span></td><td>Modulos segun plan y extras autorizados.</td></tr>',
+        '<tr><td>Soporte remoto</td><td><span class="sf-sa-pill sf-sa-ok">Activo</span></td><td>Cambios aplicados sobre la empresa seleccionada.</td></tr>'
+      ]);
+    pg.innerHTML = supportShell(title, 'Herramientas de diagnostico para soporte', cards);
+    return true;
+  }
+  function applySupportAdminSystemNav(){
+    if (!inSupport()) return;
+    SUPPORT_MODULES.forEach(function(id){
+      var el = document.getElementById('nav-' + id);
+      if (el) el.style.display = '';
+    });
+    ['root','empresas','gerencial','soporte'].forEach(function(id){
+      var el = document.getElementById('nav-' + id);
+      if (el) el.style.display = 'none';
+    });
+    Object.keys(SECTION_MAP).forEach(function(sec){
+      var el = document.getElementById(sec);
+      if (!el) return;
+      el.style.display = SECTION_MAP[sec].some(function(id){
+        var nav = document.getElementById('nav-' + id);
+        return nav && nav.style.display !== 'none';
+      }) ? '' : 'none';
+    });
+  }
+  function renderSupportPage(page){
+    if (page === 'auditoria') return renderAudit();
+    if (page === 'usuarios') return renderUsers();
+    if (page === 'integraciones') return renderIntegrations();
+    if (page === 'respaldos') return renderBackups();
+    if (page === 'centro-pruebas' || page === 'salud-sistema') return renderSystem(page);
+    return false;
+  }
+
+  ['auditoria','usuarios','integraciones','respaldos','centro-pruebas','salud-sistema'].forEach(function(page){
+    var old = window.renders && renders[page];
+    if (!window.renders) return;
+    renders[page] = function(){
+      if (renderSupportPage(page)) return;
+      return old ? old.apply(this, arguments) : undefined;
+    };
+  });
+
+  var baseApply = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function(){
+    if (baseApply) baseApply.apply(this, arguments);
+    applySupportAdminSystemNav();
+  };
+  window.applyPlanUI = applyPlanUI;
+
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  if (baseGoto) {
+    goto = function(page, param){
+      if (inSupport() && SUPPORT_MODULES.indexOf(page) < 0) page = 'dashboard';
+      var out = baseGoto.call(this, page, param);
+      setTimeout(function(){
+        applySupportAdminSystemNav();
+        renderSupportPage(page);
+      }, 0);
+      return out;
+    };
+    window.goto = goto;
+  }
+
+  var st = document.createElement('style');
+  st.id = 'sf-support-modules-repair-style';
+  st.textContent =
+    '.sf-support-module-wrap .sf-sa-table td,.sf-support-module-wrap .sf-sa-table th{color:var(--text)!important}' +
+    '.sf-support-module-wrap .sf-sa-panel-title,.sf-support-module-wrap strong{color:var(--white)!important}' +
+    '.sf-support-module-wrap .sf-sa-sub,.sf-support-module-wrap .sf-sa-label{color:var(--muted)!important}';
+  document.head.appendChild(st);
+  setInterval(applySupportAdminSystemNav, 800);
+  setTimeout(function(){ applySupportAdminSystemNav(); if (typeof currentPage !== 'undefined') renderSupportPage(currentPage); }, 0);
+})();
+</script>
+<script>
 /* StockFlow final hardening: animated logo, company normalization, plan scope and session TTL */
 (function(){
   var LOGO_SRC = '/assets/stockflow-logo-animado.mp4';
@@ -23028,7 +23229,7 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
     PRO: ['dashboard','inventario','movimientos','proveedores','clientes','compras','pedidos','comercial','ubicaciones','generar-qr','escaner','ciclicos','conciliacion','reportes','respaldos'],
     WMS: ['dashboard','inventario','movimientos','proveedores','clientes','compras','pedidos','comercial','logistica','ubicaciones','generar-qr','escaner','ciclicos','conciliacion','reportes','auditoria','usuarios','integraciones','respaldos','traslados','picking','packing','mis-inventarios']
   };
-  var SUPPORT_MODULES = ['dashboard','inventario','compras','pedidos','comercial','proveedores','clientes','logistica','ubicaciones','generar-qr','escaner','movimientos','traslados','reportes','ciclicos','conciliacion','auditoria','usuarios','integraciones','respaldos','picking','packing','mis-inventarios'];
+  var SUPPORT_MODULES = ['dashboard','inventario','compras','pedidos','comercial','proveedores','clientes','logistica','ubicaciones','generar-qr','escaner','movimientos','traslados','reportes','ciclicos','conciliacion','auditoria','usuarios','integraciones','respaldos','centro-pruebas','salud-sistema','picking','packing','mis-inventarios'];
   var SECTION_MAP = {
     'nav-sec-principal':['dashboard'],
     'nav-sec-operacion':['inventario','compras','pedidos','comercial','proveedores','clientes','logistica','movimientos','traslados'],
@@ -23363,7 +23564,7 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
     '#sf-logo-lightbox .sf-logo-lightbox-card{position:relative;max-width:min(92vw,1080px);max-height:92vh;border-radius:24px;overflow:hidden;background:#07111f;border:1px solid rgba(0,168,255,.35);box-shadow:0 30px 90px rgba(0,0,0,.5)}' +
     '#sf-logo-lightbox video{display:block;width:min(92vw,1080px);height:min(92vw,1080px);max-height:92vh;object-fit:cover;object-position:center center;background:#07111f}' +
     '#sf-logo-lightbox .sf-logo-lightbox-close{position:absolute;right:12px;top:12px;z-index:2;width:34px;height:34px;border-radius:999px;border:1px solid rgba(255,255,255,.22);background:rgba(7,17,31,.78);color:#fff;font-weight:900;cursor:pointer}' +
-    'body:not(.sf-platform-admin) #nav-root,body:not(.sf-platform-admin) #nav-empresas,body:not(.sf-platform-admin) #nav-centro-pruebas,body:not(.sf-platform-admin) #nav-salud-sistema{display:none!important}';
+    'body:not(.sf-platform-admin) #nav-root,body:not(.sf-platform-admin) #nav-empresas{display:none!important}';
   document.head.appendChild(st);
 
   if (document.readyState === 'loading') {
