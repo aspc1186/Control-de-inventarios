@@ -23579,6 +23579,143 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
 })();
 </script>
 <script>
+/* Final sidebar authority: stable plan + extra module visibility */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var ALL_NAV = [
+    'dashboard','inventario','compras','pedidos','comercial','proveedores','clientes','logistica',
+    'ubicaciones','generar-qr','escaner','auditoria','usuarios','integraciones','respaldos',
+    'centro-pruebas','salud-sistema','empresas','root','gerencial','movimientos','traslados',
+    'reportes','ciclicos','conciliacion','picking','packing','mis-inventarios'
+  ];
+  var SECTIONS = {
+    'nav-sec-principal':['dashboard'],
+    'nav-sec-operacion':['inventario','compras','pedidos','comercial','proveedores','clientes','logistica','movimientos','traslados'],
+    'nav-sec-analitica':['reportes'],
+    'nav-sec-bodegas':['ubicaciones','generar-qr','escaner'],
+    'nav-sec-seguridad':['auditoria'],
+    'nav-sec-admin':['empresas','usuarios','integraciones','respaldos','root'],
+    'nav-sec-sistema':['centro-pruebas','salud-sistema']
+  };
+  var PLAN_MODULES = {
+    FREE: ['dashboard','inventario','movimientos','clientes','reportes'],
+    PRO: ['dashboard','inventario','movimientos','proveedores','clientes','compras','pedidos','comercial','logistica','ubicaciones','generar-qr','escaner','ciclicos','conciliacion','reportes','usuarios','respaldos','traslados','picking','packing'],
+    WMS: ['dashboard','inventario','movimientos','proveedores','clientes','compras','pedidos','comercial','logistica','ubicaciones','generar-qr','escaner','ciclicos','conciliacion','reportes','auditoria','usuarios','integraciones','respaldos','centro-pruebas','salud-sistema','traslados','picking','packing','mis-inventarios']
+  };
+  var PLAN_ALIAS = {
+    STARTER:'FREE', LITE:'FREE', BASICO:'FREE', BASIC:'FREE', FREE:'FREE',
+    PRO:'PRO', PROFESIONAL:'PRO',
+    WMS:'WMS', ENTERPRISE:'WMS', EMPRESARIAL:'WMS', EMPRESARIAL_WMS:'WMS',
+    'EMPRESARIAL WMS':'WMS', 'ENTERPRISE / WMS':'WMS'
+  };
+  function normalizePlan(plan){
+    var key = String(plan || 'FREE').trim().toUpperCase().replace(/\s+/g, ' ');
+    return PLAN_ALIAS[key] || PLAN_ALIAS[key.replace(/\s+/g, '_')] || 'FREE';
+  }
+  function isSA(){
+    return !!(window.SESSION && SESSION.user && SESSION.user.rol === 'SUPER ADMINISTRADOR');
+  }
+  function supportId(){
+    try { return sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) { return ''; }
+  }
+  function inSupport(){
+    return isSA() && !!supportId();
+  }
+  function empresaActual(){
+    var id = '';
+    try { id = inSupport() ? supportId() : (SESSION && SESSION.user && SESSION.user.empresa_id || ''); } catch(e) {}
+    if (!id) return null;
+    var rows = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    return rows.find(function(e){ return e && String(e.id) === String(id); }) || null;
+  }
+  function uniq(arr){
+    var out = [];
+    (arr || []).forEach(function(v){ if (v && out.indexOf(v) < 0) out.push(v); });
+    return out;
+  }
+  function extras(emp){
+    var map = {};
+    try { map = DB.get('sf_modulos_extra') || {}; } catch(e) {}
+    return uniq([].concat(emp && emp.features_enabled || [], emp && emp.modulos_extra || [], map[emp && emp.id] || []));
+  }
+  function roleModules(){
+    var rol = SESSION && SESSION.user && SESSION.user.rol || '';
+    if (rol === 'SUPER ADMINISTRADOR' || rol === 'ADMINISTRADOR' || rol === 'ROOT') return null;
+    var p = typeof PERMISOS !== 'undefined' && PERMISOS[rol];
+    if (Array.isArray(p)) return p;
+    if (p && Array.isArray(p.modulos)) return p.modulos;
+    return ['dashboard'];
+  }
+  function allowedModules(){
+    if (!SESSION || !SESSION.user) return [];
+    if (isSA() && !inSupport()) return ['dashboard','empresas','root'];
+    var emp = empresaActual();
+    var plan = normalizePlan((emp && emp.plan) || SESSION.plan || 'FREE');
+    var allowed = uniq((PLAN_MODULES[plan] || PLAN_MODULES.FREE).concat(extras(emp)));
+    var role = inSupport() ? null : roleModules();
+    if (role) allowed = allowed.filter(function(m){ return role.indexOf(m) >= 0 || m === 'dashboard'; });
+    return allowed;
+  }
+  function moduleAllowed(page){
+    if (!page || page === 'detalle') return true;
+    return allowedModules().indexOf(page) >= 0;
+  }
+  function applySidebarAuthority(){
+    if (!SESSION || !SESSION.user) return;
+    var allowed = allowedModules();
+    var css = [];
+    ALL_NAV.forEach(function(id){
+      var show = allowed.indexOf(id) >= 0;
+      css.push('#nav-' + id + '{display:' + (show ? 'flex' : 'none') + '!important}');
+    });
+    Object.keys(SECTIONS).forEach(function(sec){
+      var showSec = SECTIONS[sec].some(function(id){ return allowed.indexOf(id) >= 0; });
+      css.push('#' + sec + '{display:' + (showSec ? 'block' : 'none') + '!important}');
+    });
+    css.push('body.sf-platform-admin #nav-dashboard,body.sf-platform-admin #nav-empresas,body.sf-platform-admin #nav-root{display:flex!important}');
+    css.push('body.sf-platform-admin #nav-sec-principal,body.sf-platform-admin #nav-sec-admin{display:block!important}');
+    var st = document.getElementById('sf-sidebar-authority-style');
+    if (!st) {
+      st = document.createElement('style');
+      st.id = 'sf-sidebar-authority-style';
+      document.head.appendChild(st);
+    }
+    st.textContent = css.join('\n');
+    var badge = document.getElementById('plan-badge');
+    if (badge) {
+      var emp = empresaActual();
+      badge.textContent = inSupport() ? normalizePlan(emp && emp.plan) : (isSA() ? 'PLATFORM' : normalizePlan((emp && emp.plan) || SESSION.plan));
+    }
+  }
+
+  var baseApply = typeof applyPlanUI === 'function' ? applyPlanUI : null;
+  applyPlanUI = function(){
+    if (baseApply) baseApply.apply(this, arguments);
+    applySidebarAuthority();
+  };
+  window.applyPlanUI = applyPlanUI;
+
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  if (baseGoto) {
+    goto = function(page, param){
+      if (SESSION && SESSION.user && !moduleAllowed(page)) {
+        if (typeof showToast === 'function') showToast('Modulo restringido por plan o permisos. Activalo como extra desde ROOT.', 'amber');
+        page = 'dashboard';
+      }
+      var out = baseGoto.call(this, page, param);
+      setTimeout(applySidebarAuthority, 0);
+      setTimeout(applySidebarAuthority, 250);
+      return out;
+    };
+    window.goto = goto;
+  }
+
+  window._sfApplySidebarAuthority = applySidebarAuthority;
+  setInterval(applySidebarAuthority, 300);
+  setTimeout(applySidebarAuthority, 0);
+})();
+</script>
+<script>
 /* Login final: 2FA auto y fondo StockFlow completo */
 (function(){
   var verifying2FA = false;
