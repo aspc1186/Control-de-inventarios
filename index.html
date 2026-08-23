@@ -10904,6 +10904,42 @@ function _confirmarImportacionProveedores() {
   }
 }
 
+function _sfReplaceEmpresaProveedoresAfterImport(targetEmpresaProv, manuales, importados) {
+  var empresaId = targetEmpresaProv ? String(targetEmpresaProv) : null;
+  var manualRows = (manuales || []).map(function(p){
+    return Object.assign({}, p, empresaId ? { empresa_id: empresaId } : {});
+  });
+  var importRows = (importados || []).map(function(p, i){
+    var row = Object.assign({}, p);
+    row.origen_registro = 'IMPORTADO';
+    if (!row.id) row.id = 'prov-imp-local-' + Date.now() + '-' + i;
+    if (empresaId) row.empresa_id = empresaId;
+    return row;
+  });
+
+  try {
+    var deletedProv = DB.get('sf_deleted_proveedores') || [];
+    var importedNit = {};
+    importRows.forEach(function(p){
+      if (p && p.nit) importedNit[String(p.nit).trim().toLowerCase()] = true;
+    });
+    DB.set('sf_deleted_proveedores', deletedProv.filter(function(d){
+      var nit = String(d && d.nit || '').trim().toLowerCase();
+      var sameEmpresa = !empresaId || !d || !d.empresa_id || String(d.empresa_id) === empresaId;
+      return !(nit && importedNit[nit] && sameEmpresa);
+    }));
+  } catch(e) {}
+
+  if (empresaId) {
+    var all = [];
+    try { all = DB.get('proveedores') || []; } catch(e) {}
+    var other = all.filter(function(p){ return !p || String(p.empresa_id || '') !== empresaId; });
+    DB.set('proveedores', other.concat(manualRows, importRows));
+  } else {
+    DB.set('proveedores', manualRows.concat(importRows));
+  }
+}
+
 function _ejecutarImportacionProveedores() {
   var valid = window._provImportData || [];
   if (!valid.length) return;
@@ -10974,6 +11010,7 @@ function _ejecutarImportacionProveedores() {
   var importadosParaNeon = nuevosProvs.filter(function(p){
     return p.origen_registro === 'IMPORTADO';
   });
+  _sfReplaceEmpresaProveedoresAfterImport(targetEmpresaProv, manuales, importadosParaNeon);
   var urlImportProv = '/api/proveedores' + (eidImportProv && eidImportProv !== '__SA__' ? '?empresa_id=' + encodeURIComponent(eidImportProv) : '');
   fetch(urlImportProv, {
     method: 'POST',
@@ -10987,7 +11024,7 @@ function _ejecutarImportacionProveedores() {
         _syncProveedoresFromAPI(function(){
           try {
             var actual = typeof loadProveedores === 'function' ? loadProveedores() : [];
-            if (!actual.length && importadosParaNeon.length) saveProveedores(manuales.concat(importadosParaNeon));
+            if (!actual.length && importadosParaNeon.length) _sfReplaceEmpresaProveedoresAfterImport(targetEmpresaProv, manuales, importadosParaNeon);
             if (renders && renders.proveedores) renders.proveedores();
           } catch(e) {}
         });
@@ -21459,6 +21496,94 @@ setTimeout(function(){ try { if (SESSION && SESSION.user) applyPlanUI(); } catch
         return;
       }
       return baseGotoTraslados.call(this, page, param);
+    };
+    window.goto = goto;
+  }
+})();
+</script>
+<script>
+/* Final WMS navigation hardening: rutas internas y tabs visibles en picking */
+(function(){
+  var WMS_PAGES = ['picking','packing','traslados'];
+
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function setPage(page, title) {
+    Array.prototype.forEach.call(document.querySelectorAll('[id^="pg-"]'), function(el){ el.style.display = 'none'; });
+    var pg = document.getElementById('pg-' + page);
+    if (pg) pg.style.display = 'block';
+    Array.prototype.forEach.call(document.querySelectorAll('nav a[id^="nav-"]'), function(a){ a.classList.remove('active'); });
+    var nav = document.getElementById('nav-' + page);
+    if (nav) nav.classList.add('active');
+    if (typeof currentPage !== 'undefined') currentPage = page;
+    try { DB.set('last_page', page); localStorage.setItem('sf_last_page', page); } catch(e) {}
+    var titleEl = document.getElementById('page-title');
+    if (titleEl) titleEl.textContent = title || page;
+    if (window.renders && typeof renders[page] === 'function') renders[page]();
+    if (typeof _sfApplySidebarAuthority === 'function') _sfApplySidebarAuthority();
+  }
+
+  function tab(label, action, active) {
+    return '<button type="button" class="sf-wms-inline-tab' + (active ? ' active' : '') + '" onclick="' + esc(action) + '">' + esc(label) + '</button>';
+  }
+
+  function installPickingTabs() {
+    var pg = document.getElementById('pg-picking');
+    if (!pg || document.getElementById('sf-picking-wms-tabs')) return;
+    var html = '<div id="sf-picking-wms-tabs" class="sf-wms-inline-tabs">' +
+      tab('Picking', "goto('picking')", true) +
+      tab('Packing', "_packTab='packing';goto('packing')", false) +
+      tab('Guias', "_packTab='guias';goto('packing')", false) +
+      tab('Despacho', "_packTab='despacho';goto('packing')", false) +
+      tab('Traslados', "goto('traslados')", false) +
+      tab('Config', "_packTab='config';goto('packing')", false) +
+    '</div>';
+    pg.insertAdjacentHTML('afterbegin', html);
+  }
+
+  function installStyles() {
+    if (document.getElementById('sf-wms-inline-tabs-style')) return;
+    var st = document.createElement('style');
+    st.id = 'sf-wms-inline-tabs-style';
+    st.textContent =
+      '.sf-wms-inline-tabs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px;padding:8px 0;border-bottom:1px solid var(--border2)}' +
+      '.sf-wms-inline-tab{border:1px solid var(--border2);background:var(--bg-card);color:var(--text)!important;border-radius:8px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer}' +
+      '.sf-wms-inline-tab:hover,.sf-wms-inline-tab.active{border-color:var(--electric);color:var(--electric)!important;background:rgba(0,168,255,.08)}';
+    document.head.appendChild(st);
+  }
+
+  installStyles();
+  if (window.renders && typeof renders.picking === 'function' && !renders.picking._sfWmsTabsWrapped) {
+    var basePickingRender = renders.picking;
+    renders.picking = function(){
+      var out = basePickingRender.apply(this, arguments);
+      setTimeout(installPickingTabs, 0);
+      return out;
+    };
+    renders.picking._sfWmsTabsWrapped = true;
+  }
+
+  var baseGoto = typeof goto === 'function' ? goto : null;
+  if (baseGoto) {
+    goto = function(page, param) {
+      if (page === 'traslados' && document.getElementById('pg-traslados')) {
+        setPage('traslados', 'Traslados');
+        return;
+      }
+      if (page === 'picking' && document.getElementById('pg-picking')) {
+        setPage('picking', 'Picking');
+        setTimeout(installPickingTabs, 0);
+        return;
+      }
+      if (WMS_PAGES.indexOf(page) >= 0 && document.getElementById('pg-' + page)) {
+        setPage(page, page === 'packing' ? 'Packing' : page);
+        return;
+      }
+      return baseGoto.call(this, page, param);
     };
     window.goto = goto;
   }
