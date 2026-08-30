@@ -22090,5 +22090,154 @@ body:not(.app-mode) #login-view .login-right .card {
 :root[data-theme="neon"]{--bg:#020617;--bg2:#07111f;--card:#0b1728;--card2:#081426;--border:#12344b;--border2:#1d4c68;--white:#f8fafc;--muted:#9fb6cc;--electric:#00ff87;--electric2:#00a8ff}
 #global-search-btn{display:none!important}.sf-sa-icon.sf-sa-icon-polished{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;font-size:20px;background:linear-gradient(135deg,rgba(0,168,255,.24),rgba(0,255,135,.18))!important;color:var(--white)!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}.sf-sa-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.sf-sa-action-btn{border:1px solid var(--border2);background:var(--card2);color:var(--white);border-radius:8px;min-height:30px;padding:6px 10px;font-weight:800;cursor:pointer}.sf-sa-action-btn:hover{border-color:var(--electric);color:var(--electric)}.sf-sa-action-eye{min-width:34px;padding:6px;font-size:15px}.sf-theme-modal-head{display:flex;align-items:center;gap:10px;padding:16px;border-bottom:1px solid var(--border2);color:var(--white)}.sf-theme-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:16px}.sf-theme-option{text-align:left;border:1px solid var(--border2);background:var(--card2);color:var(--white);border-radius:10px;padding:12px;cursor:pointer;min-height:72px}.sf-theme-option strong{display:block;color:var(--white);font-size:13px}.sf-theme-option span{display:block;color:var(--muted);font-size:11px;margin-top:4px}.sf-theme-option em{display:block;color:var(--electric);font-style:normal;font-size:11px;margin-top:7px;font-weight:800}.sf-theme-option.active,.sf-theme-option:hover{border-color:var(--electric);box-shadow:0 0 0 2px rgba(14,165,233,.16)}@media(max-width:640px){.sf-theme-grid{grid-template-columns:1fr}}
 </style>
+<script>
+/* Final inventory filters and provider import persistence */
+(function(){
+  function eid(){
+    try { return typeof _getEmpresaId === 'function' ? String(_getEmpresaId() || '__global__') : '__global__'; } catch(e) { return '__global__'; }
+  }
+  function provCacheKey(id){ return 'sf_last_provider_import_' + String(id || eid()); }
+  window._sfCacheImportedProviders = function(companyId, rows){
+    if (!Array.isArray(rows) || !rows.length || typeof DB === 'undefined') return;
+    try { DB.set(provCacheKey(companyId), rows.map(function(p){ return Object.assign({}, p, { empresa_id: companyId && companyId !== '__SA__' ? companyId : p.empresa_id }); })); } catch(e) {}
+  };
+
+  var baseLoadProvidersVisible = typeof loadProveedores === 'function' ? loadProveedores : null;
+  if (baseLoadProvidersVisible) {
+    loadProveedores = function(){
+      var rows = baseLoadProvidersVisible.apply(this, arguments) || [];
+      if (rows.length || typeof DB === 'undefined') return rows;
+      try {
+        var cached = DB.get(provCacheKey(eid())) || [];
+        return Array.isArray(cached) ? cached : rows;
+      } catch(e) { return rows; }
+    };
+    window.loadProveedores = loadProveedores;
+  }
+
+  var baseSaveProvidersVisible = typeof saveProveedores === 'function' ? saveProveedores : null;
+  if (baseSaveProvidersVisible) {
+    saveProveedores = function(rows){
+      var out = baseSaveProvidersVisible.apply(this, arguments);
+      if (Array.isArray(rows) && rows.length) window._sfCacheImportedProviders(eid(), rows);
+      return out;
+    };
+    window.saveProveedores = saveProveedores;
+  }
+
+  function invAvailable(item){ return Number(item.stock || item.actual || 0) - Number(item.stock_reservado || item.reserv || item.reservado || 0); }
+  function invMinimum(item){ return Number(item.stock_minimo || item.minimo || item.min || 0); }
+  function invIsCritical(item){ var d = invAvailable(item), m = invMinimum(item); return d > 0 && m > 0 && d < m; }
+  function invIsEmpty(item){ return invAvailable(item) <= 0; }
+  function invItems(){ try { return (_invItems && _invItems.length ? _invItems : loadItems()) || []; } catch(e) { return []; } }
+
+  function setInvFilter(next){
+    window.invFiltro = next;
+    try { invFiltro = next; } catch(e) {}
+    if (typeof filterInventarioTable === 'function') filterInventarioTable();
+    setTimeout(wireInventoryButtons, 0);
+  }
+  function normalizeButton(btn, label, count, filter){
+    btn.type = 'button';
+    btn.className = 'btn btn-ghost btn-sm sf-inv-filter-btn' + (String(window.invFiltro || invFiltro || 'TODOS').toUpperCase() === filter ? ' active' : '');
+    btn.removeAttribute('style');
+    btn.textContent = label + ' (' + count + ')';
+    btn.onclick = function(){ setInvFilter(filter); };
+  }
+  function wireInventoryButtons(){
+    var pg = document.getElementById('pg-inventario');
+    if (!pg) return;
+    var items = invItems();
+    var total = items.length;
+    var critical = items.filter(invIsCritical).length;
+    var empty = items.filter(invIsEmpty).length;
+    Array.prototype.forEach.call(pg.querySelectorAll('button'), function(btn){
+      var t = String(btn.textContent || '').toLowerCase();
+      if (t.indexOf('todos') >= 0) normalizeButton(btn, 'Todos', total, 'TODOS');
+      else if (t.indexOf('bajo') >= 0 || t.indexOf('critico') >= 0 || t.indexOf('crítico') >= 0) normalizeButton(btn, 'Critico', critical, 'CRITICO');
+      else if (t.indexOf('agotado') >= 0) normalizeButton(btn, 'Agotados', empty, 'AGOTADO');
+    });
+  }
+
+  var baseFilterInvFinalReadable = typeof filterInventarioTable === 'function' ? filterInventarioTable : null;
+  if (baseFilterInvFinalReadable) {
+    filterInventarioTable = function(){
+      var result = baseFilterInvFinalReadable.apply(this, arguments);
+      wireInventoryButtons();
+      return result;
+    };
+    window.filterInventarioTable = filterInventarioTable;
+  }
+  var baseBuildInvFinalReadable = typeof _buildInventarioUI === 'function' ? _buildInventarioUI : null;
+  if (baseBuildInvFinalReadable) {
+    _buildInventarioUI = function(){
+      var out = baseBuildInvFinalReadable.apply(this, arguments);
+      setTimeout(wireInventoryButtons, 0);
+      return out;
+    };
+    window._buildInventarioUI = _buildInventarioUI;
+  }
+
+  var baseExecuteProviderImport = typeof _ejecutarImportacionProveedores === 'function' ? _ejecutarImportacionProveedores : null;
+  if (baseExecuteProviderImport) {
+    _ejecutarImportacionProveedores = function(){
+      var companyId = eid();
+      var incoming = (window._provImportData || []).map(function(p){ return Object.assign({}, p, { empresa_id: companyId !== '__SA__' ? companyId : p.empresa_id }); });
+      var out = baseExecuteProviderImport.apply(this, arguments);
+      if (incoming.length) {
+        window._sfCacheImportedProviders(companyId, incoming);
+        setTimeout(function(){
+          if (typeof renders !== 'undefined' && renders.proveedores && currentPage === 'proveedores') renders.proveedores();
+        }, 250);
+      }
+      return out;
+    };
+    window._ejecutarImportacionProveedores = _ejecutarImportacionProveedores;
+  }
+
+  document.addEventListener('DOMContentLoaded', wireInventoryButtons);
+  setInterval(function(){
+    if (typeof currentPage !== 'undefined' && currentPage === 'inventario') wireInventoryButtons();
+  }, 1000);
+})();
+</script>
+<style>
+/* Final readable controls across themes */
+#pg-inventario .sf-inv-filter-btn,
+#pg-inventario .sf-inv-filter-btn.btn-navy,
+#pg-inventario .sf-inv-filter-btn.btn-ghost {
+  background: var(--card2) !important;
+  color: var(--white) !important;
+  border: 1px solid var(--border2) !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+#pg-inventario .sf-inv-filter-btn.active {
+  border-color: var(--electric) !important;
+  box-shadow: inset 0 0 0 1px var(--electric) !important;
+}
+#pg-inventario table th,
+#pg-inventario table td,
+#pg-proveedores table th,
+#pg-proveedores table td {
+  color: var(--white) !important;
+}
+#pg-inventario .btn:not(.sf-inv-filter-btn),
+#pg-proveedores .btn {
+  color: var(--white) !important;
+}
+#pg-inventario input,
+#pg-inventario select,
+#pg-proveedores input,
+#pg-proveedores select {
+  color: var(--white) !important;
+  background: var(--card2) !important;
+}
+#pg-inventario input::placeholder,
+#pg-proveedores input::placeholder {
+  color: var(--muted) !important;
+  opacity: 1 !important;
+}
+</style>
 </body>
 </html>
