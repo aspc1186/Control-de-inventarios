@@ -207,6 +207,26 @@ async function setupTables(sql) {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS motoparts_locations (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      codigo TEXT NOT NULL,
+      nombre TEXT,
+      tipo TEXT NOT NULL,
+      grupo TEXT NOT NULL,
+      descripcion TEXT,
+      bodega_id TEXT,
+      empresa_id TEXT,
+      estado TEXT DEFAULT 'ACTIVA',
+      permite_multiples_referencias BOOLEAN DEFAULT TRUE,
+      permite_vin BOOLEAN DEFAULT FALSE,
+      capacidad NUMERIC(12,2),
+      recorrido_orden INTEGER,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nombre TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS slug TEXT`;
   await sql`ALTER TABLE empresas ALTER COLUMN slug SET DEFAULT 'empresa-principal'`;
@@ -295,6 +315,23 @@ async function setupTables(sql) {
   await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
   await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS data JSONB DEFAULT '{}'`;
   await sql`ALTER TABLE wms_operaciones ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
+
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS nombre TEXT`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS tipo TEXT`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS grupo TEXT`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS descripcion TEXT`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS bodega_id TEXT`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'ACTIVA'`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS permite_multiples_referencias BOOLEAN DEFAULT TRUE`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS permite_vin BOOLEAN DEFAULT FALSE`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS capacidad NUMERIC(12,2)`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS recorrido_orden INTEGER`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'`;
+  await sql`ALTER TABLE motoparts_locations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS motoparts_locations_empresa_codigo_uidx ON motoparts_locations ((COALESCE(empresa_id, '__GLOBAL__')), codigo)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_locations_empresa_idx ON motoparts_locations (empresa_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_locations_tipo_idx ON motoparts_locations (tipo)`;
 
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS username TEXT`;
