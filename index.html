@@ -21976,5 +21976,119 @@ body:not(.app-mode) #login-view .login-right .card {
   }
 }
 </style>
+<script>
+/* Final Super Admin polish: toolbar, themes, cards and company access */
+(function(){
+  var SUPPORT_KEY = 'sf_support_empresa_id';
+  var THEME_LIST = [
+    ['white-accessible','Blanco accesible','Alto contraste para oficina'],['pink','Rosado','Rosado suave StockFlow'],['cream','Crema','Lectura calida y clara'],['lilac','Lila','Lila profesional'],['sky','Azul cielo','Claro con acentos azules'],['gray-light','Gris claro','Neutro y legible'],['dark','Noche profesional','Oscuro StockFlow'],['ocean','Oceano ejecutivo','Azul profundo ejecutivo'],['wine','Vino nocturno','Oscuro con acento vino'],['amber','Ambar lounge','Oscuro con acento ambar'],['graphite','Grafito moderno','Gris oscuro tecnico'],['neon','Neon','Contraste alto con acento neon']
+  ];
+  function isSA(){ return !!(window.SESSION && SESSION.user && String(SESSION.user.rol || '').toUpperCase() === 'SUPER ADMINISTRADOR'); }
+  function inSupport(){ try { return isSA() && !!sessionStorage.getItem(SUPPORT_KEY); } catch(e) { return false; } }
+  function getSupportCompany(){
+    var id = ''; try { id = sessionStorage.getItem(SUPPORT_KEY) || ''; } catch(e) {}
+    var rows = typeof loadEmpresas === 'function' ? loadEmpresas() : [];
+    return rows.find(function(e){ return e && e.id === id; }) || null;
+  }
+  function cleanTopbar(){
+    var search = document.getElementById('global-search-btn');
+    if (search) search.style.display = 'none';
+    var badge = document.getElementById('plan-badge');
+    if (badge && String(badge.textContent || '').trim().toUpperCase() === 'PLATFORM') badge.style.display = 'none';
+    var info = document.getElementById('nav-user-info');
+    if (info && window.SESSION && SESSION.user) {
+      var emp = getSupportCompany();
+      info.textContent = emp ? 'Soporte SA - ' + (emp.nombre || 'Cliente') : (isSA() ? 'Super Administrador' : (SESSION.user.nombre || SESSION.user.usuario || ''));
+    }
+    var themeButtons = Array.prototype.filter.call(document.querySelectorAll('#topbar button'), function(btn){
+      return /tema|🎨/i.test((btn.textContent || '') + ' ' + (btn.title || ''));
+    });
+    themeButtons.forEach(function(btn, idx){
+      btn.style.display = idx === 0 ? '' : 'none';
+      if (idx === 0) { btn.innerHTML = '🎨 <span>Tema</span>'; btn.onclick = window._abrirSelectorTema; }
+    });
+  }
+  function parseCompanyId(actions){
+    var raw = actions ? actions.innerHTML : '';
+    var m = raw.match(/_verEmpresaSuperAdmin\(&quot;([^&]+)&quot;\)/) || raw.match(/_editarEmpresa\(&quot;([^&]+)&quot;\)/);
+    if (m) return m[1];
+    var btn = actions && actions.querySelector('button[onclick]');
+    raw = btn ? String(btn.getAttribute('onclick') || '') : '';
+    m = raw.match(/["']([^"']+)["']/);
+    return m ? m[1] : '';
+  }
+  window._verEmpresaSuperAdmin = function(empId){
+    if (!empId) return;
+    if (typeof _confirmarAbrirSoporteCliente === 'function') return _confirmarAbrirSoporteCliente(empId);
+    try { sessionStorage.setItem(SUPPORT_KEY, empId); } catch(e) {}
+    if (typeof goto === 'function') goto('dashboard');
+  };
+  window._administrarEmpresaCliente = window._verEmpresaSuperAdmin;
+  function polishCompanyActions(){
+    Array.prototype.forEach.call(document.querySelectorAll('.sf-sa-actions'), function(actions){
+      var empId = parseCompanyId(actions); if (!empId) return;
+      var view = actions.querySelector('button[title*="Ver"],button[title*="Abrir"]');
+      if (view) {
+        view.className = 'sf-sa-action-btn sf-sa-action-eye';
+        view.title = 'Visualizar panel cliente';
+        view.innerHTML = '👁️';
+        view.onclick = function(){ window._verEmpresaSuperAdmin(empId); };
+      }
+      if (!actions.querySelector('[data-sf-admin-client]')) {
+        var admin = document.createElement('button');
+        admin.type = 'button'; admin.className = 'sf-sa-action-btn sf-sa-action-admin'; admin.dataset.sfAdminClient = '1';
+        admin.title = 'Administrar cliente'; admin.textContent = 'Administrar';
+        admin.onclick = function(){ window._administrarEmpresaCliente(empId); };
+        actions.insertBefore(admin, actions.firstChild);
+      }
+    });
+  }
+  function polishKpiIcons(){
+    var map = {'Total empresas':'🏢','Activas':'✅','Usuarios':'👥','Todos los planes':'📊','FREE':'🟢','PRO':'⭐','Enterprise / WMS':'🏭'};
+    Array.prototype.forEach.call(document.querySelectorAll('.sf-sa-kpi'), function(kpi){
+      var label = kpi.querySelector('.sf-sa-label'), icon = kpi.querySelector('.sf-sa-icon');
+      var key = label ? String(label.textContent || '').trim() : '';
+      if (icon && map[key]) { icon.textContent = map[key]; icon.removeAttribute('style'); icon.classList.add('sf-sa-icon-polished'); }
+    });
+  }
+  window._buildTemaSelector = function(){
+    var current = typeof _getTema === 'function' ? _getTema() : 'dark';
+    return '<div class="sf-theme-grid">' + THEME_LIST.map(function(t){
+      var active = current === t[0];
+      return '<button type="button" class="sf-theme-option '+(active?'active':'')+'" onclick="_aplicarTema(&quot;'+t[0]+'&quot;);closeModal();showToast(&quot;Tema aplicado: '+t[1]+'&quot;,&quot;green&quot;)"><strong>'+t[1]+'</strong><span>'+t[2]+'</span>'+(active?'<em>Activo</em>':'')+'</button>';
+    }).join('') + '</div>';
+  };
+  window._abrirSelectorTema = function(){
+    if (typeof openModal === 'function') openModal('<div class="sf-theme-modal-head"><span>🎨</span><strong>Seleccionar tema</strong></div>' + window._buildTemaSelector());
+  };
+  function restoreSuperAdminNav(){
+    if (!isSA() || inSupport()) return;
+    document.body.classList.add('sf-platform-admin');
+    ['nav-dashboard','nav-root','nav-empresas'].forEach(function(id){ var el = document.getElementById(id); if (el) el.style.display = ''; });
+  }
+  function applyFinalPolish(){ cleanTopbar(); restoreSuperAdminNav(); polishKpiIcons(); polishCompanyActions(); }
+  var baseRenderEmpresasSA = window.renderEmpresasSA || (typeof renderEmpresasSA === 'function' ? renderEmpresasSA : null);
+  if (baseRenderEmpresasSA) { window.renderEmpresasSA = function(){ var out = baseRenderEmpresasSA.apply(this, arguments); setTimeout(applyFinalPolish, 0); return out; }; try { renderEmpresasSA = window.renderEmpresasSA; } catch(e) {} }
+  var baseRenderDashboardSA = window.renderDashboardSA || (typeof renderDashboardSA === 'function' ? renderDashboardSA : null);
+  if (baseRenderDashboardSA) { window.renderDashboardSA = function(){ var out = baseRenderDashboardSA.apply(this, arguments); setTimeout(applyFinalPolish, 0); return out; }; try { renderDashboardSA = window.renderDashboardSA; } catch(e) {} }
+  document.addEventListener('DOMContentLoaded', applyFinalPolish);
+  setInterval(applyFinalPolish, 1200);
+})();
+</script>
+<style>
+:root[data-theme="white-accessible"],:root[data-theme="gray-light"],:root[data-theme="sky"],:root[data-theme="cream"],:root[data-theme="pink"],:root[data-theme="lilac"]{--bg:#f7fafc;--bg2:#eef5fb;--card:#fff;--card2:#fff;--border:#d8e3ee;--border2:#c8d5e4;--white:#132033;--muted:#51657d;--electric:#0ea5e9;--electric2:#0284c7;--green:#059669;--red:#dc2626;--orange:#ea580c}
+:root[data-theme="white-accessible"]{--bg:#fff;--bg2:#f1f5f9;--card:#fff;--card2:#f8fafc;--white:#0f172a;--muted:#475569}
+:root[data-theme="gray-light"]{--bg:#f3f4f6;--bg2:#e5e7eb;--card:#fff;--white:#111827;--muted:#4b5563;--electric:#2563eb}
+:root[data-theme="sky"]{--bg:#f0f9ff;--bg2:#e0f2fe;--card:#fff;--white:#082f49;--muted:#38647b;--electric:#0284c7}
+:root[data-theme="cream"]{--bg:#fbf6ed;--bg2:#f2eadc;--card:#fffaf2;--white:#2d1f12;--muted:#6d5a45;--electric:#c27803}
+:root[data-theme="pink"]{--bg:#fff1f7;--bg2:#fde7f0;--card:#fffafd;--white:#3b1021;--muted:#8b4863;--electric:#db2777}
+:root[data-theme="lilac"]{--bg:#f6f0ff;--bg2:#ece4ff;--card:#fff;--white:#251044;--muted:#695586;--electric:#7c3aed}
+:root[data-theme="ocean"]{--bg:#061826;--bg2:#0b2538;--card:#102d42;--card2:#0d2538;--border:#1e4966;--border2:#2a5a78;--white:#effaff;--muted:#8db5cc;--electric:#22d3ee}
+:root[data-theme="wine"]{--bg:#180812;--bg2:#270d1b;--card:#321426;--card2:#251020;--border:#5c233f;--border2:#733052;--white:#fff1f7;--muted:#d9a8bd;--electric:#f472b6}
+:root[data-theme="amber"]{--bg:#171006;--bg2:#241808;--card:#30200d;--card2:#261908;--border:#654414;--border2:#82591c;--white:#fff7ed;--muted:#d9b98c;--electric:#f59e0b}
+:root[data-theme="graphite"]{--bg:#0b0f14;--bg2:#141a22;--card:#1d2631;--card2:#151d27;--border:#303b49;--border2:#3c4a5b;--white:#f8fafc;--muted:#aab6c5;--electric:#38bdf8}
+:root[data-theme="neon"]{--bg:#020617;--bg2:#07111f;--card:#0b1728;--card2:#081426;--border:#12344b;--border2:#1d4c68;--white:#f8fafc;--muted:#9fb6cc;--electric:#00ff87;--electric2:#00a8ff}
+#global-search-btn{display:none!important}.sf-sa-icon.sf-sa-icon-polished{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;font-size:20px;background:linear-gradient(135deg,rgba(0,168,255,.24),rgba(0,255,135,.18))!important;color:var(--white)!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}.sf-sa-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}.sf-sa-action-btn{border:1px solid var(--border2);background:var(--card2);color:var(--white);border-radius:8px;min-height:30px;padding:6px 10px;font-weight:800;cursor:pointer}.sf-sa-action-btn:hover{border-color:var(--electric);color:var(--electric)}.sf-sa-action-eye{min-width:34px;padding:6px;font-size:15px}.sf-theme-modal-head{display:flex;align-items:center;gap:10px;padding:16px;border-bottom:1px solid var(--border2);color:var(--white)}.sf-theme-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:16px}.sf-theme-option{text-align:left;border:1px solid var(--border2);background:var(--card2);color:var(--white);border-radius:10px;padding:12px;cursor:pointer;min-height:72px}.sf-theme-option strong{display:block;color:var(--white);font-size:13px}.sf-theme-option span{display:block;color:var(--muted);font-size:11px;margin-top:4px}.sf-theme-option em{display:block;color:var(--electric);font-style:normal;font-size:11px;margin-top:7px;font-weight:800}.sf-theme-option.active,.sf-theme-option:hover{border-color:var(--electric);box-shadow:0 0 0 2px rgba(14,165,233,.16)}@media(max-width:640px){.sf-theme-grid{grid-template-columns:1fr}}
+</style>
 </body>
 </html>
