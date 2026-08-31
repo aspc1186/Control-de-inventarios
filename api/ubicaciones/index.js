@@ -2,6 +2,31 @@
 const { getSQL, cors } = require('../_db');
 const { normalizeMotoPartsLocation, validateMotoPartsLocation } = require('../../lib/motoparts-locations');
 
+async function ensureMotoPartsLocationStorage(sql) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS motoparts_locations (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      codigo TEXT NOT NULL,
+      nombre TEXT,
+      tipo TEXT NOT NULL,
+      grupo TEXT NOT NULL,
+      descripcion TEXT,
+      bodega_id TEXT,
+      empresa_id TEXT,
+      estado TEXT DEFAULT 'ACTIVA',
+      permite_multiples_referencias BOOLEAN DEFAULT TRUE,
+      permite_vin BOOLEAN DEFAULT FALSE,
+      capacidad NUMERIC(12,2),
+      recorrido_orden INTEGER,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS motoparts_locations_empresa_codigo_uidx ON motoparts_locations ((COALESCE(empresa_id, '__GLOBAL__')), codigo)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_locations_empresa_idx ON motoparts_locations (empresa_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_locations_tipo_idx ON motoparts_locations (tipo)`;
+}
+
 module.exports = async (req, res) => {
   cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -13,6 +38,7 @@ module.exports = async (req, res) => {
   await sql`ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS responsable TEXT`.catch(()=>{});
 
   const isMotoParts = (req.query && req.query.mode === 'motoparts') || (req.body && req.body.mode === 'motoparts');
+  if (isMotoParts) await ensureMotoPartsLocationStorage(sql);
 
   if (req.method === 'GET') {
     const { empresa_id, tipo, codigo } = req.query;
