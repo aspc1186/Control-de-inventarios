@@ -1,6 +1,7 @@
 // api/articulos/index.js — StockFlow WMS v2
 // Maneja GET, POST (batch upsert), PUT (update single), DELETE, deactivate
 const { getSQL, cors } = require('../_db');
+const { normalizeMotoPartsProduct } = require('../../lib/motoparts-products');
 
 
 // Todos los campos del modelo — sincronizados con COL mapping del frontend
@@ -9,6 +10,10 @@ const CAMPOS_TEXTO = [
   'unidad','ubicacion','ubicacion_label','bodega','bodega_id',
   'proveedor','estado','empresa_id','created_by',
   'ultima_entrada','ultima_salida','codigo_barras','metodo_seguridad',
+  'referencia_fabricante','referencia_oem','referencias_alternas','marca_moto',
+  'linea_moto','modelo_moto','cilindraje','anio_inicial','anio_final','vin',
+  'numero_motor','proveedor_origen','ubicacion_motoparts','compatibilidad_moto',
+  'tipo_repuesto','posicion_moto','foto_url',
 ];
 const CAMPOS_NUMERO = [
   'stock','stock_minimo','stock_maximo','stock_reservado','stock_seguridad',
@@ -43,6 +48,28 @@ async function ensureColumns(sql) {
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS estado           TEXT DEFAULT 'Activo'`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS ultima_entrada   TEXT`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS ultima_salida    TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS referencia_fabricante TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS referencia_oem TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS referencias_alternas TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS marca_moto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS linea_moto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS modelo_moto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS cilindraje TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS anio_inicial TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS anio_final TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS vin TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS numero_motor TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS proveedor_origen TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS ubicacion_motoparts TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS compatibilidad_moto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS tipo_repuesto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS posicion_moto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS foto_url TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS fotos JSONB DEFAULT '[]'`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS motos_compatibles JSONB DEFAULT '[]'`;
+  await sql`CREATE INDEX IF NOT EXISTS articulos_referencia_oem_idx ON articulos (referencia_oem)`;
+  await sql`CREATE INDEX IF NOT EXISTS articulos_vin_idx ON articulos (vin)`;
+  await sql`CREATE INDEX IF NOT EXISTS articulos_ubicacion_motoparts_idx ON articulos (ubicacion_motoparts)`;
 }
 
 module.exports = async (req, res) => {
@@ -112,6 +139,9 @@ module.exports = async (req, res) => {
           const ultima_sal       = s(item.ultima_salida)   || null;
           const metodo_seg       = s(item.metodo_seguridad)|| 'automatico';
           const codigo_barras    = s(item.codigo_barras)   || '';
+          const moto             = normalizeMotoPartsProduct(item);
+          const fotos_json       = JSON.stringify(moto.fotos || []);
+          const motos_json       = JSON.stringify(moto.motos_compatibles || []);
 
           const stock            = n(item.stock)           ?? 0;
           const stock_min        = n(item.stock_minimo)    ?? 0;
@@ -147,8 +177,27 @@ module.exports = async (req, res) => {
                 ultima_entrada=COALESCE(${ultima_ent}, ultima_entrada),
                 ultima_salida=COALESCE(${ultima_sal}, ultima_salida),
                 codigo_barras=${codigo_barras},
+                referencia_fabricante=${moto.referencia_fabricante},
+                referencia_oem=${moto.referencia_oem},
+                referencias_alternas=${moto.referencias_alternas},
+                marca_moto=${moto.marca_moto},
+                linea_moto=${moto.linea_moto},
+                modelo_moto=${moto.modelo_moto},
+                cilindraje=${moto.cilindraje},
+                anio_inicial=${moto.anio_inicial},
+                anio_final=${moto.anio_final},
+                vin=${moto.vin},
+                numero_motor=${moto.numero_motor},
+                proveedor_origen=${moto.proveedor_origen},
+                ubicacion_motoparts=${moto.ubicacion_motoparts},
+                compatibilidad_moto=${moto.compatibilidad_moto},
+                tipo_repuesto=${moto.tipo_repuesto},
+                posicion_moto=${moto.posicion_moto},
+                foto_url=${moto.foto_url},
+                fotos=${fotos_json}::jsonb,
+                motos_compatibles=${motos_json}::jsonb,
                 created_by=${created_by}, updated_at=NOW()
-              WHERE sku=${sku}`;
+              WHERE id=${existing[0].id}`;
             updated++;
           } else {
             await sql`
@@ -158,14 +207,24 @@ module.exports = async (req, res) => {
                 stock, stock_minimo, stock_maximo, stock_reservado, stock_seguridad,
                 punto_reorden, consumo_diario, lead_time, dias_cobertura, metodo_seguridad,
                 costo, precio, proveedor, estado, empresa_id, created_by,
-                ultima_entrada, ultima_salida, codigo_barras, created_at, updated_at
+                ultima_entrada, ultima_salida, codigo_barras,
+                referencia_fabricante, referencia_oem, referencias_alternas, marca_moto,
+                linea_moto, modelo_moto, cilindraje, anio_inicial, anio_final, vin,
+                numero_motor, proveedor_origen, ubicacion_motoparts, compatibilidad_moto,
+                tipo_repuesto, posicion_moto, foto_url, fotos, motos_compatibles,
+                created_at, updated_at
               ) VALUES (
                 ${id}, ${sku}, ${nombre}, ${descripcion}, ${categoria}, ${subcategoria},
                 ${marca}, ${unidad}, ${ubicacion}, ${ubicacion_label}, ${bodega}, ${bodega_id},
                 ${stock}, ${stock_min}, ${stock_max}, ${stock_res}, ${stock_seg},
                 ${p_reorden}, ${consumo}, ${lead}, ${dias_cob}, ${metodo_seg},
                 ${costo}, ${precio}, ${proveedor}, ${estado}, ${empresa_id_v}, ${created_by},
-                ${ultima_ent}, ${ultima_sal}, ${codigo_barras}, NOW(), NOW()
+                ${ultima_ent}, ${ultima_sal}, ${codigo_barras},
+                ${moto.referencia_fabricante}, ${moto.referencia_oem}, ${moto.referencias_alternas}, ${moto.marca_moto},
+                ${moto.linea_moto}, ${moto.modelo_moto}, ${moto.cilindraje}, ${moto.anio_inicial}, ${moto.anio_final}, ${moto.vin},
+                ${moto.numero_motor}, ${moto.proveedor_origen}, ${moto.ubicacion_motoparts}, ${moto.compatibilidad_moto},
+                ${moto.tipo_repuesto}, ${moto.posicion_moto}, ${moto.foto_url}, ${fotos_json}::jsonb, ${motos_json}::jsonb,
+                NOW(), NOW()
               )`;
             inserted++;
           }
@@ -181,6 +240,9 @@ module.exports = async (req, res) => {
       const item = req.body;
       const sku  = s(item.sku || item.codigo);
       if (!sku) return res.status(400).json({ error: 'SKU requerido' });
+      const moto = normalizeMotoPartsProduct(item);
+      const fotos_json = item.fotos === undefined && item.imagenes === undefined ? null : JSON.stringify(moto.fotos || []);
+      const motos_json = item.motos_compatibles === undefined && item.compatibilidades === undefined ? null : JSON.stringify(moto.motos_compatibles || []);
       await sql`
         UPDATE articulos SET
           nombre=COALESCE(${s(item.nombre)},nombre),
@@ -203,6 +265,25 @@ module.exports = async (req, res) => {
           estado=COALESCE(${s(item.estado)},estado),
           empresa_id=COALESCE(${s(item.empresa_id)},empresa_id),
           ultima_entrada=COALESCE(${s(item.ultima_entrada)},ultima_entrada),
+          referencia_fabricante=COALESCE(${moto.referencia_fabricante},referencia_fabricante),
+          referencia_oem=COALESCE(${moto.referencia_oem},referencia_oem),
+          referencias_alternas=COALESCE(${moto.referencias_alternas},referencias_alternas),
+          marca_moto=COALESCE(${moto.marca_moto},marca_moto),
+          linea_moto=COALESCE(${moto.linea_moto},linea_moto),
+          modelo_moto=COALESCE(${moto.modelo_moto},modelo_moto),
+          cilindraje=COALESCE(${moto.cilindraje},cilindraje),
+          anio_inicial=COALESCE(${moto.anio_inicial},anio_inicial),
+          anio_final=COALESCE(${moto.anio_final},anio_final),
+          vin=COALESCE(${moto.vin},vin),
+          numero_motor=COALESCE(${moto.numero_motor},numero_motor),
+          proveedor_origen=COALESCE(${moto.proveedor_origen},proveedor_origen),
+          ubicacion_motoparts=COALESCE(${moto.ubicacion_motoparts},ubicacion_motoparts),
+          compatibilidad_moto=COALESCE(${moto.compatibilidad_moto},compatibilidad_moto),
+          tipo_repuesto=COALESCE(${moto.tipo_repuesto},tipo_repuesto),
+          posicion_moto=COALESCE(${moto.posicion_moto},posicion_moto),
+          foto_url=COALESCE(${moto.foto_url},foto_url),
+          fotos=COALESCE(${fotos_json}::jsonb,fotos),
+          motos_compatibles=COALESCE(${motos_json}::jsonb,motos_compatibles),
           updated_at=NOW()
         WHERE sku=${sku}`;
       return res.status(200).json({ updated: 1 });

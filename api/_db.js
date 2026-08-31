@@ -40,6 +40,25 @@ async function setupTables(sql) {
       bodega          TEXT DEFAULT '',
       codigo_barras   TEXT DEFAULT '',
       metodo_seguridad TEXT DEFAULT 'automatico',
+      referencia_fabricante TEXT,
+      referencia_oem TEXT,
+      referencias_alternas TEXT,
+      marca_moto TEXT,
+      linea_moto TEXT,
+      modelo_moto TEXT,
+      cilindraje TEXT,
+      anio_inicial TEXT,
+      anio_final TEXT,
+      vin TEXT,
+      numero_motor TEXT,
+      proveedor_origen TEXT,
+      ubicacion_motoparts TEXT,
+      compatibilidad_moto TEXT,
+      tipo_repuesto TEXT,
+      posicion_moto TEXT,
+      foto_url TEXT,
+      fotos JSONB DEFAULT '[]',
+      motos_compatibles JSONB DEFAULT '[]',
       created_at      TIMESTAMPTZ DEFAULT NOW(),
       created_by      TEXT,
       ultima_entrada  TEXT,
@@ -261,6 +280,28 @@ async function setupTables(sql) {
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bodega TEXT DEFAULT ''`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS codigo_barras TEXT DEFAULT ''`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS metodo_seguridad TEXT DEFAULT 'automatico'`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS referencia_fabricante TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS referencia_oem TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS referencias_alternas TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS marca_moto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS linea_moto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS modelo_moto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS cilindraje TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS anio_inicial TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS anio_final TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS vin TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS numero_motor TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS proveedor_origen TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS ubicacion_motoparts TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS compatibilidad_moto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS tipo_repuesto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS posicion_moto TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS foto_url TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS fotos JSONB DEFAULT '[]'`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS motos_compatibles JSONB DEFAULT '[]'`;
+  await sql`CREATE INDEX IF NOT EXISTS articulos_referencia_oem_idx ON articulos (referencia_oem)`;
+  await sql`CREATE INDEX IF NOT EXISTS articulos_vin_idx ON articulos (vin)`;
+  await sql`CREATE INDEX IF NOT EXISTS articulos_ubicacion_motoparts_idx ON articulos (ubicacion_motoparts)`;
 
   await sql`ALTER TABLE movimientos ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
   await sql`ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
