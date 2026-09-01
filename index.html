@@ -22429,7 +22429,7 @@ body:not(.app-mode) #login-view .login-right .card {
     var map = groupedByLocation();
     host.innerHTML =
       '<div class="sf-moto-head"><div><h3>StockFlow MotoParts</h3><p>Ubicaciones reales: EST-01 a EST-100, piso A-Z, SOLTRECH y FANALCA.</p></div>' +
-      '<div class="sf-moto-actions"><button class="btn btn-ghost btn-sm" onclick="_sfMotoNewLocation()">+ Ubicacion</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoRefreshLocations()">Actualizar</button></div></div>' +
+      '<div class="sf-moto-actions"><button class="btn btn-ghost btn-sm" onclick="_sfMotoMotorcycles()">Motocicletas</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoNewLocation()">+ Ubicacion</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoRefreshLocations()">Actualizar</button></div></div>' +
       '<div class="sf-moto-tabs">' +
       [['shelf','Estanteria'],['floor','Piso A-Z'],['special','SOLTRECH / FANALCA']].map(function(t){
         return '<button type="button" class="'+(tab===t[0]?'active':'')+'" onclick="_sfMotoLocTab=&quot;'+t[0]+'&quot;;_sfRenderMotoLocations()">'+t[1]+'</button>';
@@ -22491,6 +22491,53 @@ body:not(.app-mode) #login-view .login-right .card {
       window._sfMotoLocations = res && Array.isArray(res.data) ? res.data : [];
       renderMotoLocations();
     }).catch(function(){ renderMotoLocations(); });
+  };
+  function motorcycleRows(){
+    return (window._sfMotoMotorcycleRows || []).slice().sort(function(a,b){ return String(a.vin||'').localeCompare(String(b.vin||'')); });
+  }
+  function motorcycleTable(rows){
+    if (!rows.length) return '<div class="empty-state"><p>No hay motocicletas registradas por VIN.</p></div>';
+    return '<div class="tbl-overflow"><table><thead><tr><th>VIN</th><th>Motor</th><th>Moto</th><th>Ubicacion</th><th>Estado</th></tr></thead><tbody>' +
+      rows.map(function(m){ return '<tr><td><code>'+esc(m.vin||'')+'</code></td><td>'+esc(m.numero_motor||'')+'</td><td>'+esc([m.marca,m.linea,m.modelo,m.anio_modelo,m.cilindraje].filter(Boolean).join(' '))+'</td><td>'+esc(m.ubicacion_actual||'FANALCA')+'</td><td><span class="badge b-ok">'+esc(m.estado_comercial||m.estado||'DISPONIBLE')+'</span></td></tr>'; }).join('') +
+      '</tbody></table></div>';
+  }
+  window._sfMotoMotorcycles = function(){
+    var id = companyId();
+    var url = '/api/articulos?mode=motorcycles&limit=1000' + (id && id !== '__SA__' ? '&empresa_id=' + encodeURIComponent(id) : '');
+    fetch(url).then(function(r){ return r.ok ? r.json() : null; }).then(function(res){
+      window._sfMotoMotorcycleRows = res && Array.isArray(res.data) ? res.data : [];
+      var rows = motorcycleRows();
+      var h = '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px"><div><h3 style="margin:0">Motocicletas por VIN</h3><p style="font-size:12px;color:var(--muted);margin:3px 0 0">'+rows.length+' unidades serializadas</p></div><button class="btn btn-navy btn-sm" onclick="_sfMotoNewMotorcycle()">+ Registrar VIN</button></div>' + motorcycleTable(rows);
+      if (typeof openModal === 'function') openModal(h, true);
+    }).catch(function(e){ if (typeof showToast === 'function') showToast('No se pudieron cargar motocicletas: '+e.message,'red'); });
+  };
+  window._sfMotoNewMotorcycle = function(){
+    var h = '<h3 style="margin-bottom:10px">Registrar motocicleta</h3>' +
+      '<div class="form-row"><label>VIN *</label><input id="sf-mc-vin" style="text-transform:uppercase" placeholder="VIN / chasis"></div>' +
+      '<div class="form-grid"><div class="form-row"><label>Numero motor</label><input id="sf-mc-motor"></div><div class="form-row"><label>Numero chasis</label><input id="sf-mc-chasis"></div></div>' +
+      '<div class="form-grid"><div class="form-row"><label>Marca</label><input id="sf-mc-marca"></div><div class="form-row"><label>Linea</label><input id="sf-mc-linea"></div></div>' +
+      '<div class="form-grid"><div class="form-row"><label>Modelo</label><input id="sf-mc-modelo"></div><div class="form-row"><label>Año modelo</label><input id="sf-mc-anio"></div></div>' +
+      '<div class="form-grid"><div class="form-row"><label>Cilindraje</label><input id="sf-mc-cc"></div><div class="form-row"><label>Color</label><input id="sf-mc-color"></div></div>' +
+      '<div class="form-grid"><div class="form-row"><label>Ubicacion actual</label><input id="sf-mc-ubicacion" value="FANALCA" style="text-transform:uppercase"></div><div class="form-row"><label>Estado comercial</label><select id="sf-mc-estado-com"><option>DISPONIBLE</option><option>RESERVADA</option><option>VENDIDA</option><option>NO DISPONIBLE</option></select></div></div>' +
+      '<div class="form-grid"><div class="form-row"><label>Proveedor</label><input id="sf-mc-proveedor"></div><div class="form-row"><label>Orden compra</label><input id="sf-mc-oc"></div></div>' +
+      '<div id="sf-mc-error" style="display:none;color:var(--red);font-size:12px;margin-top:8px"></div>' +
+      '<div class="modal-actions"><button class="btn btn-ghost" onclick="_sfMotoMotorcycles()">Cancelar</button><button class="btn btn-navy" onclick="_sfMotoSaveMotorcycle()">Guardar VIN</button></div>';
+    if (typeof openModal === 'function') openModal(h, true);
+  };
+  window._sfMotoSaveMotorcycle = function(){
+    var g = function(id){ var el=document.getElementById(id); return el ? el.value.trim() : ''; };
+    var body = {
+      vin:norm(g('sf-mc-vin')), numero_motor:g('sf-mc-motor'), numero_chasis:g('sf-mc-chasis'),
+      marca:g('sf-mc-marca'), linea:g('sf-mc-linea'), modelo:g('sf-mc-modelo'), anio_modelo:g('sf-mc-anio'),
+      cilindraje:g('sf-mc-cc'), color:g('sf-mc-color'), ubicacion_actual:norm(g('sf-mc-ubicacion')) || 'FANALCA',
+      estado_comercial:g('sf-mc-estado-com'), proveedor:g('sf-mc-proveedor'), orden_compra:g('sf-mc-oc'),
+      empresa_id:companyId()
+    };
+    var err = document.getElementById('sf-mc-error');
+    fetch('/api/articulos?mode=motorcycles', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+      .then(function(r){ return r.json().then(function(x){ if(!r.ok || x.ok===false) throw new Error(x.error || 'No se pudo guardar'); return x; }); })
+      .then(function(){ if (typeof showToast === 'function') showToast('Motocicleta registrada por VIN','green'); window._sfMotoMotorcycles(); })
+      .catch(function(e){ if (err) { err.style.display='block'; err.textContent=e.message; } else if (typeof showToast === 'function') showToast(e.message,'red'); });
   };
 
   var baseBuildLocations = typeof _buildUbicacionesUI === 'function' ? _buildUbicacionesUI : null;

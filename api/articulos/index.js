@@ -2,6 +2,7 @@
 // Maneja GET, POST (batch upsert), PUT (update single), DELETE, deactivate
 const { getSQL, cors } = require('../_db');
 const { normalizeMotoPartsProduct } = require('../../lib/motoparts-products');
+const { normalizeMotorcycle, validateVin } = require('../../lib/motoparts-motorcycles');
 
 
 // Todos los campos del modelo — sincronizados con COL mapping del frontend
@@ -78,6 +79,42 @@ async function ensureColumns(sql) {
   await sql`CREATE INDEX IF NOT EXISTS articulos_clase_abc_idx ON articulos (clase_abc)`;
 }
 
+async function ensureMotorcycleStorage(sql) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS motoparts_motorcycles (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      vin TEXT NOT NULL,
+      numero_chasis TEXT,
+      numero_motor TEXT,
+      marca TEXT,
+      linea TEXT,
+      modelo TEXT,
+      anio_modelo TEXT,
+      cilindraje TEXT,
+      color TEXT,
+      tipo TEXT DEFAULT 'MOTOCICLETA',
+      estado TEXT DEFAULT 'RECIBIDA',
+      bodega TEXT,
+      ubicacion_actual TEXT DEFAULT 'FANALCA',
+      fecha_recepcion TEXT,
+      proveedor TEXT,
+      orden_compra TEXT,
+      costo NUMERIC(14,4),
+      precio_venta NUMERIC(14,2),
+      cliente_reservado TEXT,
+      estado_comercial TEXT DEFAULT 'DISPONIBLE',
+      empresa_id TEXT,
+      fecha_ultimo_movimiento TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS motoparts_motorcycles_vin_uidx ON motoparts_motorcycles (vin)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_motorcycles_empresa_idx ON motoparts_motorcycles (empresa_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_motorcycles_motor_idx ON motoparts_motorcycles (numero_motor)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_motorcycles_chasis_idx ON motoparts_motorcycles (numero_chasis)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_motorcycles_location_idx ON motoparts_motorcycles (ubicacion_actual)`;
+}
+
 module.exports = async (req, res) => {
   cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -87,7 +124,85 @@ module.exports = async (req, res) => {
     // Ensure columns exist on every request (cheap — uses IF NOT EXISTS)
     await ensureColumns(sql);
 
-    const { action, limit = 5000, empresa_id } = req.query;
+    const { action, limit = 5000, empresa_id, mode, vin } = req.query;
+
+    if (mode === 'motorcycles') {
+      await ensureMotorcycleStorage(sql);
+
+      if (req.method === 'GET') {
+        let rows;
+        const v = vin ? validateVin(vin) : null;
+        if (vin && !v.ok) return res.status(400).json({ ok: false, error: v.message });
+        if (empresa_id && vin) {
+          rows = await sql`SELECT * FROM motoparts_motorcycles WHERE empresa_id = ${empresa_id} AND vin = ${v.vin} ORDER BY updated_at DESC LIMIT ${parseInt(limit)}`;
+        } else if (empresa_id) {
+          rows = await sql`SELECT * FROM motoparts_motorcycles WHERE empresa_id = ${empresa_id} ORDER BY updated_at DESC LIMIT ${parseInt(limit)}`;
+        } else if (vin) {
+          rows = await sql`SELECT * FROM motoparts_motorcycles WHERE vin = ${v.vin} ORDER BY updated_at DESC LIMIT ${parseInt(limit)}`;
+        } else {
+          rows = await sql`SELECT * FROM motoparts_motorcycles ORDER BY updated_at DESC LIMIT ${parseInt(limit)}`;
+        }
+        return res.status(200).json({ ok: true, data: rows, total: rows.length });
+      }
+
+      if (req.method === 'POST' || req.method === 'PUT') {
+        const payload = normalizeMotorcycle(req.body || {});
+        if (!payload.ok) return res.status(400).json({ ok: false, error: payload.message });
+        if (!Number.isFinite(payload.costo) && payload.costo !== null) return res.status(400).json({ ok: false, error: 'Costo invalido.' });
+        if (!Number.isFinite(payload.precio_venta) && payload.precio_venta !== null) return res.status(400).json({ ok: false, error: 'Precio de venta invalido.' });
+        const rows = await sql`
+          INSERT INTO motoparts_motorcycles (
+            id, vin, numero_chasis, numero_motor, marca, linea, modelo, anio_modelo,
+            cilindraje, color, tipo, estado, bodega, ubicacion_actual, fecha_recepcion,
+            proveedor, orden_compra, costo, precio_venta, cliente_reservado,
+            estado_comercial, empresa_id, fecha_ultimo_movimiento, updated_at
+          ) VALUES (
+            ${payload.id}, ${payload.vin}, ${payload.numero_chasis}, ${payload.numero_motor},
+            ${payload.marca}, ${payload.linea}, ${payload.modelo}, ${payload.anio_modelo},
+            ${payload.cilindraje}, ${payload.color}, ${payload.tipo}, ${payload.estado},
+            ${payload.bodega}, ${payload.ubicacion_actual}, ${payload.fecha_recepcion},
+            ${payload.proveedor}, ${payload.orden_compra}, ${payload.costo}, ${payload.precio_venta},
+            ${payload.cliente_reservado}, ${payload.estado_comercial}, ${payload.empresa_id},
+            NOW(), NOW()
+          )
+          ON CONFLICT (vin) DO UPDATE SET
+            numero_chasis=EXCLUDED.numero_chasis,
+            numero_motor=EXCLUDED.numero_motor,
+            marca=EXCLUDED.marca,
+            linea=EXCLUDED.linea,
+            modelo=EXCLUDED.modelo,
+            anio_modelo=EXCLUDED.anio_modelo,
+            cilindraje=EXCLUDED.cilindraje,
+            color=EXCLUDED.color,
+            tipo=EXCLUDED.tipo,
+            estado=EXCLUDED.estado,
+            bodega=EXCLUDED.bodega,
+            ubicacion_actual=EXCLUDED.ubicacion_actual,
+            fecha_recepcion=EXCLUDED.fecha_recepcion,
+            proveedor=EXCLUDED.proveedor,
+            orden_compra=EXCLUDED.orden_compra,
+            costo=EXCLUDED.costo,
+            precio_venta=EXCLUDED.precio_venta,
+            cliente_reservado=EXCLUDED.cliente_reservado,
+            estado_comercial=EXCLUDED.estado_comercial,
+            empresa_id=EXCLUDED.empresa_id,
+            fecha_ultimo_movimiento=NOW(),
+            updated_at=NOW()
+          RETURNING *`;
+        return res.status(200).json({ ok: true, data: rows[0], id: rows[0].id });
+      }
+
+      if (req.method === 'DELETE') {
+        const validation = validateVin(vin);
+        if (!validation.ok) return res.status(400).json({ ok: false, error: validation.message });
+        const rows = await sql`
+          UPDATE motoparts_motorcycles
+          SET estado='BLOQUEADA', estado_comercial='NO DISPONIBLE', updated_at=NOW()
+          WHERE vin=${validation.vin}
+          RETURNING *`;
+        return res.status(200).json({ ok: true, data: rows[0] || null });
+      }
+    }
 
     // ── GET ───────────────────────────────────────────────────────────────
     if (req.method === 'GET') {

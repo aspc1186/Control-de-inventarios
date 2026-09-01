@@ -250,6 +250,35 @@ async function setupTables(sql) {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`;
 
+  await sql`
+    CREATE TABLE IF NOT EXISTS motoparts_motorcycles (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      vin TEXT NOT NULL,
+      numero_chasis TEXT,
+      numero_motor TEXT,
+      marca TEXT,
+      linea TEXT,
+      modelo TEXT,
+      anio_modelo TEXT,
+      cilindraje TEXT,
+      color TEXT,
+      tipo TEXT DEFAULT 'MOTOCICLETA',
+      estado TEXT DEFAULT 'RECIBIDA',
+      bodega TEXT,
+      ubicacion_actual TEXT DEFAULT 'FANALCA',
+      fecha_recepcion TEXT,
+      proveedor TEXT,
+      orden_compra TEXT,
+      costo NUMERIC(14,4),
+      precio_venta NUMERIC(14,2),
+      cliente_reservado TEXT,
+      estado_comercial TEXT DEFAULT 'DISPONIBLE',
+      empresa_id TEXT,
+      fecha_ultimo_movimiento TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS nombre TEXT`;
   await sql`ALTER TABLE empresas ADD COLUMN IF NOT EXISTS slug TEXT`;
   await sql`ALTER TABLE empresas ALTER COLUMN slug SET DEFAULT 'empresa-principal'`;
@@ -383,6 +412,35 @@ async function setupTables(sql) {
   await sql`CREATE UNIQUE INDEX IF NOT EXISTS motoparts_locations_empresa_codigo_uidx ON motoparts_locations ((COALESCE(empresa_id, '__GLOBAL__')), codigo)`;
   await sql`CREATE INDEX IF NOT EXISTS motoparts_locations_empresa_idx ON motoparts_locations (empresa_id)`;
   await sql`CREATE INDEX IF NOT EXISTS motoparts_locations_tipo_idx ON motoparts_locations (tipo)`;
+
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS vin TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS numero_chasis TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS numero_motor TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS marca TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS linea TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS modelo TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS anio_modelo TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS cilindraje TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS color TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS tipo TEXT DEFAULT 'MOTOCICLETA'`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'RECIBIDA'`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS bodega TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS ubicacion_actual TEXT DEFAULT 'FANALCA'`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS fecha_recepcion TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS proveedor TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS orden_compra TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS costo NUMERIC(14,4)`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS precio_venta NUMERIC(14,2)`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS cliente_reservado TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS estado_comercial TEXT DEFAULT 'DISPONIBLE'`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS fecha_ultimo_movimiento TIMESTAMPTZ DEFAULT NOW()`;
+  await sql`ALTER TABLE motoparts_motorcycles ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS motoparts_motorcycles_vin_uidx ON motoparts_motorcycles (vin)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_motorcycles_empresa_idx ON motoparts_motorcycles (empresa_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_motorcycles_motor_idx ON motoparts_motorcycles (numero_motor)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_motorcycles_chasis_idx ON motoparts_motorcycles (numero_chasis)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_motorcycles_location_idx ON motoparts_motorcycles (ubicacion_actual)`;
 
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS correo TEXT`;
   await sql`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS username TEXT`;
