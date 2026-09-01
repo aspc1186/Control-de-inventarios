@@ -22326,6 +22326,175 @@ body:not(.app-mode) #login-view .login-right .card {
 }
 </style>
 <script>
+/* MotoParts locations: EST-01..EST-100, A-Z floor, SOLTRECH and FANALCA */
+(function(){
+  function esc(v){
+    if (typeof _sfEsc === 'function') return _sfEsc(v);
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; });
+  }
+  function companyId(){
+    try { return typeof _getEmpresaId === 'function' ? String(_getEmpresaId() || '') : ''; } catch(e) { return ''; }
+  }
+  function items(){
+    try { return (typeof _sfItemsAll === 'function' ? _sfItemsAll() : (typeof loadItems === 'function' ? loadItems() : [])) || []; } catch(e) { return []; }
+  }
+  function norm(v){ return String(v || '').trim().toUpperCase().replace(/\s+/g,''); }
+  function locOf(item){ return norm(item && (item.ubicacion_motoparts || item.ubicacion || item.bodega || item.localizacion)); }
+  function codeOf(item){ return String((item && (item.sku || item.codigo || item.id || item.referencia)) || '').trim(); }
+  function qtyOf(item){ return Number(item && (item.stock_disponible != null ? item.stock_disponible : item.stock != null ? item.stock : item.cantidad) || 0); }
+  function isShelf(code){ return /^EST-(0[1-9]|[1-9][0-9]|100)$/.test(norm(code)); }
+  function isFloor(code){ return /^[A-Z]-(0[1-9]|[1-9][0-9])-(0[1-9]|[1-9][0-9])$/.test(norm(code)); }
+  function locType(code){
+    var c = norm(code);
+    if (isShelf(c)) return 'SHELF';
+    if (isFloor(c)) return 'FLOOR';
+    if (/^SOLTRECH(?:-(0[1-9]|[1-9][0-9]))?$/.test(c)) return 'SOLTRECH';
+    if (c === 'FANALCA') return 'FANALCA';
+    return '';
+  }
+  function shelfCodes(){
+    var out = [];
+    for (var i=1;i<=100;i++) out.push('EST-' + String(i).padStart(2,'0'));
+    return out;
+  }
+  function floorZones(){
+    var out = [];
+    for (var c=65;c<=90;c++) out.push(String.fromCharCode(c));
+    return out;
+  }
+  function groupedByLocation(){
+    var map = {};
+    items().forEach(function(it){
+      var loc = locOf(it);
+      if (!loc) return;
+      if (!map[loc]) map[loc] = [];
+      map[loc].push(it);
+    });
+    (window._sfMotoLocations || []).forEach(function(loc){
+      var code = norm(loc && loc.codigo);
+      if (code && !map[code]) map[code] = [];
+    });
+    return map;
+  }
+  function locationSummary(code, rows){
+    var motos = rows.filter(function(it){ return it.vin || it.numero_motor || String(it.categoria||'').toUpperCase().indexOf('MOTO') >= 0; });
+    var refs = rows.length;
+    var units = rows.reduce(function(a,it){ return a + qtyOf(it); }, 0);
+    var state = refs ? 'Con inventario' : 'Disponible';
+    if (code === 'FANALCA' && motos.length) state = motos.length + ' VIN';
+    return { refs: refs, units: units, motos: motos.length, state: state };
+  }
+  function card(code, rows){
+    rows = rows || [];
+    var s = locationSummary(code, rows);
+    return '<button type="button" class="sf-moto-loc-card '+(rows.length?'has-stock':'')+'" onclick="_sfMotoOpenLocation(&quot;'+esc(code)+'&quot;)">' +
+      '<strong>'+esc(code)+'</strong><span>'+esc(locType(code) || 'UBICACION')+'</span>' +
+      '<em>'+esc(s.state)+'</em><small>'+s.refs+' refs - '+s.units.toLocaleString('es-CO')+' und</small>' +
+    '</button>';
+  }
+  function renderShelf(map){
+    return '<div class="sf-moto-loc-grid shelf">' + shelfCodes().map(function(c){ return card(c, map[c] || []); }).join('') + '</div>';
+  }
+  function renderFloor(map){
+    return '<div class="sf-moto-zones">' + floorZones().map(function(z){
+      var rows = Object.keys(map).filter(function(k){ return k.indexOf(z + '-') === 0; });
+      return '<button type="button" class="sf-moto-zone" onclick="_sfMotoFilterFloor(&quot;'+z+'&quot;)"><strong>'+z+'</strong><span>'+rows.length+' ubicaciones</span></button>';
+    }).join('') + '</div><div id="sf-moto-floor-list" class="sf-moto-floor-list"><p>Selecciona una zona A-Z para ver sus ubicaciones creadas.</p></div>';
+  }
+  function renderSpecial(map){
+    return '<div class="sf-moto-special">' + ['SOLTRECH','FANALCA'].map(function(c){ return card(c, map[c] || []); }).join('') + '</div>';
+  }
+  function renderMotoLocations(){
+    var host = document.getElementById('sf-motoparts-locations');
+    if (!host) return;
+    var tab = window._sfMotoLocTab || 'shelf';
+    var map = groupedByLocation();
+    host.innerHTML =
+      '<div class="sf-moto-head"><div><h3>StockFlow MotoParts</h3><p>Ubicaciones reales: EST-01 a EST-100, piso A-Z, SOLTRECH y FANALCA.</p></div>' +
+      '<div class="sf-moto-actions"><button class="btn btn-ghost btn-sm" onclick="_sfMotoNewLocation()">+ Ubicacion</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoRefreshLocations()">Actualizar</button></div></div>' +
+      '<div class="sf-moto-tabs">' +
+      [['shelf','Estanteria'],['floor','Piso A-Z'],['special','SOLTRECH / FANALCA']].map(function(t){
+        return '<button type="button" class="'+(tab===t[0]?'active':'')+'" onclick="_sfMotoLocTab=&quot;'+t[0]+'&quot;;_sfRenderMotoLocations()">'+t[1]+'</button>';
+      }).join('') + '</div>' +
+      (tab === 'floor' ? renderFloor(map) : tab === 'special' ? renderSpecial(map) : renderShelf(map));
+  }
+  window._sfRenderMotoLocations = renderMotoLocations;
+  window._sfMotoFilterFloor = function(zone){
+    var box = document.getElementById('sf-moto-floor-list');
+    if (!box) return;
+    var map = groupedByLocation();
+    var codes = Object.keys(map).filter(function(k){ return k.indexOf(zone + '-') === 0 && isFloor(k); }).sort();
+    box.innerHTML = codes.length ? '<div class="sf-moto-loc-grid">' + codes.map(function(c){ return card(c, map[c] || []); }).join('') + '</div>' : '<p>No hay ubicaciones con inventario en zona '+esc(zone)+'. Puedes crear una sin generar combinaciones masivas.</p>';
+  };
+  window._sfMotoOpenLocation = function(code){
+    var c = norm(code), rows = groupedByLocation()[c] || [];
+    var h = '<h3 style="margin-bottom:6px">'+esc(c)+'</h3><p style="font-size:12px;color:var(--muted);margin-bottom:12px">'+esc(locType(c) || 'Ubicacion MotoParts')+' - '+rows.length+' referencias</p>';
+    if (c === 'FANALCA') {
+      var vins = rows.filter(function(it){ return it.vin || it.numero_motor || String(it.categoria||'').toUpperCase().indexOf('MOTO') >= 0; });
+      h += vins.length ? '<div class="tbl-overflow"><table><thead><tr><th>VIN</th><th>Motor</th><th>Moto</th><th>Color/Estado</th></tr></thead><tbody>' + vins.map(function(it){
+        return '<tr><td><code>'+esc(it.vin || '-')+'</code></td><td>'+esc(it.numero_motor || '-')+'</td><td>'+esc([it.marca_moto,it.linea_moto,it.modelo_moto,it.cilindraje].filter(Boolean).join(' '))+'</td><td>'+esc([it.color,it.estado].filter(Boolean).join(' / '))+'</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p style="color:var(--muted)">FANALCA no tiene motocicletas/VIN registrados en esta empresa.</p>';
+    } else {
+      h += rows.length ? '<div class="tbl-overflow"><table><thead><tr><th>Codigo</th><th>Producto</th><th>Stock</th><th>OEM</th></tr></thead><tbody>' + rows.map(function(it){
+        return '<tr><td><code>'+esc(codeOf(it))+'</code></td><td>'+esc(it.nombre || it.descripcion || '')+'</td><td>'+qtyOf(it).toLocaleString('es-CO')+'</td><td>'+esc(it.referencia_oem || '')+'</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p style="color:var(--muted)">Ubicacion disponible sin inventario registrado.</p>';
+    }
+    h += '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cerrar</button></div>';
+    if (typeof openModal === 'function') openModal(h, true);
+  };
+  window._sfMotoNewLocation = function(){
+    var h = '<h3 style="margin-bottom:10px">Nueva ubicacion MotoParts</h3>' +
+      '<div class="form-row"><label>Codigo</label><input id="sf-moto-loc-code" placeholder="EST-01, A-01-01, SOLTRECH o FANALCA" style="text-transform:uppercase"></div>' +
+      '<div class="form-row"><label>Descripcion</label><input id="sf-moto-loc-desc" placeholder="Opcional"></div>' +
+      '<div class="form-grid"><div class="form-row"><label>Capacidad</label><input id="sf-moto-loc-cap" type="number" min="0"></div><div class="form-row"><label>Orden recorrido</label><input id="sf-moto-loc-order" type="number" min="0"></div></div>' +
+      '<div id="sf-moto-loc-error" style="display:none;color:var(--red);font-size:12px;margin-top:8px"></div>' +
+      '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_sfMotoSaveLocation()">Guardar</button></div>';
+    if (typeof openModal === 'function') openModal(h, true);
+  };
+  window._sfMotoSaveLocation = function(){
+    var g = function(id){ var el=document.getElementById(id); return el ? el.value.trim() : ''; };
+    var code = norm(g('sf-moto-loc-code'));
+    var type = locType(code);
+    var err = document.getElementById('sf-moto-loc-error');
+    if (!type) {
+      if (err) { err.style.display='block'; err.textContent='Codigo invalido. Usa EST-01..EST-100, A-01-01..Z-99-99, SOLTRECH o FANALCA.'; }
+      return;
+    }
+    var body = { mode:'motoparts', codigo:code, nombre:code, descripcion:g('sf-moto-loc-desc'), empresa_id:companyId(), capacidad:g('sf-moto-loc-cap'), recorrido_orden:g('sf-moto-loc-order') };
+    fetch('/api/ubicaciones?mode=motoparts', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+      .then(function(r){ return r.json().then(function(x){ if(!r.ok || x.ok===false) throw new Error(x.error || 'No se pudo guardar'); return x; }); })
+      .then(function(){ if (typeof showToast === 'function') showToast('Ubicacion MotoParts guardada','green'); if (typeof closeModal === 'function') closeModal(); window._sfMotoRefreshLocations(); })
+      .catch(function(e){ if (err) { err.style.display='block'; err.textContent=e.message; } else if (typeof showToast === 'function') showToast(e.message,'red'); });
+  };
+  window._sfMotoRefreshLocations = function(){
+    var id = companyId();
+    var url = '/api/ubicaciones?mode=motoparts' + (id && id !== '__SA__' ? '&empresa_id=' + encodeURIComponent(id) : '');
+    fetch(url).then(function(r){ return r.ok ? r.json() : null; }).then(function(res){
+      window._sfMotoLocations = res && Array.isArray(res.data) ? res.data : [];
+      renderMotoLocations();
+    }).catch(function(){ renderMotoLocations(); });
+  };
+
+  var baseBuildLocations = typeof _buildUbicacionesUI === 'function' ? _buildUbicacionesUI : null;
+  if (baseBuildLocations) {
+    _buildUbicacionesUI = function(){
+      var out = baseBuildLocations.apply(this, arguments);
+      var pg = document.getElementById('pg-ubicaciones');
+      if (pg && !document.getElementById('sf-motoparts-locations')) {
+        pg.insertAdjacentHTML('afterbegin', '<div id="sf-motoparts-locations" class="card sf-moto-locations"></div>');
+        renderMotoLocations();
+        setTimeout(window._sfMotoRefreshLocations, 0);
+      }
+      return out;
+    };
+    window._buildUbicacionesUI = _buildUbicacionesUI;
+  }
+})();
+</script>
+<style>
+.sf-moto-locations{margin-bottom:14px;padding:14px}.sf-moto-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}.sf-moto-head h3{margin:0;color:var(--white);font-size:15px}.sf-moto-head p{margin:3px 0 0;color:var(--muted);font-size:11px}.sf-moto-actions{display:flex;gap:8px;flex-wrap:wrap}.sf-moto-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;border-bottom:1px solid var(--border2)}.sf-moto-tabs button{border:0;background:transparent;color:var(--muted);font-weight:800;padding:9px 10px;cursor:pointer;border-bottom:2px solid transparent}.sf-moto-tabs button.active{color:var(--electric);border-bottom-color:var(--electric)}.sf-moto-loc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}.sf-moto-loc-grid.shelf{max-height:360px;overflow:auto;padding-right:4px}.sf-moto-loc-card,.sf-moto-zone{border:1px solid var(--border2);background:var(--card2);border-radius:8px;color:var(--white);padding:10px;text-align:left;cursor:pointer;min-height:84px}.sf-moto-loc-card strong,.sf-moto-zone strong{display:block;font-size:13px;color:var(--white)}.sf-moto-loc-card span,.sf-moto-zone span{display:block;font-size:10px;color:var(--muted);margin-top:3px}.sf-moto-loc-card em{display:block;font-style:normal;font-size:11px;color:var(--electric);margin-top:8px;font-weight:800}.sf-moto-loc-card small{display:block;font-size:10px;color:var(--muted);margin-top:3px}.sf-moto-loc-card.has-stock{border-color:var(--electric);box-shadow:inset 0 0 0 1px rgba(14,165,233,.25)}.sf-moto-zones{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:8px;margin-bottom:12px}.sf-moto-floor-list{border:1px dashed var(--border2);border-radius:8px;padding:12px;color:var(--muted);font-size:12px}.sf-moto-special{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+</style>
+<script>
 /* Final MotoParts product surface */
 (function(){
   var MOTO_HEADERS = [

@@ -128,5 +128,15 @@ module.exports = async (req, res) => {
       RETURNING *`;
     return res.json({ ok: true, data: rows[0] || null });
   }
+  if (req.method === 'DELETE') {
+    const { id, codigo } = req.query || {};
+    const key = String(id || codigo || '').trim();
+    if (!key) return res.status(400).json({ ok: false, error: 'id o codigo requerido' });
+    const rows = await sql`
+      DELETE FROM ubicaciones
+      WHERE id = ${key} OR codigo = ${key}
+      RETURNING *`;
+    return res.json({ ok: true, deleted: rows.length, data: rows[0] || null });
+  }
   res.status(405).end();
 };
