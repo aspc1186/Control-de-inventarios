@@ -33,7 +33,9 @@ async function setupTables(sql) {
       dias_cobertura  NUMERIC(8,0) DEFAULT 0,
       costo           NUMERIC(14,4) DEFAULT 0,
       precio          NUMERIC(14,2) DEFAULT 0,
+      iva             NUMERIC(6,2) DEFAULT 0,
       proveedor       TEXT,
+      proveedores_alternos TEXT,
       estado          TEXT DEFAULT 'Activo',
       empresa_id      TEXT,
       subcategoria    TEXT DEFAULT '',
@@ -57,6 +59,8 @@ async function setupTables(sql) {
       tipo_repuesto TEXT,
       posicion_moto TEXT,
       foto_url TEXT,
+      rotacion NUMERIC(14,4) DEFAULT 0,
+      clase_abc TEXT DEFAULT '',
       fotos JSONB DEFAULT '[]',
       motos_compatibles JSONB DEFAULT '[]',
       created_at      TIMESTAMPTZ DEFAULT NOW(),
@@ -274,6 +278,8 @@ async function setupTables(sql) {
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS lead_time NUMERIC(8,0) DEFAULT 0`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS dias_cobertura NUMERIC(8,0) DEFAULT 0`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS precio NUMERIC(14,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS iva NUMERIC(6,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS proveedores_alternos TEXT`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'Activo'`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS subcategoria TEXT DEFAULT ''`;
@@ -297,11 +303,15 @@ async function setupTables(sql) {
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS tipo_repuesto TEXT`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS posicion_moto TEXT`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS foto_url TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS rotacion NUMERIC(14,4) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS clase_abc TEXT DEFAULT ''`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS fotos JSONB DEFAULT '[]'`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS motos_compatibles JSONB DEFAULT '[]'`;
   await sql`CREATE INDEX IF NOT EXISTS articulos_referencia_oem_idx ON articulos (referencia_oem)`;
   await sql`CREATE INDEX IF NOT EXISTS articulos_vin_idx ON articulos (vin)`;
   await sql`CREATE INDEX IF NOT EXISTS articulos_ubicacion_motoparts_idx ON articulos (ubicacion_motoparts)`;
+  await sql`CREATE INDEX IF NOT EXISTS articulos_codigo_barras_idx ON articulos (codigo_barras)`;
+  await sql`CREATE INDEX IF NOT EXISTS articulos_clase_abc_idx ON articulos (clase_abc)`;
 
   await sql`ALTER TABLE movimientos ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
   await sql`ALTER TABLE ubicaciones ADD COLUMN IF NOT EXISTS empresa_id TEXT`;

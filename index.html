@@ -1318,7 +1318,8 @@ function saveItems(items) {
         stock_reservado:i.stock_reservado||0, stock_seguridad:i.stock_seguridad,
         punto_reorden:i.punto_reorden, consumo_diario:i.consumo_diario,
         lead_time:i.lead_time, costo:i.costo, proveedor:i.proveedor,
-        estado:i.estado, empresa_id:i.empresa_id,
+        estado:i.estado, empresa_id:i.empresa_id, iva:i.iva,
+        proveedores_alternos:i.proveedores_alternos, rotacion:i.rotacion, clase_abc:i.clase_abc,
         referencia_fabricante:i.referencia_fabricante, referencia_oem:i.referencia_oem,
         referencias_alternas:i.referencias_alternas, marca_moto:i.marca_moto,
         linea_moto:i.linea_moto, modelo_moto:i.modelo_moto, cilindraje:i.cilindraje,
@@ -9618,6 +9619,13 @@ function openNuevoArticulo(editId) {
     h.push('</div>');
   }
   h.push('</div>');
+  h.push('<div class="form-grid">');
+  h.push('<div class="form-row"><label>IVA (%)</label>');
+  h.push('<input id="na-iva" type="number" min="0" step="0.01" placeholder="0" value="'+(item?item.iva||'':'')+'">');
+  h.push('</div>');
+  h.push('<div class="form-row"><label>Proveedores alternos</label>');
+  h.push('<input id="na-proveedores-alt" placeholder="Separados por ;" value="'+(item?_sfEsc(item.proveedores_alternos||''):'')+'">');
+  h.push('</div></div>');
 
   // ── Lead Time (único indicador que el usuario puede ingresar) ─────────
   h.push('<div class="form-grid">');
@@ -9720,6 +9728,8 @@ function _guardarNuevoArticulo(editId) {
     costo:        costo,
     costo_unitario: costo,
     precio:       gn('na-precio'),
+    iva:          gn('na-iva'),
+    proveedores_alternos: g('na-proveedores-alt'),
     lead_time:    lead,
     referencia_fabricante: g('na-ref-fabricante'),
     referencia_oem: g('na-ref-oem'),
@@ -12989,6 +12999,10 @@ function handleImportFile(file) {
                            'ultima salida','fecha ultimo despacho','fecha despacho'],
         codigo_barras:    ['Código de Barras','codigo de barras','codigo_barras','barcode','ean','upc','cod_barras'],
         proveedor:        ['Proveedor','proveedor','supplier','vendor','suplidor'],
+        proveedores_alternos: ['Proveedores Alternos','proveedores_alternos','proveedores alternos','alternos','suppliers alternos'],
+        iva:              ['IVA','iva','impuesto'],
+        rotacion:         ['Rotacion','Rotación','rotacion','rotación','rotation'],
+        clase_abc:        ['Clasificacion ABC','Clasificación ABC','clase_abc','clasificacion_abc','abc'],
         estado:           ['Estado','estado','status','activo','state'],
         referencia_fabricante: ['Referencia Fabricante','referencia_fabricante','ref fabricante','referencia fabricante','part number','numero parte','número parte'],
         referencia_oem:        ['Referencia OEM','referencia_oem','ref oem','oem','codigo oem','código oem'],
@@ -13111,10 +13125,14 @@ function handleImportFile(file) {
           dias_cobertura:  parseFloat(g('dias_cobertura'))||0,
           costo:           _parseCosto(g('costo')),
           precio:          _parseCosto(g('precio'))||0,
+          iva:             parseFloat(g('iva'))||0,
+          rotacion:        parseFloat(g('rotacion'))||0,
+          clase_abc:       g('clase_abc'),
           codigo_barras:   g('codigo_barras'),
           ultima_entrada:  g('ultima_entrada'),
           ultima_salida:   g('ultima_salida'),
           proveedor:       g('proveedor'),
+          proveedores_alternos: g('proveedores_alternos'),
           estado:          g('estado')||'Activo',
           referencia_fabricante: g('referencia_fabricante'),
           referencia_oem:        g('referencia_oem'),
@@ -13375,7 +13393,7 @@ function executeSync(parsed) {
       var CAMPOS_EXCEL = ['nombre','descripcion','categoria','subcategoria','marca',
         'unidad','bodega','stock_minimo','stock_maximo','stock_seguridad','punto_reorden',
         'consumo_diario','lead_time','costo','precio','proveedor','estado',
-        'ultima_entrada','ultima_salida','codigo_barras',
+        'ultima_entrada','ultima_salida','codigo_barras','iva','proveedores_alternos','rotacion','clase_abc',
         'referencia_fabricante','referencia_oem','referencias_alternas','marca_moto',
         'linea_moto','modelo_moto','cilindraje','anio_inicial','anio_final','vin',
         'numero_motor','proveedor_origen','ubicacion_motoparts','compatibilidad_moto',
@@ -22500,16 +22518,16 @@ body:not(.app-mode) #login-view .login-right .card {
   var MOTO_HEADERS = [
     'SKU','Nombre','Descripcion','Categoria','Subcategoria','Marca','Unidad','Ubicacion','Bodega',
     'Stock','Stock_Minimo','Stock_Maximo','Stock_Reservado','Stock_Seguridad','Punto_Reorden',
-    'Consumo_Diario','Lead_Time','Costo','Precio','Proveedor','Estado','Codigo_Barras',
+    'Consumo_Diario','Lead_Time','Costo','Precio','IVA','Proveedor','Proveedores_Alternos','Estado','Codigo_Barras',
     'Referencia_Fabricante','Referencia_OEM','Referencias_Alternas','Marca_Moto','Linea_Moto',
     'Modelo_Moto','Cilindraje','Anio_Inicial','Anio_Final','VIN','Numero_Motor','Proveedor_Origen',
-    'Ubicacion_MotoParts','Compatibilidad_Moto','Tipo_Repuesto','Posicion_Moto','Foto_URL'
+    'Ubicacion_MotoParts','Compatibilidad_Moto','Tipo_Repuesto','Posicion_Moto','Foto_URL','Rotacion','Clasificacion_ABC'
   ];
   var MOTO_SAMPLE = [[
     'AKT-125-FILTRO-001','Filtro aire AKT 125','Filtro de aire alto flujo','Repuestos moto','Filtros',
-    'AKT','UND','EST-01','B01',10,2,20,0,1,3,0,7,18000,26000,'MCM','Activo','',
+    'AKT','UND','EST-01','B01',10,2,20,0,1,3,0,7,18000,26000,19,'MCM','Soldaduras West Arco','Activo','',
     'FA-AKT-125','OEM-AKT-125-FA','FA125; FILTRO125','AKT','NKD','125',125,2018,2026,'',
-    '','MCM','EST-01','AKT NKD 125 2018-2026','Filtro','Admision',''
+    '','MCM','EST-01','AKT NKD 125 2018-2026','Filtro','Admision','',0,'C'
   ]];
 
   function downloadMotoTemplate(){

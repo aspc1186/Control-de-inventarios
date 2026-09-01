@@ -8,17 +8,17 @@ const { normalizeMotoPartsProduct } = require('../../lib/motoparts-products');
 const CAMPOS_TEXTO = [
   'sku','nombre','descripcion','categoria','subcategoria','marca',
   'unidad','ubicacion','ubicacion_label','bodega','bodega_id',
-  'proveedor','estado','empresa_id','created_by',
+  'proveedor','proveedores_alternos','estado','empresa_id','created_by',
   'ultima_entrada','ultima_salida','codigo_barras','metodo_seguridad',
   'referencia_fabricante','referencia_oem','referencias_alternas','marca_moto',
   'linea_moto','modelo_moto','cilindraje','anio_inicial','anio_final','vin',
   'numero_motor','proveedor_origen','ubicacion_motoparts','compatibilidad_moto',
-  'tipo_repuesto','posicion_moto','foto_url',
+  'tipo_repuesto','posicion_moto','foto_url','clase_abc',
 ];
 const CAMPOS_NUMERO = [
   'stock','stock_minimo','stock_maximo','stock_reservado','stock_seguridad',
   'punto_reorden','consumo_diario','lead_time','dias_cobertura',
-  'costo','precio',
+  'costo','precio','iva','rotacion',
 ];
 
 function n(v) {
@@ -43,6 +43,8 @@ async function ensureColumns(sql) {
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS subcategoria     VARCHAR(200)  DEFAULT ''`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bodega           VARCHAR(200)  DEFAULT ''`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS precio           NUMERIC(14,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS iva              NUMERIC(6,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS proveedores_alternos TEXT`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS codigo_barras    VARCHAR(100)  DEFAULT ''`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS empresa_id       VARCHAR(100)`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS estado           TEXT DEFAULT 'Activo'`;
@@ -65,11 +67,15 @@ async function ensureColumns(sql) {
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS tipo_repuesto TEXT`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS posicion_moto TEXT`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS foto_url TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS rotacion NUMERIC(14,4) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS clase_abc TEXT DEFAULT ''`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS fotos JSONB DEFAULT '[]'`;
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS motos_compatibles JSONB DEFAULT '[]'`;
   await sql`CREATE INDEX IF NOT EXISTS articulos_referencia_oem_idx ON articulos (referencia_oem)`;
   await sql`CREATE INDEX IF NOT EXISTS articulos_vin_idx ON articulos (vin)`;
   await sql`CREATE INDEX IF NOT EXISTS articulos_ubicacion_motoparts_idx ON articulos (ubicacion_motoparts)`;
+  await sql`CREATE INDEX IF NOT EXISTS articulos_codigo_barras_idx ON articulos (codigo_barras)`;
+  await sql`CREATE INDEX IF NOT EXISTS articulos_clase_abc_idx ON articulos (clase_abc)`;
 }
 
 module.exports = async (req, res) => {
@@ -88,12 +94,12 @@ module.exports = async (req, res) => {
       let rows;
       if (empresa_id) {
         rows = await sql`
-          SELECT * FROM articulos 
+          SELECT *, (COALESCE(stock,0) - COALESCE(stock_reservado,0)) AS stock_disponible FROM articulos 
           WHERE empresa_id = ${empresa_id} AND estado != 'Inactivo'
           ORDER BY sku LIMIT ${parseInt(limit)}`;
       } else {
         rows = await sql`
-          SELECT * FROM articulos 
+          SELECT *, (COALESCE(stock,0) - COALESCE(stock_reservado,0)) AS stock_disponible FROM articulos 
           ORDER BY sku LIMIT ${parseInt(limit)}`;
       }
       return res.status(200).json({ data: rows, total: rows.length });
@@ -132,6 +138,7 @@ module.exports = async (req, res) => {
           const bodega           = s(item.bodega)          || '';
           const bodega_id        = s(item.bodega_id)       || bodega;
           const proveedor        = s(item.proveedor)       || '';
+          const proveedores_alt  = s(item.proveedores_alternos) || '';
           const estado           = s(item.estado)          || 'Activo';
           const empresa_id_v     = s(item.empresa_id)      || null;
           const created_by       = s(item.created_by)      || 'Sistema';
@@ -154,6 +161,9 @@ module.exports = async (req, res) => {
           const dias_cob         = n(item.dias_cobertura)  ?? 0;
           const costo            = n(item.costo)           ?? n(item.costo_unitario) ?? 0;
           const precio           = n(item.precio)          ?? costo;
+          const iva              = n(item.iva)             ?? 0;
+          const rotacion         = n(item.rotacion)        ?? 0;
+          const clase_abc        = s(item.clase_abc || item.clasificacion_abc) || '';
 
           // Check if exists
           const existing = await sql`SELECT id FROM articulos WHERE sku=${sku} LIMIT 1`;
@@ -171,8 +181,8 @@ module.exports = async (req, res) => {
                 punto_reorden=${p_reorden}, consumo_diario=${consumo},
                 lead_time=${lead}, dias_cobertura=${dias_cob},
                 metodo_seguridad=${metodo_seg},
-                costo=${costo}, precio=${precio},
-                proveedor=${proveedor}, estado=${estado},
+                costo=${costo}, precio=${precio}, iva=${iva},
+                proveedor=${proveedor}, proveedores_alternos=${proveedores_alt}, estado=${estado},
                 empresa_id=COALESCE(${empresa_id_v}, empresa_id),
                 ultima_entrada=COALESCE(${ultima_ent}, ultima_entrada),
                 ultima_salida=COALESCE(${ultima_sal}, ultima_salida),
@@ -194,6 +204,8 @@ module.exports = async (req, res) => {
                 tipo_repuesto=${moto.tipo_repuesto},
                 posicion_moto=${moto.posicion_moto},
                 foto_url=${moto.foto_url},
+                rotacion=${rotacion},
+                clase_abc=${clase_abc},
                 fotos=${fotos_json}::jsonb,
                 motos_compatibles=${motos_json}::jsonb,
                 created_by=${created_by}, updated_at=NOW()
@@ -206,24 +218,24 @@ module.exports = async (req, res) => {
                 marca, unidad, ubicacion, ubicacion_label, bodega, bodega_id,
                 stock, stock_minimo, stock_maximo, stock_reservado, stock_seguridad,
                 punto_reorden, consumo_diario, lead_time, dias_cobertura, metodo_seguridad,
-                costo, precio, proveedor, estado, empresa_id, created_by,
+                costo, precio, iva, proveedor, proveedores_alternos, estado, empresa_id, created_by,
                 ultima_entrada, ultima_salida, codigo_barras,
                 referencia_fabricante, referencia_oem, referencias_alternas, marca_moto,
                 linea_moto, modelo_moto, cilindraje, anio_inicial, anio_final, vin,
                 numero_motor, proveedor_origen, ubicacion_motoparts, compatibilidad_moto,
-                tipo_repuesto, posicion_moto, foto_url, fotos, motos_compatibles,
+                tipo_repuesto, posicion_moto, foto_url, rotacion, clase_abc, fotos, motos_compatibles,
                 created_at, updated_at
               ) VALUES (
                 ${id}, ${sku}, ${nombre}, ${descripcion}, ${categoria}, ${subcategoria},
                 ${marca}, ${unidad}, ${ubicacion}, ${ubicacion_label}, ${bodega}, ${bodega_id},
                 ${stock}, ${stock_min}, ${stock_max}, ${stock_res}, ${stock_seg},
                 ${p_reorden}, ${consumo}, ${lead}, ${dias_cob}, ${metodo_seg},
-                ${costo}, ${precio}, ${proveedor}, ${estado}, ${empresa_id_v}, ${created_by},
+                ${costo}, ${precio}, ${iva}, ${proveedor}, ${proveedores_alt}, ${estado}, ${empresa_id_v}, ${created_by},
                 ${ultima_ent}, ${ultima_sal}, ${codigo_barras},
                 ${moto.referencia_fabricante}, ${moto.referencia_oem}, ${moto.referencias_alternas}, ${moto.marca_moto},
                 ${moto.linea_moto}, ${moto.modelo_moto}, ${moto.cilindraje}, ${moto.anio_inicial}, ${moto.anio_final}, ${moto.vin},
                 ${moto.numero_motor}, ${moto.proveedor_origen}, ${moto.ubicacion_motoparts}, ${moto.compatibilidad_moto},
-                ${moto.tipo_repuesto}, ${moto.posicion_moto}, ${moto.foto_url}, ${fotos_json}::jsonb, ${motos_json}::jsonb,
+                ${moto.tipo_repuesto}, ${moto.posicion_moto}, ${moto.foto_url}, ${rotacion}, ${clase_abc}, ${fotos_json}::jsonb, ${motos_json}::jsonb,
                 NOW(), NOW()
               )`;
             inserted++;
@@ -261,7 +273,9 @@ module.exports = async (req, res) => {
           lead_time=COALESCE(${n(item.lead_time)},lead_time),
           costo=COALESCE(${n(item.costo)},costo),
           precio=COALESCE(${n(item.precio)},precio),
+          iva=COALESCE(${n(item.iva)},iva),
           proveedor=COALESCE(${s(item.proveedor)},proveedor),
+          proveedores_alternos=COALESCE(${s(item.proveedores_alternos)},proveedores_alternos),
           estado=COALESCE(${s(item.estado)},estado),
           empresa_id=COALESCE(${s(item.empresa_id)},empresa_id),
           ultima_entrada=COALESCE(${s(item.ultima_entrada)},ultima_entrada),
@@ -282,6 +296,8 @@ module.exports = async (req, res) => {
           tipo_repuesto=COALESCE(${moto.tipo_repuesto},tipo_repuesto),
           posicion_moto=COALESCE(${moto.posicion_moto},posicion_moto),
           foto_url=COALESCE(${moto.foto_url},foto_url),
+          rotacion=COALESCE(${n(item.rotacion)},rotacion),
+          clase_abc=COALESCE(${s(item.clase_abc || item.clasificacion_abc)},clase_abc),
           fotos=COALESCE(${fotos_json}::jsonb,fotos),
           motos_compatibles=COALESCE(${motos_json}::jsonb,motos_compatibles),
           updated_at=NOW()
