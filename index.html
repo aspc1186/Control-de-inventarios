@@ -13991,6 +13991,7 @@ function _buildInventarioUI(allItems) {
     h.push('<svg viewBox="0 0 24 24" width="14" height="14" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted)" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>');
     h.push('<input id="inv-s" type="text" placeholder="Buscar codigo, nombre, categoria, marca..." value="'+(invSearch||'')+'" oninput="invSearch=this.value;filterInventarioTable()" style="width:100%;padding:8px 8px 8px 32px;background:var(--card2);border:1px solid var(--border2);border-radius:8px;color:var(--white);font-size:12px;box-sizing:border-box">');
     h.push('</div>');
+    h.push('<button class="btn btn-ghost btn-sm" onclick="openGlobalSearch()" style="white-space:nowrap">Buscador global</button>');
     h.push('<select onchange="invFiltroCateg=this.value;filterInventarioTable()" style="background:var(--card2);border:1px solid var(--border2);color:var(--white);padding:7px 10px;border-radius:8px;font-size:12px">');
     h.push('<option value="">Categoría</option>');
     cats.forEach(function(cat){ h.push('<option value="'+cat+'"'+(typeof invFiltroCateg!=='undefined'&&invFiltroCateg===cat?' selected':'')+'>'+cat+'</option>'); });
@@ -14667,7 +14668,7 @@ function openReorderModal(itemId) {
 function openGlobalSearch() {
   var h = [];
   h.push('<div style="position:relative">');
-  h.push('<input id="gs-q" type="text" placeholder="Buscar productos, proveedores, movimientos..." autofocus');
+  h.push('<input id="gs-q" type="text" placeholder="Buscar repuestos, VIN, ubicaciones, OEM o compatibilidad..." autofocus');
   h.push(' oninput="_globalSearch(this.value)"');
   h.push(' style="width:100%;padding:12px 12px 12px 40px;font-size:14px;background:var(--card2);border:1px solid var(--border2);border-radius:10px;color:var(--white);box-sizing:border-box">');
   h.push('<svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>');
@@ -14677,27 +14678,73 @@ function openGlobalSearch() {
   setTimeout(function(){ var el=document.getElementById('gs-q'); if(el) el.focus(); }, 100);
 }
 
+var _sfGlobalSearchTimer = null;
 function _globalSearch(q) {
   var results = document.getElementById('gs-results');
   if (!results) return;
   if (!q || q.length < 2) { results.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Escribe para buscar...</p>'; return; }
-  q = q.toLowerCase();
-  var items = _invItems || loadItems();
-  var found = items.filter(function(i){
-    return (i.sku||'').toLowerCase().includes(q) ||
-           (i.nombre||'').toLowerCase().includes(q) ||
-           (i.categoria||'').toLowerCase().includes(q) ||
-           (i.proveedor||'').toLowerCase().includes(q);
+  var needle = String(q || '').trim();
+  results.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Buscando...</p>';
+  clearTimeout(_sfGlobalSearchTimer);
+  _sfGlobalSearchTimer = setTimeout(function(){
+    var companyId = '';
+    try { companyId = typeof _getEmpresaId === 'function' ? _getEmpresaId() : ''; } catch(e) {}
+    var url = '/api/articulos?mode=global-search&limit=20&q=' + encodeURIComponent(needle);
+    if (companyId) url += '&empresa_id=' + encodeURIComponent(companyId);
+    fetch(url)
+      .then(function(r){ return r.ok ? r.json() : Promise.reject(new Error('Busqueda no disponible')); })
+      .then(function(payload){ _renderGlobalSearchResults(needle, payload && payload.groups, payload && payload.total); })
+      .catch(function(){ _renderGlobalSearchLocal(needle); });
+  }, 220);
+}
+
+function _sfResultCard(label, title, subtitle, meta, onclick) {
+  var esc = typeof _sfEsc === 'function' ? _sfEsc : function(v){ return String(v == null ? '' : v).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); };
+  return '<button type="button" onclick="'+onclick+'" style="width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:10px;border:0;border-bottom:1px solid rgba(255,255,255,.06);cursor:pointer;background:transparent;color:var(--white);border-radius:8px" onmouseenter="this.style.background=\'rgba(255,255,255,.04)\'" onmouseleave="this.style.background=\'transparent\'">' +
+    '<span style="font-size:10px;font-weight:900;color:var(--electric);background:rgba(59,130,246,.12);padding:3px 7px;border-radius:6px;min-width:74px;text-align:center">'+esc(label)+'</span>' +
+    '<span style="flex:1;min-width:0"><strong style="display:block;font-size:12px;color:var(--white);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(title)+'</strong><small style="display:block;font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(subtitle||'')+'</small></span>' +
+    '<strong style="font-size:12px;color:var(--neon);white-space:nowrap">'+esc(meta||'')+'</strong>' +
+    '</button>';
+}
+
+function _renderGlobalSearchResults(q, groups, total) {
+  var results = document.getElementById('gs-results');
+  if (!results) return;
+  groups = groups || {};
+  if (!total) { results.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Sin resultados para "'+(typeof _sfEsc==='function'?_sfEsc(q):q)+'"</p>'; return; }
+  var html = [];
+  function section(title, rows, build) {
+    if (!rows || !rows.length) return;
+    html.push('<div style="margin-bottom:12px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);font-weight:900;margin:8px 0">'+title+'</div><div style="border:1px solid var(--border2);border-radius:10px;overflow:hidden;background:var(--card2)">');
+    rows.forEach(function(row){ html.push(build(row)); });
+    html.push('</div></div>');
+  }
+  section('Repuestos', groups.repuestos, function(item){
+    var disp = Number(item.stock_disponible || 0);
+    return _sfResultCard('REPUESTO', item.sku + ' · ' + (item.nombre || ''), (item.referencia_oem || item.referencia_fabricante || item.categoria || '') + (item.ubicacion_motoparts ? ' · ' + item.ubicacion_motoparts : ''), disp, "closeModal();goto('inventario');invSearch='"+String(item.sku||'').replace(/'/g,'')+"';filterInventarioTable()");
+  });
+  section('Motocicletas y VIN', groups.motocicletas, function(m){
+    return _sfResultCard('VIN', m.vin || m.numero_motor || 'Moto', [m.marca,m.linea,m.modelo,m.anio_modelo].filter(Boolean).join(' '), m.ubicacion_actual || m.estado_comercial || '', "closeModal();goto('bodegas')");
+  });
+  section('Ubicaciones', groups.ubicaciones, function(u){
+    return _sfResultCard('UBICACION', u.codigo || u.nombre || 'Ubicacion', [u.tipo,u.grupo,u.estado].filter(Boolean).join(' · '), u.permite_vin ? 'VIN' : '', "closeModal();goto('bodegas')");
+  });
+  section('Compatibilidad', groups.compatibilidad, function(c){
+    return _sfResultCard('COMPAT', c.sku + ' · ' + (c.nombre || ''), [c.marca,c.linea,c.modelo,c.cilindraje,c.anio_desde&&c.anio_hasta?(c.anio_desde+'-'+c.anio_hasta):''].filter(Boolean).join(' '), c.referencia_oem || '', "closeModal();goto('inventario');invSearch='"+String(c.sku||'').replace(/'/g,'')+"';filterInventarioTable()");
+  });
+  results.innerHTML = html.join('');
+}
+
+function _renderGlobalSearchLocal(q) {
+  var results = document.getElementById('gs-results');
+  if (!results) return;
+  var needle = String(q || '').toLowerCase();
+  var items = (_invItems || loadItems() || []).filter(function(i){
+    return [i.sku,i.nombre,i.categoria,i.marca,i.proveedor,i.ubicacion,i.ubicacion_motoparts,i.referencia_oem,i.compatibilidad_moto]
+      .join(' ').toLowerCase().indexOf(needle) >= 0;
   }).slice(0,20);
-  if (!found.length) { results.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Sin resultados para "'+q+'"</p>'; return; }
-  results.innerHTML = found.map(function(item){
-    var disp = Math.max(0, Number(item.stock||0)-Number(item.stock_reservado||0));
-    return '<div onclick="closeModal();goto(\'inventario\');invSearch=\''+item.sku+'\';filterInventarioTable()" style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid rgba(255,255,255,.05);cursor:pointer;border-radius:8px" onmouseenter="this.style.background=\'rgba(255,255,255,.04)\'" onmouseleave="this.style.background=\'\'\'>' +
-      '<span style="font-family:monospace;font-size:10px;color:var(--electric);background:rgba(59,130,246,.1);padding:2px 6px;border-radius:4px">'+item.sku+'</span>' +
-      '<div style="flex:1"><div style="font-size:12px;font-weight:600">'+item.nombre+'</div><div style="font-size:10px;color:var(--muted)">'+(item.categoria||'')+(item.proveedor?' · '+item.proveedor:'')+'</div></div>' +
-      '<strong style="font-size:13px;color:'+(disp>0?'var(--neon)':'var(--red)')+'">'+disp+'</strong>' +
-      '</div>';
-  }).join('');
+  if (!items.length) { results.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">Sin resultados locales para "'+q+'"</p>'; return; }
+  _renderGlobalSearchResults(q, { repuestos: items.map(function(i){ return Object.assign({}, i, { stock_disponible: Number(i.stock||0)-Number(i.stock_reservado||0) }); }) }, items.length);
 }
 
 /* ── abrirDiagnostico ────────────────────────────────────────────────── */

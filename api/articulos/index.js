@@ -148,6 +148,32 @@ async function ensureCompatibilityStorage(sql) {
   await sql`CREATE INDEX IF NOT EXISTS motoparts_part_compatibility_model_idx ON motoparts_part_compatibility (motocicleta_modelo_id)`;
 }
 
+async function ensureGlobalSearchStorage(sql) {
+  await ensureMotorcycleStorage(sql);
+  await ensureCompatibilityStorage(sql);
+  await sql`
+    CREATE TABLE IF NOT EXISTS motoparts_locations (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      codigo TEXT NOT NULL,
+      nombre TEXT,
+      tipo TEXT,
+      grupo TEXT,
+      descripcion TEXT,
+      bodega_id TEXT,
+      empresa_id TEXT,
+      estado TEXT DEFAULT 'ACTIVA',
+      permite_multiples_referencias BOOLEAN DEFAULT TRUE,
+      permite_vin BOOLEAN DEFAULT FALSE,
+      capacidad NUMERIC(12,2),
+      recorrido_orden INTEGER,
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_locations_empresa_idx ON motoparts_locations (empresa_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_locations_tipo_idx ON motoparts_locations (tipo)`;
+}
+
 module.exports = async (req, res) => {
   cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -158,6 +184,139 @@ module.exports = async (req, res) => {
     await ensureColumns(sql);
 
     const { action, limit = 5000, empresa_id, mode, vin } = req.query;
+
+    if (mode === 'global-search') {
+      await ensureGlobalSearchStorage(sql);
+      if (req.method !== 'GET') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+      const q = String(req.query.q || '').trim();
+      const tokens = queryTokens(q);
+      const firstToken = tokens[0] || q;
+      const like = `%${firstToken}%`;
+      const safeLimit = Math.max(1, Math.min(60, parseInt(limit) || 20));
+      if (!firstToken || firstToken.length < 2) {
+        return res.status(200).json({ ok: true, q, groups: { repuestos: [], motocicletas: [], ubicaciones: [], compatibilidad: [] }, total: 0 });
+      }
+
+      let repuestos, motocicletas, ubicaciones, compatibilidad;
+      if (empresa_id) {
+        repuestos = await sql`
+          SELECT 'repuesto' AS tipo_resultado, sku, nombre, categoria, marca, proveedor, ubicacion,
+                 ubicacion_motoparts, referencia_fabricante, referencia_oem, referencias_alternas,
+                 compatibilidad_moto, clase_abc, estado,
+                 (COALESCE(stock,0) - COALESCE(stock_reservado,0)) AS stock_disponible
+          FROM articulos
+          WHERE empresa_id=${empresa_id}
+            AND COALESCE(estado,'Activo') <> 'Inactivo'
+            AND (
+              sku ILIKE ${like} OR nombre ILIKE ${like} OR descripcion ILIKE ${like}
+              OR categoria ILIKE ${like} OR marca ILIKE ${like} OR proveedor ILIKE ${like}
+              OR ubicacion ILIKE ${like} OR ubicacion_motoparts ILIKE ${like}
+              OR referencia_fabricante ILIKE ${like} OR referencia_oem ILIKE ${like}
+              OR referencias_alternas ILIKE ${like} OR compatibilidad_moto ILIKE ${like}
+              OR codigo_barras ILIKE ${like}
+            )
+          ORDER BY sku
+          LIMIT ${safeLimit}`;
+        motocicletas = await sql`
+          SELECT 'motocicleta' AS tipo_resultado, vin, numero_chasis, numero_motor, marca, linea, modelo,
+                 anio_modelo, cilindraje, color, estado, ubicacion_actual, estado_comercial, proveedor
+          FROM motoparts_motorcycles
+          WHERE empresa_id=${empresa_id}
+            AND (
+              vin ILIKE ${like} OR numero_chasis ILIKE ${like} OR numero_motor ILIKE ${like}
+              OR marca ILIKE ${like} OR linea ILIKE ${like} OR modelo ILIKE ${like}
+              OR ubicacion_actual ILIKE ${like} OR proveedor ILIKE ${like}
+            )
+          ORDER BY updated_at DESC
+          LIMIT ${safeLimit}`;
+        ubicaciones = await sql`
+          SELECT 'ubicacion' AS tipo_resultado, codigo, nombre, tipo, grupo, descripcion, estado, permite_vin, capacidad
+          FROM motoparts_locations
+          WHERE empresa_id=${empresa_id}
+            AND (codigo ILIKE ${like} OR nombre ILIKE ${like} OR tipo ILIKE ${like} OR grupo ILIKE ${like} OR descripcion ILIKE ${like})
+          ORDER BY recorrido_orden NULLS LAST, codigo
+          LIMIT ${safeLimit}`;
+        compatibilidad = await sql`
+          SELECT 'compatibilidad' AS tipo_resultado, a.sku, a.nombre, a.referencia_oem,
+                 m.id AS motocicleta_modelo_id, m.marca, m.linea, m.modelo, m.cilindraje, m.anio_desde, m.anio_hasta,
+                 c.observaciones
+          FROM motoparts_part_compatibility c
+          JOIN articulos a ON a.sku = c.repuesto_id
+          JOIN motoparts_motorcycle_models m ON m.id = c.motocicleta_modelo_id
+          WHERE a.empresa_id=${empresa_id}
+            AND (c.empresa_id=${empresa_id} OR c.empresa_id IS NULL)
+            AND (
+              a.sku ILIKE ${like} OR a.nombre ILIKE ${like} OR a.referencia_oem ILIKE ${like}
+              OR a.compatibilidad_moto ILIKE ${like} OR m.marca ILIKE ${like} OR m.linea ILIKE ${like}
+              OR m.modelo ILIKE ${like} OR m.cilindraje ILIKE ${like} OR c.observaciones ILIKE ${like}
+            )
+          ORDER BY a.sku
+          LIMIT ${safeLimit}`;
+      } else {
+        repuestos = await sql`
+          SELECT 'repuesto' AS tipo_resultado, sku, nombre, categoria, marca, proveedor, ubicacion,
+                 ubicacion_motoparts, referencia_fabricante, referencia_oem, referencias_alternas,
+                 compatibilidad_moto, clase_abc, estado,
+                 (COALESCE(stock,0) - COALESCE(stock_reservado,0)) AS stock_disponible
+          FROM articulos
+          WHERE COALESCE(estado,'Activo') <> 'Inactivo'
+            AND (
+              sku ILIKE ${like} OR nombre ILIKE ${like} OR descripcion ILIKE ${like}
+              OR categoria ILIKE ${like} OR marca ILIKE ${like} OR proveedor ILIKE ${like}
+              OR ubicacion ILIKE ${like} OR ubicacion_motoparts ILIKE ${like}
+              OR referencia_fabricante ILIKE ${like} OR referencia_oem ILIKE ${like}
+              OR referencias_alternas ILIKE ${like} OR compatibilidad_moto ILIKE ${like}
+              OR codigo_barras ILIKE ${like}
+            )
+          ORDER BY sku
+          LIMIT ${safeLimit}`;
+        motocicletas = await sql`
+          SELECT 'motocicleta' AS tipo_resultado, vin, numero_chasis, numero_motor, marca, linea, modelo,
+                 anio_modelo, cilindraje, color, estado, ubicacion_actual, estado_comercial, proveedor
+          FROM motoparts_motorcycles
+          WHERE vin ILIKE ${like} OR numero_chasis ILIKE ${like} OR numero_motor ILIKE ${like}
+             OR marca ILIKE ${like} OR linea ILIKE ${like} OR modelo ILIKE ${like}
+             OR ubicacion_actual ILIKE ${like} OR proveedor ILIKE ${like}
+          ORDER BY updated_at DESC
+          LIMIT ${safeLimit}`;
+        ubicaciones = await sql`
+          SELECT 'ubicacion' AS tipo_resultado, codigo, nombre, tipo, grupo, descripcion, estado, permite_vin, capacidad
+          FROM motoparts_locations
+          WHERE codigo ILIKE ${like} OR nombre ILIKE ${like} OR tipo ILIKE ${like} OR grupo ILIKE ${like} OR descripcion ILIKE ${like}
+          ORDER BY recorrido_orden NULLS LAST, codigo
+          LIMIT ${safeLimit}`;
+        compatibilidad = await sql`
+          SELECT 'compatibilidad' AS tipo_resultado, a.sku, a.nombre, a.referencia_oem,
+                 m.id AS motocicleta_modelo_id, m.marca, m.linea, m.modelo, m.cilindraje, m.anio_desde, m.anio_hasta,
+                 c.observaciones
+          FROM motoparts_part_compatibility c
+          JOIN articulos a ON a.sku = c.repuesto_id
+          JOIN motoparts_motorcycle_models m ON m.id = c.motocicleta_modelo_id
+          WHERE a.sku ILIKE ${like} OR a.nombre ILIKE ${like} OR a.referencia_oem ILIKE ${like}
+             OR a.compatibilidad_moto ILIKE ${like} OR m.marca ILIKE ${like} OR m.linea ILIKE ${like}
+             OR m.modelo ILIKE ${like} OR m.cilindraje ILIKE ${like} OR c.observaciones ILIKE ${like}
+          ORDER BY a.sku
+          LIMIT ${safeLimit}`;
+      }
+
+      const tokenMatch = (row) => {
+        if (tokens.length <= 1) return true;
+        const haystack = queryTokens(Object.values(row).join(' '));
+        return tokens.every((token) => haystack.some((h) => h.indexOf(token) >= 0 || token.indexOf(h) >= 0));
+      };
+      const groups = {
+        repuestos: repuestos.filter(tokenMatch),
+        motocicletas: motocicletas.filter(tokenMatch),
+        ubicaciones: ubicaciones.filter(tokenMatch),
+        compatibilidad: compatibilidad.filter(tokenMatch),
+      };
+      return res.status(200).json({
+        ok: true,
+        q,
+        groups,
+        total: groups.repuestos.length + groups.motocicletas.length + groups.ubicaciones.length + groups.compatibilidad.length,
+      });
+    }
 
     if (mode === 'motorcycles') {
       await ensureMotorcycleStorage(sql);
