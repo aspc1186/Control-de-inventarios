@@ -244,44 +244,81 @@ module.exports = async (req, res) => {
       if (req.method === 'GET') {
         const q = String(req.query.q || '').trim();
         const tokens = queryTokens(q);
+        const safeLimit = Math.max(1, Math.min(500, parseInt(limit) || 100));
         let rows;
         if (q) {
           const like = `%${q}%`;
-          rows = await sql`
-            SELECT a.*,
-                   m.id AS motocicleta_modelo_id,
-                   m.marca AS moto_marca,
-                   m.linea AS moto_linea,
-                   m.modelo AS moto_modelo,
-                   m.cilindraje AS moto_cilindraje,
-                   m.anio_desde AS moto_anio_desde,
-                   m.anio_hasta AS moto_anio_hasta,
-                   c.observaciones AS compatibilidad_observaciones,
-                   (COALESCE(a.stock,0) - COALESCE(a.stock_reservado,0)) AS stock_disponible
-            FROM articulos a
-            LEFT JOIN motoparts_part_compatibility c ON c.repuesto_id = a.sku
-            LEFT JOIN motoparts_motorcycle_models m ON m.id = c.motocicleta_modelo_id
-            WHERE (${empresa_id || null} IS NULL OR a.empresa_id = ${empresa_id || null})
-              AND COALESCE(a.estado,'Activo') <> 'Inactivo'
-              AND (
-                a.sku ILIKE ${like} OR a.nombre ILIKE ${like} OR a.descripcion ILIKE ${like}
-                OR a.referencia_oem ILIKE ${like} OR a.referencias_alternas ILIKE ${like}
-                OR a.compatibilidad_moto ILIKE ${like} OR a.marca_moto ILIKE ${like}
-                OR a.linea_moto ILIKE ${like} OR a.modelo_moto ILIKE ${like}
-                OR m.marca ILIKE ${like} OR m.linea ILIKE ${like} OR m.modelo ILIKE ${like}
-              )
-            ORDER BY a.sku
-            LIMIT ${parseInt(limit)}`;
+          if (empresa_id) {
+            rows = await sql`
+              SELECT a.*,
+                     m.id AS motocicleta_modelo_id,
+                     m.marca AS moto_marca,
+                     m.linea AS moto_linea,
+                     m.modelo AS moto_modelo,
+                     m.cilindraje AS moto_cilindraje,
+                     m.anio_desde AS moto_anio_desde,
+                     m.anio_hasta AS moto_anio_hasta,
+                     c.observaciones AS compatibilidad_observaciones,
+                     (COALESCE(a.stock,0) - COALESCE(a.stock_reservado,0)) AS stock_disponible
+              FROM articulos a
+              LEFT JOIN motoparts_part_compatibility c ON c.repuesto_id = a.sku
+              LEFT JOIN motoparts_motorcycle_models m ON m.id = c.motocicleta_modelo_id
+              WHERE a.empresa_id = ${empresa_id}
+                AND COALESCE(a.estado,'Activo') <> 'Inactivo'
+                AND (
+                  a.sku ILIKE ${like} OR a.nombre ILIKE ${like} OR a.descripcion ILIKE ${like}
+                  OR a.referencia_oem ILIKE ${like} OR a.referencias_alternas ILIKE ${like}
+                  OR a.compatibilidad_moto ILIKE ${like} OR a.marca_moto ILIKE ${like}
+                  OR a.linea_moto ILIKE ${like} OR a.modelo_moto ILIKE ${like}
+                  OR m.marca ILIKE ${like} OR m.linea ILIKE ${like} OR m.modelo ILIKE ${like}
+                )
+              ORDER BY a.sku
+              LIMIT ${safeLimit}`;
+          } else {
+            rows = await sql`
+              SELECT a.*,
+                     m.id AS motocicleta_modelo_id,
+                     m.marca AS moto_marca,
+                     m.linea AS moto_linea,
+                     m.modelo AS moto_modelo,
+                     m.cilindraje AS moto_cilindraje,
+                     m.anio_desde AS moto_anio_desde,
+                     m.anio_hasta AS moto_anio_hasta,
+                     c.observaciones AS compatibilidad_observaciones,
+                     (COALESCE(a.stock,0) - COALESCE(a.stock_reservado,0)) AS stock_disponible
+              FROM articulos a
+              LEFT JOIN motoparts_part_compatibility c ON c.repuesto_id = a.sku
+              LEFT JOIN motoparts_motorcycle_models m ON m.id = c.motocicleta_modelo_id
+              WHERE COALESCE(a.estado,'Activo') <> 'Inactivo'
+                AND (
+                  a.sku ILIKE ${like} OR a.nombre ILIKE ${like} OR a.descripcion ILIKE ${like}
+                  OR a.referencia_oem ILIKE ${like} OR a.referencias_alternas ILIKE ${like}
+                  OR a.compatibilidad_moto ILIKE ${like} OR a.marca_moto ILIKE ${like}
+                  OR a.linea_moto ILIKE ${like} OR a.modelo_moto ILIKE ${like}
+                  OR m.marca ILIKE ${like} OR m.linea ILIKE ${like} OR m.modelo ILIKE ${like}
+                )
+              ORDER BY a.sku
+              LIMIT ${safeLimit}`;
+          }
         } else if (actionName === 'models') {
-          rows = await sql`SELECT * FROM motoparts_motorcycle_models ORDER BY marca, linea, modelo LIMIT ${parseInt(limit)}`;
+          rows = await sql`SELECT * FROM motoparts_motorcycle_models ORDER BY marca, linea, modelo LIMIT ${safeLimit}`;
         } else {
-          rows = await sql`
-            SELECT c.*, m.marca, m.linea, m.modelo, m.cilindraje, m.anio_desde, m.anio_hasta
-            FROM motoparts_part_compatibility c
-            LEFT JOIN motoparts_motorcycle_models m ON m.id = c.motocicleta_modelo_id
-            WHERE (${empresa_id || null} IS NULL OR c.empresa_id = ${empresa_id || null})
-            ORDER BY c.updated_at DESC
-            LIMIT ${parseInt(limit)}`;
+          if (empresa_id) {
+            rows = await sql`
+              SELECT c.*, m.marca, m.linea, m.modelo, m.cilindraje, m.anio_desde, m.anio_hasta
+              FROM motoparts_part_compatibility c
+              LEFT JOIN motoparts_motorcycle_models m ON m.id = c.motocicleta_modelo_id
+              WHERE c.empresa_id = ${empresa_id}
+              ORDER BY c.updated_at DESC
+              LIMIT ${safeLimit}`;
+          } else {
+            rows = await sql`
+              SELECT c.*, m.marca, m.linea, m.modelo, m.cilindraje, m.anio_desde, m.anio_hasta
+              FROM motoparts_part_compatibility c
+              LEFT JOIN motoparts_motorcycle_models m ON m.id = c.motocicleta_modelo_id
+              ORDER BY c.updated_at DESC
+              LIMIT ${safeLimit}`;
+          }
         }
         if (tokens.length > 1 && rows.length) {
           const filtered = rows.filter((row) => {
@@ -328,6 +365,35 @@ module.exports = async (req, res) => {
             updated_at=NOW()
           RETURNING *`;
         return res.status(200).json({ ok: true, data: rows[0], id: rows[0].id });
+      }
+
+      if (req.method === 'DELETE') {
+        const id = String(req.query.id || '').trim();
+        const repuesto = String(req.query.repuesto_id || '').trim();
+        const modelo = String(req.query.motocicleta_modelo_id || '').trim();
+        if (actionName === 'model') {
+          if (!id) return res.status(400).json({ ok: false, error: 'id requerido' });
+          const rows = await sql`DELETE FROM motoparts_motorcycle_models WHERE id=${id} RETURNING id`;
+          return res.status(200).json({ ok: true, deleted: rows.length });
+        }
+        if (id) {
+          const rows = await sql`DELETE FROM motoparts_part_compatibility WHERE id=${id} RETURNING id`;
+          return res.status(200).json({ ok: true, deleted: rows.length });
+        }
+        if (!repuesto || !modelo) return res.status(400).json({ ok: false, error: 'id o repuesto_id/motocicleta_modelo_id requerido' });
+        let rows;
+        if (empresa_id) {
+          rows = await sql`
+            DELETE FROM motoparts_part_compatibility
+            WHERE repuesto_id=${repuesto} AND motocicleta_modelo_id=${modelo} AND empresa_id=${empresa_id}
+            RETURNING id`;
+        } else {
+          rows = await sql`
+            DELETE FROM motoparts_part_compatibility
+            WHERE repuesto_id=${repuesto} AND motocicleta_modelo_id=${modelo}
+            RETURNING id`;
+        }
+        return res.status(200).json({ ok: true, deleted: rows.length });
       }
     }
 
