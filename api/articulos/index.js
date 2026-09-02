@@ -3,6 +3,7 @@
 const { getSQL, cors } = require('../_db');
 const { normalizeMotoPartsProduct } = require('../../lib/motoparts-products');
 const { normalizeMotorcycle, validateVin } = require('../../lib/motoparts-motorcycles');
+const { normalizeMotoModel, normalizeCompatibility, queryTokens } = require('../../lib/motoparts-compatibility');
 
 
 // Todos los campos del modelo — sincronizados con COL mapping del frontend
@@ -115,6 +116,38 @@ async function ensureMotorcycleStorage(sql) {
   await sql`CREATE INDEX IF NOT EXISTS motoparts_motorcycles_location_idx ON motoparts_motorcycles (ubicacion_actual)`;
 }
 
+async function ensureCompatibilityStorage(sql) {
+  await sql`
+    CREATE TABLE IF NOT EXISTS motoparts_motorcycle_models (
+      id TEXT PRIMARY KEY,
+      marca TEXT NOT NULL,
+      linea TEXT NOT NULL,
+      modelo TEXT,
+      cilindraje TEXT,
+      anio_desde TEXT,
+      anio_hasta TEXT,
+      version TEXT,
+      motor TEXT,
+      observaciones TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS motoparts_part_compatibility (
+      id TEXT PRIMARY KEY,
+      repuesto_id TEXT NOT NULL,
+      motocicleta_modelo_id TEXT NOT NULL,
+      observaciones TEXT,
+      empresa_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_models_lookup_idx ON motoparts_motorcycle_models (marca, linea, modelo, cilindraje)`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS motoparts_part_compatibility_uidx ON motoparts_part_compatibility (repuesto_id, motocicleta_modelo_id, COALESCE(empresa_id, '__GLOBAL__'))`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_part_compatibility_part_idx ON motoparts_part_compatibility (repuesto_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS motoparts_part_compatibility_model_idx ON motoparts_part_compatibility (motocicleta_modelo_id)`;
+}
+
 module.exports = async (req, res) => {
   cors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -201,6 +234,100 @@ module.exports = async (req, res) => {
           WHERE vin=${validation.vin}
           RETURNING *`;
         return res.status(200).json({ ok: true, data: rows[0] || null });
+      }
+    }
+
+    if (mode === 'compatibility') {
+      await ensureCompatibilityStorage(sql);
+      const actionName = String(action || '').toLowerCase();
+
+      if (req.method === 'GET') {
+        const q = String(req.query.q || '').trim();
+        const tokens = queryTokens(q);
+        let rows;
+        if (q) {
+          const like = `%${q}%`;
+          rows = await sql`
+            SELECT a.*,
+                   m.id AS motocicleta_modelo_id,
+                   m.marca AS moto_marca,
+                   m.linea AS moto_linea,
+                   m.modelo AS moto_modelo,
+                   m.cilindraje AS moto_cilindraje,
+                   m.anio_desde AS moto_anio_desde,
+                   m.anio_hasta AS moto_anio_hasta,
+                   c.observaciones AS compatibilidad_observaciones,
+                   (COALESCE(a.stock,0) - COALESCE(a.stock_reservado,0)) AS stock_disponible
+            FROM articulos a
+            LEFT JOIN motoparts_part_compatibility c ON c.repuesto_id = a.sku
+            LEFT JOIN motoparts_motorcycle_models m ON m.id = c.motocicleta_modelo_id
+            WHERE (${empresa_id || null} IS NULL OR a.empresa_id = ${empresa_id || null})
+              AND COALESCE(a.estado,'Activo') <> 'Inactivo'
+              AND (
+                a.sku ILIKE ${like} OR a.nombre ILIKE ${like} OR a.descripcion ILIKE ${like}
+                OR a.referencia_oem ILIKE ${like} OR a.referencias_alternas ILIKE ${like}
+                OR a.compatibilidad_moto ILIKE ${like} OR a.marca_moto ILIKE ${like}
+                OR a.linea_moto ILIKE ${like} OR a.modelo_moto ILIKE ${like}
+                OR m.marca ILIKE ${like} OR m.linea ILIKE ${like} OR m.modelo ILIKE ${like}
+              )
+            ORDER BY a.sku
+            LIMIT ${parseInt(limit)}`;
+        } else if (actionName === 'models') {
+          rows = await sql`SELECT * FROM motoparts_motorcycle_models ORDER BY marca, linea, modelo LIMIT ${parseInt(limit)}`;
+        } else {
+          rows = await sql`
+            SELECT c.*, m.marca, m.linea, m.modelo, m.cilindraje, m.anio_desde, m.anio_hasta
+            FROM motoparts_part_compatibility c
+            LEFT JOIN motoparts_motorcycle_models m ON m.id = c.motocicleta_modelo_id
+            WHERE (${empresa_id || null} IS NULL OR c.empresa_id = ${empresa_id || null})
+            ORDER BY c.updated_at DESC
+            LIMIT ${parseInt(limit)}`;
+        }
+        if (tokens.length > 1 && rows.length) {
+          const filtered = rows.filter((row) => {
+            const haystack = queryTokens(Object.values(row).join(' '));
+            return tokens.every((token) => haystack.some((h) => h.indexOf(token) >= 0 || token.indexOf(h) >= 0));
+          });
+          if (filtered.length) rows = filtered;
+        }
+        return res.status(200).json({ ok: true, data: rows, total: rows.length });
+      }
+
+      if (req.method === 'POST') {
+        if (actionName === 'model') {
+          const model = normalizeMotoModel(req.body || {});
+          if (!model.ok) return res.status(400).json({ ok: false, error: model.error });
+          const rows = await sql`
+            INSERT INTO motoparts_motorcycle_models (
+              id, marca, linea, modelo, cilindraje, anio_desde, anio_hasta, version, motor, observaciones, updated_at
+            ) VALUES (
+              ${model.id}, ${model.marca}, ${model.linea}, ${model.modelo}, ${model.cilindraje},
+              ${model.anio_desde}, ${model.anio_hasta}, ${model.version}, ${model.motor}, ${model.observaciones}, NOW()
+            )
+            ON CONFLICT (id) DO UPDATE SET
+              marca=EXCLUDED.marca, linea=EXCLUDED.linea, modelo=EXCLUDED.modelo,
+              cilindraje=EXCLUDED.cilindraje, anio_desde=EXCLUDED.anio_desde,
+              anio_hasta=EXCLUDED.anio_hasta, version=EXCLUDED.version,
+              motor=EXCLUDED.motor, observaciones=EXCLUDED.observaciones, updated_at=NOW()
+            RETURNING *`;
+          return res.status(200).json({ ok: true, data: rows[0], id: rows[0].id });
+        }
+        const comp = normalizeCompatibility(Object.assign({}, req.body, { empresa_id: req.body && (req.body.empresa_id || empresa_id) }));
+        if (!comp.ok) return res.status(400).json({ ok: false, error: comp.error });
+        const rows = await sql`
+          INSERT INTO motoparts_part_compatibility (
+            id, repuesto_id, motocicleta_modelo_id, observaciones, empresa_id, updated_at
+          ) VALUES (
+            ${comp.id}, ${comp.repuesto_id}, ${comp.motocicleta_modelo_id}, ${comp.observaciones}, ${comp.empresa_id}, NOW()
+          )
+          ON CONFLICT (id) DO UPDATE SET
+            repuesto_id=EXCLUDED.repuesto_id,
+            motocicleta_modelo_id=EXCLUDED.motocicleta_modelo_id,
+            observaciones=EXCLUDED.observaciones,
+            empresa_id=EXCLUDED.empresa_id,
+            updated_at=NOW()
+          RETURNING *`;
+        return res.status(200).json({ ok: true, data: rows[0], id: rows[0].id });
       }
     }
 
