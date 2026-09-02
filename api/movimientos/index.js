@@ -1,6 +1,7 @@
 // api/movimientos/index.js — Movements: GET list + POST (update stock + register)
 const { getSQL, cors } = require('../_db');
 const { randomUUID } = require('crypto');
+const { validateMotoPartsLocation } = require('../../lib/motoparts-locations');
 
 function nowParts() {
   const d = new Date();
@@ -76,6 +77,39 @@ async function ensureRecepcionArticulos(sql) {
   await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
 }
 
+async function ensureRecepcionMotorcycles(sql) {
+  await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS motoparts_motorcycles (
+      id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      vin TEXT NOT NULL,
+      numero_chasis TEXT,
+      numero_motor TEXT,
+      marca TEXT,
+      linea TEXT,
+      modelo TEXT,
+      anio_modelo TEXT,
+      cilindraje TEXT,
+      color TEXT,
+      tipo TEXT DEFAULT 'MOTOCICLETA',
+      estado TEXT DEFAULT 'RECIBIDA',
+      bodega TEXT,
+      ubicacion_actual TEXT DEFAULT 'FANALCA',
+      fecha_recepcion TEXT,
+      proveedor TEXT,
+      orden_compra TEXT,
+      costo NUMERIC(14,4),
+      precio_venta NUMERIC(14,2),
+      cliente_reservado TEXT,
+      estado_comercial TEXT DEFAULT 'DISPONIBLE',
+      empresa_id TEXT,
+      fecha_ultimo_movimiento TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS motoparts_motorcycles_vin_uidx ON motoparts_motorcycles (vin)`;
+}
+
 async function ensureTraslados(sql) {
   await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
   await sql`
@@ -138,6 +172,7 @@ module.exports = async (req, res) => {
       await ensureCompras(sql);
       await ensureMovimientos(sql);
       await ensureRecepcionArticulos(sql);
+      await ensureRecepcionMotorcycles(sql);
       if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
 
       const body = req.body || {};
@@ -230,6 +265,81 @@ module.exports = async (req, res) => {
       return res.status(200).json({ ok: true, compra: updatedCompra[0], items: updatedItems, movimientos: savedMovs, count: savedMovs.length });
     } catch (err) {
       console.error('[recepcion via movimientos]', err.message);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  }
+
+  if (recurso === 'ubicacion-motoparts') {
+    try {
+      await ensureMovimientos(sql);
+      await ensureRecepcionArticulos(sql);
+      const action = String(req.query.action || '').toLowerCase();
+      if (req.method === 'GET') {
+        const { empresa_id, limit = 1000 } = req.query;
+        const lim = Math.min(Number(limit) || 1000, 5000);
+        const rows = empresa_id && empresa_id !== '__SA__'
+          ? await sql`
+              SELECT sku, nombre, ubicacion, ubicacion_motoparts, stock, stock_reservado, empresa_id, updated_at
+              FROM articulos
+              WHERE empresa_id=${empresa_id} AND COALESCE(estado,'Activo') <> 'Inactivo'
+              ORDER BY updated_at DESC LIMIT ${lim}`
+          : await sql`
+              SELECT sku, nombre, ubicacion, ubicacion_motoparts, stock, stock_reservado, empresa_id, updated_at
+              FROM articulos
+              WHERE COALESCE(estado,'Activo') <> 'Inactivo'
+              ORDER BY updated_at DESC LIMIT ${lim}`;
+        return res.status(200).json({ ok: true, data: rows, total: rows.length });
+      }
+      if (req.method !== 'POST' && req.method !== 'PUT') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+
+      const body = req.body || {};
+      const destino = validateMotoPartsLocation(body.destino || body.ubicacion || body.ubicacion_motoparts);
+      if (!destino.ok) return res.status(400).json({ ok: false, error: destino.message });
+      const empresaId = text(body.empresa_id);
+      const usuario = text(body.usuario, 'Sistema');
+      const obs = text(body.observacion, '');
+      const { fecha, hora } = nowParts();
+
+      if (action === 'vin' || body.vin) {
+        const vin = text(body.vin);
+        if (!vin) return res.status(400).json({ ok: false, error: 'VIN requerido' });
+        const before = await sql`SELECT * FROM motoparts_motorcycles WHERE vin=${vin.toUpperCase()} LIMIT 1`;
+        if (!before.length) return res.status(404).json({ ok: false, error: 'VIN no encontrado' });
+        const rows = await sql`
+          UPDATE motoparts_motorcycles
+          SET ubicacion_actual=${destino.code}, empresa_id=COALESCE(empresa_id, ${empresaId || null}),
+              fecha_ultimo_movimiento=NOW(), updated_at=NOW()
+          WHERE vin=${vin.toUpperCase()}
+          RETURNING *`;
+        return res.status(200).json({ ok: true, type: 'vin', before: before[0], data: rows[0] });
+      }
+
+      const sku = text(body.sku || body.codigo);
+      if (!sku) return res.status(400).json({ ok: false, error: 'SKU requerido' });
+      const skuUp = sku.toUpperCase();
+      const found = empresaId && empresaId !== '__SA__'
+        ? await sql`SELECT sku, nombre, stock, stock_reservado, ubicacion, ubicacion_motoparts, empresa_id FROM articulos WHERE sku=${skuUp} AND empresa_id=${empresaId} LIMIT 1`
+        : await sql`SELECT sku, nombre, stock, stock_reservado, ubicacion, ubicacion_motoparts, empresa_id FROM articulos WHERE sku=${skuUp} LIMIT 1`;
+      if (!found.length) return res.status(404).json({ ok: false, error: 'SKU no encontrado' });
+      const art = found[0];
+      const rows = await sql`
+        UPDATE articulos
+        SET ubicacion=${destino.code}, ubicacion_motoparts=${destino.code}, updated_at=NOW()
+        WHERE sku=${skuUp}
+        RETURNING *`;
+      const qty = Number(body.cantidad || 0);
+      await sql`
+        INSERT INTO movimientos
+          (tipo, sku, articulo, cantidad, stock_anterior, stock_resultante,
+           usuario, observacion, proveedor, factura, area, empresa_id, fecha, hora)
+        VALUES (
+          'UBICACION', ${skuUp}, ${art.nombre || skuUp}, ${qty}, ${Number(art.stock || 0)}, ${Number(art.stock || 0)},
+          ${usuario}, ${obs || `Ubicacion ${art.ubicacion_motoparts || art.ubicacion || 'SIN UBICACION'} -> ${destino.code}`},
+          null, null, 'UBICACION', ${empresaId || art.empresa_id || null}, ${fecha}, ${hora}
+        )`;
+      return res.status(200).json({ ok: true, type: 'sku', before: art, data: rows[0] });
+    } catch (err) {
+      console.error('[ubicacion motoparts]', err.message);
       return res.status(500).json({ ok: false, error: err.message });
     }
   }

@@ -22512,7 +22512,7 @@ body:not(.app-mode) #login-view .login-right .card {
     var map = groupedByLocation();
     host.innerHTML =
       '<div class="sf-moto-head"><div><h3>StockFlow MotoParts</h3><p>Ubicaciones reales: EST-01 a EST-100, piso A-Z, SOLTRECH y FANALCA.</p></div>' +
-      '<div class="sf-moto-actions"><button class="btn btn-ghost btn-sm" onclick="_sfMotoCompatibility()">Compatibilidad</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoMotorcycles()">Motocicletas</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoNewLocation()">+ Ubicacion</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoRefreshLocations()">Actualizar</button></div></div>' +
+      '<div class="sf-moto-actions"><button class="btn btn-ghost btn-sm" onclick="_sfMotoAssignLocation()">Ubicar</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoCompatibility()">Compatibilidad</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoMotorcycles()">Motocicletas</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoNewLocation()">+ Ubicacion</button><button class="btn btn-ghost btn-sm" onclick="_sfMotoRefreshLocations()">Actualizar</button></div></div>' +
       '<div class="sf-moto-tabs">' +
       [['shelf','Estanteria'],['floor','Piso A-Z'],['special','SOLTRECH / FANALCA']].map(function(t){
         return '<button type="button" class="'+(tab===t[0]?'active':'')+'" onclick="_sfMotoLocTab=&quot;'+t[0]+'&quot;;_sfRenderMotoLocations()">'+t[1]+'</button>';
@@ -22565,6 +22565,39 @@ body:not(.app-mode) #login-view .login-right .card {
     fetch('/api/ubicaciones?mode=motoparts', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
       .then(function(r){ return r.json().then(function(x){ if(!r.ok || x.ok===false) throw new Error(x.error || 'No se pudo guardar'); return x; }); })
       .then(function(){ if (typeof showToast === 'function') showToast('Ubicacion MotoParts guardada','green'); if (typeof closeModal === 'function') closeModal(); window._sfMotoRefreshLocations(); })
+      .catch(function(e){ if (err) { err.style.display='block'; err.textContent=e.message; } else if (typeof showToast === 'function') showToast(e.message,'red'); });
+  };
+  window._sfMotoAssignLocation = function(){
+    var h = '<h3 style="margin-bottom:10px">Ubicar SKU o VIN</h3>' +
+      '<p style="font-size:12px;color:var(--muted);margin:0 0 10px">Valida destinos MotoParts y actualiza la ubicacion operativa.</p>' +
+      '<div class="form-grid"><div class="form-row"><label>Tipo</label><select id="sf-ubi-kind"><option value="sku">SKU / repuesto</option><option value="vin">VIN / motocicleta</option></select></div><div class="form-row"><label>Codigo</label><input id="sf-ubi-code" style="text-transform:uppercase" placeholder="SKU o VIN"></div></div>' +
+      '<div class="form-grid"><div class="form-row"><label>Destino</label><input id="sf-ubi-dest" style="text-transform:uppercase" placeholder="EST-01, A-01-01, SOLTRECH o FANALCA"></div><div class="form-row"><label>Cantidad trazada</label><input id="sf-ubi-qty" type="number" min="0" step="1" value="0"></div></div>' +
+      '<div class="form-row"><label>Observacion</label><input id="sf-ubi-obs" placeholder="Opcional"></div>' +
+      '<div id="sf-ubi-error" style="display:none;color:var(--red);font-size:12px;margin-top:8px"></div>' +
+      '<div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn btn-navy" onclick="_sfMotoSaveAssignLocation()">Guardar ubicacion</button></div>';
+    if (typeof openModal === 'function') openModal(h, true);
+  };
+  window._sfMotoSaveAssignLocation = function(){
+    var g = function(id){ var el=document.getElementById(id); return el ? el.value.trim() : ''; };
+    var kind = g('sf-ubi-kind') || 'sku';
+    var code = norm(g('sf-ubi-code'));
+    var dest = norm(g('sf-ubi-dest'));
+    var err = document.getElementById('sf-ubi-error');
+    if (!code || !dest) {
+      if (err) { err.style.display='block'; err.textContent='Codigo y destino son requeridos.'; }
+      return;
+    }
+    var body = { destino:dest, cantidad:Number(g('sf-ubi-qty')||0), observacion:g('sf-ubi-obs'), empresa_id:companyId(), usuario:SESSION.user && (SESSION.user.nombre || SESSION.user.username) || 'Sistema' };
+    if (kind === 'vin') body.vin = code; else body.sku = code;
+    fetch('/api/movimientos?recurso=ubicacion-motoparts' + (kind === 'vin' ? '&action=vin' : ''), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+      .then(function(r){ return r.json().then(function(x){ if(!r.ok || x.ok===false) throw new Error(x.error || 'No se pudo ubicar'); return x; }); })
+      .then(function(){
+        try { DB.set('sync_dirty_articulos', null); DB.set('sync_dirty_movimientos', null); } catch(e) {}
+        if (typeof showToast === 'function') showToast('Ubicacion actualizada','green');
+        if (typeof closeModal === 'function') closeModal();
+        if (typeof _syncAllFromNeon === 'function') _syncAllFromNeon(function(){ window._sfMotoRefreshLocations(); });
+        else window._sfMotoRefreshLocations();
+      })
       .catch(function(e){ if (err) { err.style.display='block'; err.textContent=e.message; } else if (typeof showToast === 'function') showToast(e.message,'red'); });
   };
   window._sfMotoRefreshLocations = function(){
