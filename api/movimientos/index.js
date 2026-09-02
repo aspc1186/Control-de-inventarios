@@ -55,6 +55,25 @@ async function ensureCompras(sql) {
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS estado_oc TEXT`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS fecha_recepcion TEXT`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS fecha_cierre TEXT`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS observacion_recepcion TEXT`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS factura_fotos JSONB DEFAULT '[]'`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS producto_fotos JSONB DEFAULT '[]'`;
+  await sql`ALTER TABLE compras ADD COLUMN IF NOT EXISTS cerrada BOOLEAN DEFAULT FALSE`;
+}
+
+async function ensureRecepcionArticulos(sql) {
+  await sql`CREATE EXTENSION IF NOT EXISTS pgcrypto`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS ubicacion_motoparts TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS stock_reservado NUMERIC(12,2) DEFAULT 0`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS metodo_seguridad TEXT DEFAULT 'automatico'`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS ultima_entrada TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS codigo_barras TEXT DEFAULT ''`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS empresa_id TEXT`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS estado TEXT DEFAULT 'Activo'`;
+  await sql`ALTER TABLE articulos ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()`;
 }
 
 async function ensureTraslados(sql) {
@@ -99,10 +118,11 @@ function normalizeCompraItems(items) {
   if (!Array.isArray(items)) return [];
   return items.map((it) => ({
     sku: text(it.sku, ''),
-    nombre: text(it.nombre, ''),
+    nombre: text(it.nombre || it.articulo, ''),
     cantidad: Number(it.cantidad || 0),
     costo: Number(it.costo || 0),
-    total: Number(it.total || (Number(it.cantidad || 0) * Number(it.costo || 0)))
+    total: Number(it.total || (Number(it.cantidad || 0) * Number(it.costo || 0))),
+    ubicacion: text(it.ubicacion || it.ubicacion_motoparts, '')
   })).filter((it) => it.sku && it.cantidad > 0);
 }
 
@@ -112,6 +132,107 @@ module.exports = async (req, res) => {
 
   const sql = getSQL();
   const recurso = req.query.recurso || req.query.resource || '';
+
+  if (recurso === 'recepcion') {
+    try {
+      await ensureCompras(sql);
+      await ensureMovimientos(sql);
+      await ensureRecepcionArticulos(sql);
+      if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' });
+
+      const body = req.body || {};
+      const empresaId = text(body.empresa_id);
+      const lookup = text(body.oc_id || body.id || body.numero);
+      if (!lookup) return res.status(400).json({ ok: false, error: 'OC requerida' });
+
+      const compras = empresaId && empresaId !== '__SA__'
+        ? await sql`SELECT * FROM compras WHERE empresa_id=${empresaId} AND (id=${lookup} OR numero=${lookup}) LIMIT 1`
+        : await sql`SELECT * FROM compras WHERE id=${lookup} OR numero=${lookup} LIMIT 1`;
+      if (!compras.length) return res.status(404).json({ ok: false, error: 'Orden de compra no encontrada' });
+
+      const compra = compras[0];
+      const items = normalizeCompraItems(body.items && body.items.length ? body.items : compra.items);
+      if (!items.length) return res.status(400).json({ ok: false, error: 'La recepcion no tiene items validos' });
+
+      const { fecha, hora } = nowParts();
+      const proveedor = text(body.proveedor, compra.proveedor || '');
+      const usuario = text(body.usuario, 'Sistema');
+      const factura = text(body.factura, compra.numero || compra.id);
+      const obs = text(body.observacion || body.observacion_recepcion, '');
+      const savedMovs = [];
+      const updatedItems = [];
+
+      for (const item of items) {
+        const sku = item.sku.toUpperCase();
+        const existing = await sql`SELECT sku, nombre, stock, empresa_id FROM articulos WHERE sku=${sku} LIMIT 1`;
+        const anterior = existing.length ? Number(existing[0].stock || 0) : 0;
+        const qty = Number(item.cantidad || 0);
+        const nuevo = anterior + qty;
+        const nombre = item.nombre || (existing[0] && existing[0].nombre) || sku;
+        const ubicacion = item.ubicacion || '';
+
+        const arts = await sql`
+          INSERT INTO articulos (
+            sku, nombre, descripcion, unidad, ubicacion, ubicacion_motoparts, stock, costo,
+            proveedor, estado, empresa_id, ultima_entrada, created_by, updated_at
+          ) VALUES (
+            ${sku}, ${nombre}, ${nombre}, 'UND', ${ubicacion}, ${ubicacion}, ${qty}, ${Number(item.costo || 0)},
+            ${proveedor}, 'Activo', ${empresaId || compra.empresa_id || null}, ${fecha}, ${usuario}, NOW()
+          )
+          ON CONFLICT (sku) DO UPDATE SET
+            nombre=COALESCE(NULLIF(EXCLUDED.nombre,''), articulos.nombre),
+            descripcion=COALESCE(NULLIF(EXCLUDED.descripcion,''), articulos.descripcion),
+            ubicacion=COALESCE(NULLIF(EXCLUDED.ubicacion,''), articulos.ubicacion),
+            ubicacion_motoparts=COALESCE(NULLIF(EXCLUDED.ubicacion_motoparts,''), articulos.ubicacion_motoparts),
+            stock=COALESCE(articulos.stock,0) + EXCLUDED.stock,
+            costo=CASE WHEN EXCLUDED.costo > 0 THEN EXCLUDED.costo ELSE articulos.costo END,
+            proveedor=COALESCE(NULLIF(EXCLUDED.proveedor,''), articulos.proveedor),
+            estado='Activo',
+            empresa_id=COALESCE(articulos.empresa_id, EXCLUDED.empresa_id),
+            ultima_entrada=${fecha},
+            updated_at=NOW()
+          RETURNING *`;
+
+        const movRows = await sql`
+          INSERT INTO movimientos
+            (tipo, sku, articulo, cantidad, stock_anterior, stock_resultante,
+             usuario, observacion, proveedor, factura, area, empresa_id, fecha, hora)
+          VALUES (
+            'ENTRADA', ${sku}, ${nombre}, ${qty}, ${anterior}, ${nuevo},
+            ${usuario}, ${obs || `Ingreso por OC ${factura}`}, ${proveedor}, ${factura}, 'RECEPCION',
+            ${empresaId || compra.empresa_id || null}, ${fecha}, ${hora}
+          )
+          RETURNING *`;
+        updatedItems.push(arts[0]);
+        savedMovs.push(movRows[0]);
+      }
+
+      const total = items.reduce((sum, it) => sum + Number(it.total || (Number(it.cantidad || 0) * Number(it.costo || 0))), 0);
+      const facturaFotos = Array.isArray(body.factura_fotos) ? body.factura_fotos.slice(0, 8) : [];
+      const productoFotos = Array.isArray(body.producto_fotos) ? body.producto_fotos.slice(0, 8) : [];
+      const updatedCompra = await sql`
+        UPDATE compras SET
+          proveedor=${proveedor},
+          estado='INGRESO',
+          estado_oc='INGRESO',
+          total=${total},
+          items=${JSON.stringify(items)}::jsonb,
+          observacion_recepcion=${obs},
+          factura_fotos=${JSON.stringify(facturaFotos)}::jsonb,
+          producto_fotos=${JSON.stringify(productoFotos)}::jsonb,
+          fecha_recepcion=NOW()::text,
+          fecha_cierre=NOW()::text,
+          cerrada=TRUE,
+          updated_at=NOW()
+        WHERE id=${compra.id}
+        RETURNING *`;
+
+      return res.status(200).json({ ok: true, compra: updatedCompra[0], items: updatedItems, movimientos: savedMovs, count: savedMovs.length });
+    } catch (err) {
+      console.error('[recepcion via movimientos]', err.message);
+      return res.status(500).json({ ok: false, error: err.message });
+    }
+  }
 
   if (recurso === 'compras') {
     try {

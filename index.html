@@ -18140,8 +18140,44 @@ function _sfGuardarRecepcionOC(id) {
     _sfMarkDirty('compras');
     _sfCerrarCamaraOC();
     closeModal();
-    showToast('Ingreso registrado y OC cerrada', 'green');
+    showToast('Ingreso registrado; sincronizando nube...', 'green');
     _sfRefreshPostIngreso();
+    var eidRec = typeof _getEmpresaId === 'function' && _getEmpresaId() !== '__SA__' ? _getEmpresaId() : null;
+    fetch('/api/movimientos?recurso=recepcion', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        oc_id: compras[idx].id || compras[idx].numero,
+        numero: compras[idx].numero,
+        proveedor: compras[idx].proveedor,
+        empresa_id: eidRec,
+        usuario: SESSION.user && (SESSION.user.nombre || SESSION.user.username) || 'Sistema',
+        observacion_recepcion: compras[idx].observacion_recepcion,
+        items: editedLines,
+        factura_fotos: compras[idx].factura_fotos,
+        producto_fotos: compras[idx].producto_fotos
+      })
+    }).then(function(r){ return r.ok ? r.json() : r.json().then(function(e){ throw new Error(e && e.error || 'No se pudo sincronizar recepcion'); }); })
+      .then(function(res){
+        if (!res || !res.ok) throw new Error(res && res.error || 'Recepcion no confirmada');
+        try {
+          DB.set('sync_dirty_articulos', null);
+          DB.set('sync_dirty_movimientos', null);
+          DB.set('sync_dirty_compras', null);
+        } catch(e) {}
+        window._comprasCloudLoaded = false;
+        window._movimientosCloudLoaded = false;
+        window._dashCloudLoaded = false;
+        _syncAllFromNeon(function(){
+          _syncComprasFromAPI(function(){
+            showToast('Recepcion sincronizada en la nube: '+(res.count||editedLines.length)+' linea(s)', 'green');
+            _sfRefreshPostIngreso();
+          });
+        });
+      })
+      .catch(function(err){
+        showToast('Ingreso local guardado, pero fallo nube: ' + (err && err.message ? err.message : err), 'red');
+      });
   } catch(err) {
     console.error('[SF] Error guardando recepcion OC:', err);
     if (btn) { btn.disabled = false; btn.textContent = 'Confirmar ingreso'; }
